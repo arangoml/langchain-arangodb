@@ -1,8 +1,8 @@
-# 🦜️🔗 LangChain {partner}
+# 🦜️🔗 LangChain ArangoDB
 
-This repository contains 1 package with {partner} integrations with LangChain:
+This repository contains 1 package with ArangoDB integrations with LangChain:
 
-- [langchain-{package_lower}](https://pypi.org/project/langchain-{package_lower}/)
+- [langchain-arangodb](https://pypi.org/project/langchain-arangodb/)
 
 ## Initial Repo Checklist (Remove this section after completing)
 
