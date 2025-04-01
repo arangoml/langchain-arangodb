@@ -19,10 +19,10 @@ def clear_arangodb_database() -> None:
     client = ArangoClient(url)
     db = client.db(username=username, password=password, verify=True)
 
-    for graph in db.graphs():
+    for graph in db.graphs():  # type: ignore
         db.delete_graph(graph["name"], drop_collections=True)
 
-    for collection in db.collections():
+    for collection in db.collections():  # type: ignore
         if not collection["system"]:
             db.delete_collection(collection["name"])
 
