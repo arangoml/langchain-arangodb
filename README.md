@@ -19,13 +19,13 @@ see [these docs](https://python.langchain.com/docs/contributing/integrations#par
 Code (auto ecli)
 
 - [ ] Fill out the readme above (for folks that follow pypi link)
-- [ ] Copy package into /libs folder
-- [ ] Update `"Source Code"` and `repository` under `[project.urls]` in /libs/*/pyproject.toml
+- [x] Copy package into /libs folder
+- [x] Update `"Source Code"` and `repository` under `[project.urls]` in /libs/*/pyproject.toml
 
 Workflow code (auto ecli)
 
-- [ ] Populate .github/workflows/_release.yml with `on.workflow_dispatch.inputs.working-directory.default`
-- [ ] Configure `LIB_DIRS` in .github/scripts/check_diff.py
+- [x] Populate .github/workflows/_release.yml with `on.workflow_dispatch.inputs.working-directory.default`
+- [x] Configure `LIB_DIRS` in .github/scripts/check_diff.py
 
 Workflow code (manual)
 
