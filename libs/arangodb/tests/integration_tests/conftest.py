@@ -2,6 +2,7 @@ import os
 
 import pytest
 from arango import ArangoClient
+
 from tests.integration_tests.utils import ArangoCredentials
 
 url = os.environ.get("ARANGODB_URI", "http://localhost:8529")

@@ -3,15 +3,17 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Type, Union
 
+import farmhash
 import numpy as np
 from arango.database import StandardDatabase
 from arango.exceptions import ArangoServerError
-from langchain_arangodb.vectorstores.utils import DistanceStrategy
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from langchain_core.vectorstores.utils import maximal_marginal_relevance
 from packaging import version
+
+from langchain_arangodb.vectorstores.utils import DistanceStrategy
 
 DEFAULT_DISTANCE_STRATEGY = DistanceStrategy.COSINE
 DISTANCE_MAPPING = {
@@ -87,7 +89,7 @@ class ArangoVector(VectorStore):
         self,
         embedding: Embeddings,
         embedding_dimension: int,
-        database: "StandardDatabase",
+        database: StandardDatabase,
         collection_name: str = "documents",
         search_type: SearchType = DEFAULT_SEARCH_TYPE,
         embedding_field: str = "embedding",
@@ -131,8 +133,8 @@ class ArangoVector(VectorStore):
 
     def retrieve_vector_index(self) -> Union[dict[str, Any], None]:
         """Retrieve the vector index from the collection."""
-        indexes = self.collection.indexes()
-        for index in indexes:
+        indexes = self.collection.indexes()  # type: ignore
+        for index in indexes:  # type: ignore
             if index["name"] == self.index_name:
                 return index
 
@@ -140,7 +142,7 @@ class ArangoVector(VectorStore):
 
     def create_vector_index(self) -> None:
         """Create the vector index on the collection."""
-        self.collection.add_index(
+        self.collection.add_index(  # type: ignore
             {
                 "name": self.index_name,
                 "type": "vector",
@@ -174,15 +176,6 @@ class ArangoVector(VectorStore):
         texts = list(texts)
 
         if ids is None:
-            try:
-                import farmhash
-            except ImportError:
-                m = """
-                    Farmhash not installed, please install with `pip install cityhash`.
-                    Alternatively, provide ids.
-                """
-                raise ImportError(m)
-
             ids = [str(farmhash.Fingerprint64(text.encode("utf-8"))) for text in texts]
 
         if not metadatas:
@@ -372,7 +365,7 @@ class ArangoVector(VectorStore):
             raise ValueError(f"Unsupported metric: {self._distance_strategy}")
 
         if use_approx:
-            if version.parse(self.db.version()) < version.parse("3.12.4"):
+            if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
                 m = "Approximate Nearest Neighbor search requires ArangoDB >= 3.12.4."
                 raise ValueError(m)
 
@@ -396,14 +389,14 @@ class ArangoVector(VectorStore):
             "query_embedding": embedding,
         }
 
-        cursor = self.db.aql.execute(aql, bind_vars=bind_vars)
+        cursor = self.db.aql.execute(aql, bind_vars=bind_vars)  # type: ignore
 
         score: float
         data: dict[str, Any]
         result: dict[str, Any]
         results = []
 
-        for result in cursor:
+        for result in cursor:  # type: ignore
             data, score = result["data"], result["score"]
 
             _key = data.pop("_key")
@@ -428,7 +421,7 @@ class ArangoVector(VectorStore):
         if not ids:
             return None
 
-        for result in self.collection.delete_many(ids, **kwargs):
+        for result in self.collection.delete_many(ids, **kwargs):  # type: ignore
             if isinstance(result, ArangoServerError):
                 raise result
 
@@ -446,7 +439,7 @@ class ArangoVector(VectorStore):
         docs = []
         doc: dict[str, Any]
 
-        for doc in self.collection.get_many(ids):
+        for doc in self.collection.get_many(ids):  # type: ignore
             _key = doc.pop("_key")
             page_content = doc.pop(self.text_field)
 
@@ -522,7 +515,7 @@ class ArangoVector(VectorStore):
         texts: List[str],
         embedding: Embeddings,
         metadatas: Optional[List[dict]] = None,
-        database: "StandardDatabase" = None,
+        database: StandardDatabase | None = None,
         collection_name: str = "documents",
         search_type: SearchType = DEFAULT_SEARCH_TYPE,
         embedding_field: str = "embedding",

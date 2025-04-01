@@ -7,17 +7,18 @@ from typing import Any, Dict, List, Optional
 
 from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain.chains.base import Chain
+from langchain_core.callbacks import CallbackManagerForChainRun
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.prompts import BasePromptTemplate
+from langchain_core.runnables import Runnable
+from pydantic import Field
+
 from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_FIX_PROMPT,
     AQL_GENERATION_PROMPT,
     AQL_QA_PROMPT,
 )
 from langchain_arangodb.graphs.graph_store import GraphStore
-from langchain_core.callbacks import CallbackManagerForChainRun
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.prompts import BasePromptTemplate
-from langchain_core.runnables import Runnable
-from pydantic import Field
 
 
 class ArangoGraphQAChain(Chain):
@@ -216,7 +217,7 @@ class ArangoGraphQAChain(Chain):
             try:
                 aql_result = aql_execution_func(aql_query, {"top_k": self.top_k})
             except (AQLQueryExecuteError, AQLQueryExplainError) as e:
-                aql_error = e.error_message
+                aql_error = str(e.error_message)
 
                 _run_manager.on_text(
                     "AQL Query Execution Error: ", end="\n", verbose=self.verbose
@@ -264,7 +265,7 @@ class ArangoGraphQAChain(Chain):
         # Interpret AQL Result #
         result = self.qa_chain.invoke(
             args={
-                "adb_schema": self.graph.schema,
+                "adb_schema": self.graph.get_structured_schema,
                 "user_input": user_input,
                 "aql_query": aql_query,
                 "aql_result": aql_result,

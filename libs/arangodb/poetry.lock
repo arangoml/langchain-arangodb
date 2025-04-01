@@ -244,6 +244,62 @@ files = [
 ]
 
 [[package]]
+name = "cityhash"
+version = "0.4.8"
+description = "Python bindings for CityHash and FarmHash"
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "cityhash-0.4.8-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:26fa8d9314667548ed7081f9c1192a893ba63b040611632825c400e536e7a7ef"},
+    {file = "cityhash-0.4.8-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:20f7a92978b934fa9cb147d00e198761640e3fc5e4aa238908ee5dc78f02f6d1"},
+    {file = "cityhash-0.4.8-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:cc3e0de3dffe6426aa2f7f5c470b787c2a2a45e0ac2e379aa01f17938161f9d9"},
+    {file = "cityhash-0.4.8-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8254afdca603522c225d93c9ed40a72754ea5fb6be3d312251cc2a84cd348175"},
+    {file = "cityhash-0.4.8-cp310-cp310-win32.whl", hash = "sha256:71c18f4291c6ac004fe2f5e7fa19fbaf8cacdb607964cecc6d418eccddd3fe19"},
+    {file = "cityhash-0.4.8-cp310-cp310-win_amd64.whl", hash = "sha256:9fdbfbaec051c68ff2d4c60a8c4bafa6aa7e54af309c06a3e7da3073cc7205bb"},
+    {file = "cityhash-0.4.8-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:808df0e56411cd083e77481ba055936924ecd9731d8093fd4c7004144f0d315e"},
+    {file = "cityhash-0.4.8-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:40a8b18246c699ec4116eff3dd495ad92e9627521ff08af5ac0607553100fe80"},
+    {file = "cityhash-0.4.8-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9dbf23cb0571280d9fb2aafac9cbeb7c3ec916cc2267bbde0988108e00111d95"},
+    {file = "cityhash-0.4.8-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:086d3c3da911aac9239f8bda89590318f3a67b113954611794b9736e7a365242"},
+    {file = "cityhash-0.4.8-cp311-cp311-win32.whl", hash = "sha256:7d950d6aba13d67fe330d90ced3b0d9e7fe42b090d0e62d0afea5f39836928d6"},
+    {file = "cityhash-0.4.8-cp311-cp311-win_amd64.whl", hash = "sha256:ffd59ddf661d25cabab4930dbde63ebbf31ce8eacdc0b3f3fe3a31449dedaa92"},
+    {file = "cityhash-0.4.8-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:e9b59a7eb28a8f722c6a8259f65bb6988a741d1f11b6753a2f1e45c4ea6bebb4"},
+    {file = "cityhash-0.4.8-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:a2048e106eddf7707be9435c59a98e2ea1f1b32be0896258ce41020a8285f332"},
+    {file = "cityhash-0.4.8-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:310dbc8fe441d27453773bda31089ce28a3220643edaaff5774409d048668206"},
+    {file = "cityhash-0.4.8-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:320bb625e2e9bae68520ca6a524d662f79637e7f638d51794a74e510901846ca"},
+    {file = "cityhash-0.4.8-cp312-cp312-win32.whl", hash = "sha256:d9201e58ef4a56ae55d9b994772a86c7d925cbd2468409f42cc56123ea1da2d8"},
+    {file = "cityhash-0.4.8-cp312-cp312-win_amd64.whl", hash = "sha256:40dd38342968d601b039c7847ff744d32cbfbaa396bda7b230a49b7ef996f920"},
+    {file = "cityhash-0.4.8-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:0879777177f06ad8668b90ea6a3a69f81ec1776110e758f1f0b3c42afffb19cd"},
+    {file = "cityhash-0.4.8-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:c165545f708f408a9fafa1401254d3b0a9683bba1b23068e6553db0155be4271"},
+    {file = "cityhash-0.4.8-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ad68388ee746a6d20f03c9d3bcd53af50238535bba143c86917a159f3b4f3541"},
+    {file = "cityhash-0.4.8-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:433e9775d1c309c73046f74bb5ddbb561f3ac4ce4bb9c33c1400f7d970a6d8da"},
+    {file = "cityhash-0.4.8-cp313-cp313-win32.whl", hash = "sha256:00eb9a881beb70b59f6c07919bb71ff628fe0474de207909e7ba34cc3d941193"},
+    {file = "cityhash-0.4.8-cp313-cp313-win_amd64.whl", hash = "sha256:6cd279eb0590a7c39c3002dda2a335b5b25d7c2e232e26f3dcbf647dfdedb15a"},
+    {file = "cityhash-0.4.8-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:1e10a61376fd886328ee620a3d15cc2df89088e8a4b7fce6255baf6336e1e96b"},
+    {file = "cityhash-0.4.8-cp36-cp36m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:62d458af48586e1341281fd89c76c2049180b5654c306a2af2bd319b78e62355"},
+    {file = "cityhash-0.4.8-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:32a95c5598443e4ec36e57ffd2e4b7b7452214df1efd6d67eb476d60ef57f005"},
+    {file = "cityhash-0.4.8-cp36-cp36m-win32.whl", hash = "sha256:9f077d385d009ffd62da42b4bf6aaea8d282ac1ad42b0a4c1c8c0fa4bf761e00"},
+    {file = "cityhash-0.4.8-cp36-cp36m-win_amd64.whl", hash = "sha256:f739ce92c296a758dcba3397e9005efffcfa9a4c53938bdce4651a7868124cf8"},
+    {file = "cityhash-0.4.8-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:359dd3277e22fcf66f46d29c0a64a1ae4a3879e653bf11fafa305835f15fa271"},
+    {file = "cityhash-0.4.8-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:41a9ad94431d1deb7e09440fc2b70a60d2772066672fb74d6ffb776c73be4c92"},
+    {file = "cityhash-0.4.8-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fc285c7dafdaf22e2e92928cb74ed722403fd394147bc3e12ccd8f61d77aebe7"},
+    {file = "cityhash-0.4.8-cp37-cp37m-win32.whl", hash = "sha256:8540553827a9373ea17254361236d2c78eb1efb798edce91bb6ff81357d1e44f"},
+    {file = "cityhash-0.4.8-cp37-cp37m-win_amd64.whl", hash = "sha256:b0857bf0554050717cd2809dfcaa038f0dd97e30fc22ffb1e26cc0e94c996359"},
+    {file = "cityhash-0.4.8-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:1addb4ada18acaac84c1c02fa7090e713182c15aaffdf95d4938007fc1736c22"},
+    {file = "cityhash-0.4.8-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ddff0a01cf5369754c773cfc60911c07656308accce25f66906c51acb4a73b04"},
+    {file = "cityhash-0.4.8-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:aac0950bf285055ffa274d69cbfbb9df0aad972ef030690065ca29125c32434e"},
+    {file = "cityhash-0.4.8-cp38-cp38-win32.whl", hash = "sha256:99e0dc577bf5565c53c47f28ccc256bb9a42e3e4f70dcbc85669c4da8b7dc420"},
+    {file = "cityhash-0.4.8-cp38-cp38-win_amd64.whl", hash = "sha256:be3dd5805aae8013e34a855b8816b5d3544ab75b021cc99bf94c134cdabf4e90"},
+    {file = "cityhash-0.4.8-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:e24341e3cf1c7a2a2c3a50eb072e087f37b03e06c30ca4da130e3afba54d987b"},
+    {file = "cityhash-0.4.8-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:f523a98f84d7cfd44fce5d170fa88f795d92d0406d68a81fb20ce98b644179e5"},
+    {file = "cityhash-0.4.8-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7aa1531cfb7bc9d04e0cf2b69ab4e0dd674a8919b21898361b4da923fa94e198"},
+    {file = "cityhash-0.4.8-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:efab5c9f3b9639613358674ec1f359219618c87dd759ab2653c3a786e03b9ac5"},
+    {file = "cityhash-0.4.8-cp39-cp39-win32.whl", hash = "sha256:12e0079260a926feb2d705edf7d81b9f7e17c047acce8f797c74d6f40224b433"},
+    {file = "cityhash-0.4.8-cp39-cp39-win_amd64.whl", hash = "sha256:e5c119538e427b3eab3bb80e45cb7a3aa7bf7e602f4af40bb72a94baa550b9e6"},
+    {file = "cityhash-0.4.8.tar.gz", hash = "sha256:b8616c90bd5b0870a170878a3f02d0df786d3e5e06685e383418231afac40ea5"},
+]
+
+[[package]]
 name = "codespell"
 version = "2.4.1"
 description = "Fix common misspellings in text files"
@@ -1714,4 +1770,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "d83701dd9a34b69505eae3df17a35fdd60a60da238ff8e2f2427dc5eda31c749"
+content-hash = "ccdc87c841ca9bcef1c4fbb496ee21b8b2b4c766f5f21d5cea5693a10a47740d"

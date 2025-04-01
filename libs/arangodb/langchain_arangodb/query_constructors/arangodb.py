@@ -35,7 +35,7 @@ class ArangoTranslator(Visitor):
             Comparator.GTE: ">=",
             Comparator.LTE: "<=",
             Comparator.LT: "<",
-            Comparator.GT: "$>",
+            Comparator.GT: ">",
         }
         return map_dict[func]
 

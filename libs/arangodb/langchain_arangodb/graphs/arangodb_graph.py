@@ -1,14 +1,16 @@
-import itertools
 import json
 import os
 import re
 from collections import defaultdict
-from importlib.util import find_spec
 from math import ceil
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Union
 
-from arango.database import StandardDatabase
+import farmhash
+from arango import ArangoClient
+from arango.database import Database, StandardDatabase
 from arango.graph import Graph
+from langchain_core.embeddings import Embeddings
+
 from langchain_arangodb.graphs.graph_document import (
     Document,
     GraphDocument,
@@ -16,7 +18,6 @@ from langchain_arangodb.graphs.graph_document import (
     Relationship,
 )
 from langchain_arangodb.graphs.graph_store import GraphStore
-from langchain_core.embeddings import Embeddings
 
 
 def get_arangodb_client(
@@ -40,12 +41,6 @@ def get_arangodb_client(
     Returns:
         An arango.database.StandardDatabase.
     """
-    try:
-        from arango import ArangoClient
-    except ImportError as e:
-        m = "Unable to import arango, please install with `pip install python-arango`."
-        raise ImportError(m) from e
-
     _url: str = url or os.environ.get("ARANGODB_URL", "http://localhost:8529")  # type: ignore[assignment]
     _dbname: str = dbname or os.environ.get("ARANGODB_DBNAME", "_system")  # type: ignore[assignment]
     _username: str = username or os.environ.get("ARANGODB_USERNAME", "root")  # type: ignore[assignment]
@@ -73,8 +68,8 @@ class ArangoGraph(GraphStore):
         higher than **schema_list_limit** will be excluded from the schema, even if
         **schema_include_examples** is set to True. Defaults to True.
     - schema_list_limit (int): The maximum list size the schema will include as part
-        of the example values. If the list is longer than this limit, a string describing
-        the list will be used in the schema instead. Default is 32.
+        of the example values. If the list is longer than this limit, a string
+        describing the list will be used in the schema instead. Default is 32.
 
     *Security note*: Make sure that the database connection uses credentials
         that are narrowly-scoped to only include necessary permissions.
@@ -90,14 +85,14 @@ class ArangoGraph(GraphStore):
 
     def __init__(
         self,
-        db: "StandardDatabase",
+        db: StandardDatabase,
         generate_schema_on_init: bool = True,
         schema_sample_ratio: float = 0,
         schema_graph_name: Optional[str] = None,
         schema_include_examples: bool = True,
         schema_list_limit: int = 32,
     ) -> None:
-        self.__db = db
+        self.__db: StandardDatabase = db
         self.__async_db = db.begin_async_execution()
 
         self.__schema = {}
@@ -110,7 +105,7 @@ class ArangoGraph(GraphStore):
             )
 
     @property
-    def db(self) -> "StandardDatabase":
+    def db(self) -> StandardDatabase:
         return self.__db
 
     @property
@@ -155,8 +150,8 @@ class ArangoGraph(GraphStore):
             higher than **list_limit** will be excluded from the schema, even if
             **schema_include_examples** is set to True. Defaults to True.
         - list_limit (int): The maximum list size the schema will include as part
-            of the example values. If the list is longer than this limit, a string describing
-            the list will be used in the schema instead. Default is 32.
+            of the example values. If the list is longer than this limit, a string
+            describing the list will be used in the schema instead. Default is 32.
         """
         self.__schema = self.generate_schema(
             sample_ratio, graph_name, include_examples, list_limit
@@ -197,32 +192,33 @@ class ArangoGraph(GraphStore):
             graph_schema = [{"name": graph_name, "edge_definitions": edge_definitions}]
 
             # Fetch graph-specific collections
-            collection_names = set(graph.vertex_collections())
-            for edge_definition in edge_definitions:
+            collection_names = set(graph.vertex_collections())  # type: ignore
+            for edge_definition in edge_definitions:  # type: ignore
                 collection_names.add(edge_definition["edge_collection"])
 
         else:
             # Fetch all graphs
             graph_schema = [
                 {"graph_name": g["name"], "edge_definitions": g["edge_definitions"]}
-                for g in self.db.graphs()
+                for g in self.db.graphs()  # type: ignore
             ]
 
             # Fetch all collections
             collection_names = {
-                collection["name"] for collection in self.db.collections()
+                collection["name"]
+                for collection in self.db.collections()  # type: ignore
             }
 
         # Stores the schema of every ArangoDB Document/Edge collection
         collection_schema: List[Dict[str, Any]] = []
-        for collection in self.db.collections():
+        for collection in self.db.collections():  # type: ignore
             if collection["system"] or collection["name"] not in collection_names:
                 continue
 
             # Extract collection name, type, and size
             col_name: str = collection["name"]
             col_type: str = collection["type"]
-            col_size: int = self.db.collection(col_name).count()
+            col_size: int = self.db.collection(col_name).count()  # type: ignore
 
             # Set number of ArangoDB documents/edges to retrieve
             limit_amount = ceil(sample_ratio * col_size) or 1
@@ -235,7 +231,8 @@ class ArangoGraph(GraphStore):
 
             doc: Dict[str, Any]
             properties: List[Dict[str, str]] = []
-            for doc in self.db.aql.execute(aql, bind_vars={"@col_name": col_name}):
+            cursor = self.db.aql.execute(aql, bind_vars={"@col_name": col_name})
+            for doc in cursor:  # type: ignore
                 for key, value in doc.items():
                     properties.append({"name": key, "type": type(value).__name__})
 
@@ -259,7 +256,7 @@ class ArangoGraph(GraphStore):
         self,
         query: str,
         params: dict = {},
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Any]:
         """
         Execute an AQL query and return the results.
 
@@ -277,12 +274,21 @@ class ArangoGraph(GraphStore):
         top_k = params.pop("top_k", None)
         list_limit = params.pop("list_limit", 32)
         cursor = self.__db.aql.execute(query, **params)
-        return [
-            self._sanitize_input(doc, list_limit)
-            for doc in itertools.islice(cursor, top_k)
-        ]
 
-    def explain(self, query: str, _) -> List[Dict[str, Any]]:
+        results = []
+
+        i = 0
+        for doc in cursor:  # type: ignore
+            results.append(self._sanitize_input(doc, list_limit))
+
+            if top_k and i >= top_k:
+                break
+
+            i += 1
+
+        return results
+
+    def explain(self, query: str, params: dict = {}) -> List[Dict[str, Any]]:
         """
         Explain an AQL query without executing it.
 
@@ -292,7 +298,7 @@ class ArangoGraph(GraphStore):
         Returns:
         - A list of dictionaries containing the query explanation.
         """
-        return self.__db.aql.explain(query)
+        return self.__db.aql.explain(query)  # type: ignore
 
     def add_graph_documents(
         self,
@@ -360,10 +366,6 @@ class ArangoGraph(GraphStore):
         """
         if not graph_documents:
             return
-
-        if find_spec("farmhash") is None:
-            m = "Farmhash not install=, please install with `pip install cityhash`."
-            raise ImportError(m)
 
         if not embeddings and (embed_source or embed_nodes or embed_relationships):
             m = "**embedding** is required to embed source, nodes, or relationships."
@@ -449,6 +451,9 @@ class ArangoGraph(GraphStore):
 
             # 1. Process Source Document
             if include_source:
+                if not document.source:
+                    raise ValueError("Source document is required.")
+
                 source_embedding = (
                     embed_text(document.source.page_content) if embed_source else None
                 )
@@ -550,7 +555,7 @@ class ArangoGraph(GraphStore):
         ##################
 
         if graph_name:
-            edge_definitions = [
+            edge_definitions: list[dict[str, str | list[str]]] = [
                 {
                     "edge_collection": k,
                     "from_vertex_collections": list(v["from_vertex_collections"]),
@@ -566,10 +571,11 @@ class ArangoGraph(GraphStore):
                 graph = self.db.graph(graph_name)
 
                 for e_d in edge_definitions:
-                    if not graph.has_edge_definition(e_d["edge_collection"]):
-                        graph.create_edge_definition(*e_d.values())
+                    e_c = str(e_d["edge_collection"])
+                    if not graph.has_edge_definition(e_c):
+                        graph.create_edge_definition(**e_d)  # type: ignore
                     else:
-                        graph.replace_edge_definition(*e_d.values())
+                        graph.replace_edge_definition(**e_d)  # type: ignore
 
         # Refresh schema after insertions
         self.refresh_schema()
@@ -604,7 +610,7 @@ class ArangoGraph(GraphStore):
 
     def _import_data(
         self,
-        db: "StandardDatabase",
+        db: Database,
         data: Dict[str, List[Dict[str, Any]]],
         is_edge: bool,
     ) -> None:
@@ -752,8 +758,6 @@ class ArangoGraph(GraphStore):
 
     def _hash(self, value: Any) -> str:
         """Applies the Farmhash hash function to a value."""
-        import farmhash
-
         try:
             value_str = str(value)
         except Exception:

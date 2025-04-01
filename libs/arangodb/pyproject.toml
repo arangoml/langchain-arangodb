@@ -16,6 +16,7 @@ python = ">=3.9,<4.0"
 langchain-core = "^0.3.8"
 langchain = "^0.3.7"
 python-arango = "^8.0.0"
+cityhash = "^0.4.8"
 
 [tool.poetry.group.test]
 optional = true

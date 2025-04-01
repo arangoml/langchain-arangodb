@@ -1,10 +1,8 @@
-from typing import List, Optional, Union
+from typing import Any, List, Union
 
 from arango.database import StandardDatabase
-from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import BaseMessage, messages_from_dict
-from langchain_core.utils import get_from_dict_or_env
 
 
 class ArangoChatMessageHistory(BaseChatMessageHistory):
@@ -16,17 +14,17 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
         db: StandardDatabase,
         collection_name: str = "ChatHistory",
         window: int = 3,
-        *args,
-        **kwargs
-    ):
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         # Make sure session id is not null
         if not session_id:
             raise ValueError("Please ensure that the session_id parameter is provided")
 
-        self._session_id = session_id
+        self._session_id = str(session_id)
         self._db = db
         self._collection_name = collection_name
-        self._window = window # TODO: Use this
+        self._window = window  # TODO: Use this
 
         if not self._db.has_collection(collection_name):
             self._db.create_collection(collection_name)
@@ -34,7 +32,7 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
         self._collection = self._db.collection(self._collection_name)
 
         has_index = False
-        for index in self._collection.indexes():
+        for index in self._collection.indexes():  # type: ignore
             if "session_id" in index["fields"]:
                 has_index = True
                 break
@@ -56,9 +54,9 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
 
         bind_vars = {"@col": self._collection_name, "session_id": self._session_id}
 
-        cursor = self._db.aql.execute(query, bind_vars=bind_vars)
+        cursor = self._db.aql.execute(query, bind_vars=bind_vars)  # type: ignore
 
-        messages = [{"data": res["content"], "type": res["role"]} for res in cursor]
+        messages = [{"data": res["content"], "type": res["role"]} for res in cursor]  # type: ignore
 
         return messages_from_dict(messages)
 
@@ -90,4 +88,4 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
 
         bind_vars = {"@col": self._collection_name, "session_id": self._session_id}
 
-        self._db.aql.execute(query, bind_vars=bind_vars)
+        self._db.aql.execute(query, bind_vars=bind_vars)  # type: ignore
