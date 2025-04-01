@@ -555,7 +555,7 @@ class ArangoGraph(GraphStore):
         ##################
 
         if graph_name:
-            edge_definitions: list[dict[str, str | list[str]]] = [
+            edge_definitions: list[dict[str, Union[str, list[str]]]] = [
                 {
                     "edge_collection": k,
                     "from_vertex_collections": list(v["from_vertex_collections"]),

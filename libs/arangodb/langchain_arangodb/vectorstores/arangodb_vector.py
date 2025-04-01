@@ -515,7 +515,7 @@ class ArangoVector(VectorStore):
         texts: List[str],
         embedding: Embeddings,
         metadatas: Optional[List[dict]] = None,
-        database: StandardDatabase | None = None,
+        database: Optional[StandardDatabase] = None,
         collection_name: str = "documents",
         search_type: SearchType = DEFAULT_SEARCH_TYPE,
         embedding_field: str = "embedding",
