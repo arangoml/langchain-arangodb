@@ -763,7 +763,7 @@ class ArangoGraph(GraphStore):
         except Exception:
             raise ValueError("Value must be a string or have a string representation.")
 
-        return str(farmhash.Fingerprint64(value_str))
+        return str(farmhash.Fingerprint64(value_str))  # type: ignore
 
     def _sanitize_collection_name(self, name: str) -> str:
         """

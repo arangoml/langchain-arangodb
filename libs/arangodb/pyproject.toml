@@ -17,6 +17,7 @@ langchain-core = "^0.3.8"
 langchain = "^0.3.7"
 python-arango = "^8.0.0"
 cityhash = "^0.4.8"
+numpy = "^1.26.4"
 
 [tool.poetry.group.test]
 optional = true
@@ -49,6 +50,7 @@ ruff = "^0.5"
 [tool.poetry.group.typing.dependencies]
 mypy = "^1.10"
 types-pyyaml = "^6.0.12.20240917"
+types-pyfarmhash = "^0.4.0.20240902"
 langchain-core = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core"}
 
 [tool.poetry.group.dev]

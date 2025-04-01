@@ -176,7 +176,7 @@ class ArangoVector(VectorStore):
         texts = list(texts)
 
         if ids is None:
-            ids = [str(farmhash.Fingerprint64(text.encode("utf-8"))) for text in texts]
+            ids = [str(farmhash.Fingerprint64(text.encode("utf-8"))) for text in texts]  # type: ignore
 
         if not metadatas:
             metadatas = [{} for _ in texts]
