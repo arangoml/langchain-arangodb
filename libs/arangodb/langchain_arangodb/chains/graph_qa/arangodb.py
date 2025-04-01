@@ -109,11 +109,9 @@ class ArangoGraphQAChain(Chain):
         **kwargs: Any,
     ) -> ArangoGraphQAChain:
         """Initialize from LLM."""
-        qa_chain = Runnable[Dict[str, Any], str](llm=llm, prompt=qa_prompt)
-        aql_generation_chain = Runnable[Dict[str, Any], str](
-            llm=llm, prompt=aql_generation_prompt
-        )
-        aql_fix_chain = Runnable[Dict[str, Any], str](llm=llm, prompt=aql_fix_prompt)
+        qa_chain = qa_prompt | llm
+        aql_generation_chain = aql_generation_prompt | llm
+        aql_fix_chain = aql_fix_prompt | llm
 
         return cls(
             qa_chain=qa_chain,
@@ -166,7 +164,7 @@ class ArangoGraphQAChain(Chain):
         #########################
         # Generate AQL Query #
         aql_generation_output = self.aql_generation_chain.invoke(
-            args={
+            {
                 "adb_schema": self.graph.get_schema,
                 "aql_examples": self.aql_examples,
                 "user_input": user_input,
@@ -229,7 +227,7 @@ class ArangoGraphQAChain(Chain):
                 ########################
                 # Retry AQL Generation #
                 aql_generation_output = self.aql_fix_chain.invoke(
-                    args={
+                    {
                         "adb_schema": self.graph.get_schema,
                         "aql_query": aql_query,
                         "aql_error": aql_error,
@@ -263,8 +261,8 @@ class ArangoGraphQAChain(Chain):
 
         ########################
         # Interpret AQL Result #
-        result = self.qa_chain.invoke(
-            args={
+        result = self.qa_chain.invoke(  # type: ignore
+            {
                 "adb_schema": self.graph.get_structured_schema,
                 "user_input": user_input,
                 "aql_query": aql_query,
@@ -275,7 +273,7 @@ class ArangoGraphQAChain(Chain):
         ########################
 
         # Return results #
-        results: Dict[str, Any] = {self.output_key: result[self.qa_chain.output_key]}
+        results: Dict[str, Any] = {self.output_key: result}
 
         if self.return_aql_query:
             results["aql_query"] = aql_query
