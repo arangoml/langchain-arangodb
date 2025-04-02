@@ -640,7 +640,7 @@ class ArangoGraph(GraphStore):
             {
                 **node.properties,
                 "_key": node_key,
-                "name": node.id,
+                "text": node.id,
                 "type": node.type,
             }
         )
@@ -651,7 +651,7 @@ class ArangoGraph(GraphStore):
     ) -> str:
         """Processes a Graph Document Node into ArangoDB based on its Node Type."""
         node_type = self._sanitize_collection_name(node.type)
-        nodes[node_type].append({"_key": node_key, "name": node.id, **node.properties})
+        nodes[node_type].append({"_key": node_key, "text": node.id, **node.properties})
         return node_type
 
     def _process_edge_as_entity(
@@ -674,7 +674,7 @@ class ArangoGraph(GraphStore):
                 "_from": f"{entity_collection_name}/{source_key}",
                 "_to": f"{entity_collection_name}/{target_key}",
                 "type": edge.type,
-                "str": edge_str,
+                "text": edge_str,
             }
         )
 
@@ -707,7 +707,7 @@ class ArangoGraph(GraphStore):
                 "_key": edge_key,
                 "_from": f"{source_type}/{source_key}",
                 "_to": f"{target_type}/{target_key}",
-                "str": edge_str,
+                "text": edge_str,
             }
         )
 
