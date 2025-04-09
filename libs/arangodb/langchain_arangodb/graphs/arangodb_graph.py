@@ -318,6 +318,7 @@ class ArangoGraph(GraphStore):
         embed_source: bool = False,
         embed_nodes: bool = False,
         embed_relationships: bool = False,
+        captialization_strategy: str = "none",
     ) -> None:
         """
         Constructs nodes & relationships in the graph based on the
@@ -363,6 +364,10 @@ class ArangoGraph(GraphStore):
         - embed_nodes (bool): If True, embeds the nodes. Defaults to False.
         - embed_relationships (bool): If True, embeds the relationships.
             Defaults to False.
+        - capitalization_strategy (str): The capitalization strategy applied on the
+            node and edge keys. Can be "lower", "upper", or "none". Defaults to "none".
+            Useful as a basic Entity Resolution technique to avoid duplicates based
+            on capitalization.
         """
         if not graph_documents:
             return
@@ -384,6 +389,15 @@ class ArangoGraph(GraphStore):
                 res = res[0]
 
             return res
+
+        if captialization_strategy == "none":
+            capitalization_fn = lambda x: x
+        if captialization_strategy == "lower":
+            capitalization_fn = str.lower
+        elif captialization_strategy == "upper":
+            capitalization_fn = str.upper
+        else:
+            raise ValueError("**capitalization_strategy** must be 'lower', 'upper', or 'none'.")
 
         #########
         # Setup #
@@ -468,7 +482,7 @@ class ArangoGraph(GraphStore):
             # 2. Process Nodes
             node_key_map = {}
             for i, node in enumerate(document.nodes, 1):
-                node.id = str(node.id)
+                node.id = capitalization_fn(str(node.id))
                 node_key = self._hash(node.id)
                 node_key_map[node.id] = node_key
 
@@ -504,6 +518,8 @@ class ArangoGraph(GraphStore):
             # 3. Process Edges
             for i, edge in enumerate(document.relationships, 1):
                 source, target = edge.source, edge.target
+                source.id = capitalization_fn(str(source.id))
+                target.id = capitalization_fn(str(target.id))
 
                 edge_str = f"{source.id} {edge.type} {target.id}"
 
