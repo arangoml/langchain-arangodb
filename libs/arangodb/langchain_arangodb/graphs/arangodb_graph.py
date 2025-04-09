@@ -318,7 +318,7 @@ class ArangoGraph(GraphStore):
         embed_source: bool = False,
         embed_nodes: bool = False,
         embed_relationships: bool = False,
-        captialization_strategy: str = "none",
+        capitalization_strategy: str = "none",
     ) -> None:
         """
         Constructs nodes & relationships in the graph based on the
@@ -390,11 +390,11 @@ class ArangoGraph(GraphStore):
 
             return res
 
-        if captialization_strategy == "none":
+        if capitalization_strategy == "none":
             capitalization_fn = lambda x: x
-        if captialization_strategy == "lower":
+        if capitalization_strategy == "lower":
             capitalization_fn = str.lower
-        elif captialization_strategy == "upper":
+        elif capitalization_strategy == "upper":
             capitalization_fn = str.upper
         else:
             raise ValueError("**capitalization_strategy** must be 'lower', 'upper', or 'none'.")
