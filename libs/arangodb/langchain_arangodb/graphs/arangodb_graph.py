@@ -391,13 +391,14 @@ class ArangoGraph(GraphStore):
             return res
 
         if capitalization_strategy == "none":
-            capitalization_fn = lambda x: x
+            capitalization_fn = lambda x: x  # noqa: E731
         if capitalization_strategy == "lower":
             capitalization_fn = str.lower
         elif capitalization_strategy == "upper":
             capitalization_fn = str.upper
         else:
-            raise ValueError("**capitalization_strategy** must be 'lower', 'upper', or 'none'.")
+            m = "**capitalization_strategy** must be 'lower', 'upper', or 'none'."
+            raise ValueError(m)
 
         #########
         # Setup #
