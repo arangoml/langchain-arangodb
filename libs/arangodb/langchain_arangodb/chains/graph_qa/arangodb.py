@@ -10,7 +10,7 @@ from langchain.chains.base import Chain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts import BasePromptTemplate
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import RunnableSerializable
 from pydantic import Field
 
 from langchain_arangodb.chains.graph_qa.prompts import (
@@ -37,9 +37,9 @@ class ArangoGraphQAChain(Chain):
     """
 
     graph: GraphStore = Field(exclude=True)
-    aql_generation_chain: Runnable[Dict[str, Any], str]
-    aql_fix_chain: Runnable[Dict[str, Any], str]
-    qa_chain: Runnable[Dict[str, Any], str]
+    aql_generation_chain: RunnableSerializable[dict, Any]
+    aql_fix_chain: RunnableSerializable[dict, Any]
+    qa_chain: RunnableSerializable[dict, Any]
     input_key: str = "query"  #: :meta private:
     output_key: str = "result"  #: :meta private:
 
@@ -161,8 +161,10 @@ class ArangoGraphQAChain(Chain):
         callbacks = _run_manager.get_child()
         user_input = inputs[self.input_key]
 
-        #########################
+        ######################
         # Generate AQL Query #
+        ######################
+
         aql_generation_output = self.aql_generation_chain.invoke(
             {
                 "adb_schema": self.graph.get_schema,
@@ -171,7 +173,6 @@ class ArangoGraphQAChain(Chain):
             },
             callbacks=callbacks,
         )
-        #########################
 
         aql_query = ""
         aql_error = ""
@@ -186,21 +187,31 @@ class ArangoGraphQAChain(Chain):
             aql_result is None
             and aql_generation_attempt < self.max_aql_generation_attempts + 1
         ):
+            aql_generation_output_content = str(aql_generation_output.content)
+
             #####################
             # Extract AQL Query #
+            #####################
+
             pattern = r"```(?i:aql)?(.*?)```"
-            matches = re.findall(pattern, aql_generation_output, re.DOTALL)
+            matches = re.findall(pattern, aql_generation_output_content, re.DOTALL)
+
             if not matches:
                 _run_manager.on_text(
                     "Invalid Response: ", end="\n", verbose=self.verbose
                 )
+
                 _run_manager.on_text(
-                    aql_generation_output, color="red", end="\n", verbose=self.verbose
+                    aql_generation_output_content,
+                    color="red",
+                    end="\n",
+                    verbose=self.verbose,
                 )
-                raise ValueError(f"Response is Invalid: {aql_generation_output}")
+
+                m = f"Response is Invalid: {aql_generation_output_content}"
+                raise ValueError(m)
 
             aql_query = matches[0]
-            #####################
 
             _run_manager.on_text(
                 f"AQL Query ({aql_generation_attempt}):", verbose=self.verbose
@@ -211,6 +222,7 @@ class ArangoGraphQAChain(Chain):
 
             #############################
             # Execute/Explain AQL Query #
+            #############################
 
             try:
                 aql_result = aql_execution_func(aql_query, {"top_k": self.top_k})
@@ -226,6 +238,8 @@ class ArangoGraphQAChain(Chain):
 
                 ########################
                 # Retry AQL Generation #
+                ########################
+
                 aql_generation_output = self.aql_fix_chain.invoke(
                     {
                         "adb_schema": self.graph.get_schema,
@@ -234,9 +248,6 @@ class ArangoGraphQAChain(Chain):
                     },
                     callbacks=callbacks,
                 )
-                ########################
-
-            #####################
 
             aql_generation_attempt += 1
 
@@ -255,12 +266,14 @@ class ArangoGraphQAChain(Chain):
         )
 
         if not self.execute_aql_query:
-            result = {self.output_key: aql_query, "aql_explain": aql_result}
+            result = {self.output_key: aql_query, "aql_result": aql_result}
 
             return result
 
         ########################
         # Interpret AQL Result #
+        ########################
+
         result = self.qa_chain.invoke(  # type: ignore
             {
                 "adb_schema": self.graph.get_structured_schema,
@@ -270,13 +283,11 @@ class ArangoGraphQAChain(Chain):
             },
             callbacks=callbacks,
         )
-        ########################
 
-        # Return results #
         results: Dict[str, Any] = {self.output_key: result}
 
         if self.return_aql_query:
-            results["aql_query"] = aql_query
+            results["aql_query"] = aql_generation_output
 
         if self.return_aql_result:
             results["aql_result"] = aql_result
