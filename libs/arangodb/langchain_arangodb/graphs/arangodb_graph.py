@@ -478,6 +478,7 @@ class ArangoGraph(GraphStore):
                     source_collection_name,
                     source_embedding,
                     embedding_field,
+                    insertion_db,
                 )
 
             # 2. Process Nodes
@@ -753,6 +754,7 @@ class ArangoGraph(GraphStore):
         source_collection_name: str,
         source_embedding: Union[list[float], None],
         embedding_field: str,
+        insertion_db: Database,
     ) -> str:
         """Processes a Graph Document Source into ArangoDB."""
         source_id = self._hash(
@@ -769,7 +771,7 @@ class ArangoGraph(GraphStore):
         if source_embedding:
             doc[embedding_field] = source_embedding
 
-        self.db.collection(source_collection_name).insert(doc, overwrite=True)
+        insertion_db.collection(source_collection_name).insert(doc, overwrite=True)
 
         return source_id
 
