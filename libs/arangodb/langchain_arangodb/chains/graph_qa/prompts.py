@@ -5,7 +5,7 @@ AQL_GENERATION_TEMPLATE = """Task: Generate an ArangoDB Query Language (AQL) que
 
 You are an ArangoDB Query Language (AQL) expert responsible for translating a `User Input` into an ArangoDB Query Language (AQL) query.
 
-You are given an `ArangoDB Schema`. It is a JSON Object containing:
+You are given an `ArangoDB Schema`. It is a YAML Spec containing:
 1. `Graph Schema`: Lists all Graphs within the ArangoDB Database Instance, along with their Edge Relationships.
 2. `Collection Schema`: Lists all Collections within the ArangoDB Database Instance, along with their document/edge properties and a document/edge example.
 
@@ -53,7 +53,7 @@ The `AQL Error` explains why the `AQL Query` could not be executed in the databa
 The `AQL Error` may also contain the position of the error relative to the total number of lines of the `AQL Query`.
 For example, 'error X at position 2:5' denotes that the error X occurs on line 2, column 5 of the `AQL Query`.  
 
-You are also given the `ArangoDB Schema`. It is a JSON Object containing:
+You are also given the `ArangoDB Schema`. It is a YAML Spec containing:
 1. `Graph Schema`: Lists all Graphs within the ArangoDB Database Instance, along with their Edge Relationships.
 2. `Collection Schema`: Lists all Collections within the ArangoDB Database Instance, along with their document/edge properties and a document/edge example.
 
@@ -111,6 +111,8 @@ AQL Query:
 
 AQL Result:
 {aql_result}
+
+Summary:
 """
 AQL_QA_PROMPT = PromptTemplate(
     input_variables=["adb_schema", "user_input", "aql_query", "aql_result"],

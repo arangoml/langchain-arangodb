@@ -6,6 +6,7 @@ from math import ceil
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Union
 
 import farmhash
+import yaml
 from arango import ArangoClient
 from arango.database import Database, StandardDatabase
 from arango.graph import Graph
@@ -91,6 +92,7 @@ class ArangoGraph(GraphStore):
         schema_graph_name: Optional[str] = None,
         schema_include_examples: bool = True,
         schema_list_limit: int = 32,
+        schema_string_limit: int = 256,
     ) -> None:
         self.__db: StandardDatabase = db
         self.__async_db = db.begin_async_execution()
@@ -102,6 +104,7 @@ class ArangoGraph(GraphStore):
                 schema_graph_name,
                 schema_include_examples,
                 schema_list_limit,
+                schema_string_limit,
             )
 
     @property
@@ -119,9 +122,14 @@ class ArangoGraph(GraphStore):
         return self.__schema
 
     @property
-    def get_schema(self) -> str:
-        """Returns the schema of the Graph Database as a string"""
+    def schema_json(self) -> str:
+        """Returns the schema of the Graph Database as a JSON string"""
         return json.dumps(self.__schema)
+
+    @property
+    def schema_yaml(self) -> str:
+        """Returns the schema of the Graph Database as a YAML string"""
+        return yaml.dump(self.__schema, sort_keys=False)
 
     def set_schema(self, schema: Dict[str, Any]) -> None:
         """Sets a custom schema for the ArangoDB Database."""
@@ -163,6 +171,7 @@ class ArangoGraph(GraphStore):
         graph_name: Optional[str] = None,
         include_examples: bool = True,
         list_limit: int = 32,
+        schema_string_limit: int = 256,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Generates the schema of the ArangoDB Database and returns it
@@ -179,6 +188,9 @@ class ArangoGraph(GraphStore):
         - list_limit (int): The maximum number of elements to include in a list.
             If the list is longer than this limit, a string describing the list
             will be used in the schema instead. Default is 32.
+        - schema_string_limit (int): The maximum number of characters to include
+            in a string. If the string is longer than this limit, a string
+            describing the string will be used in the schema instead. Default is 128.
         """
         if not 0 <= sample_ratio <= 1:
             raise ValueError("**sample_ratio** value must be in between 0 to 1")
@@ -234,7 +246,7 @@ class ArangoGraph(GraphStore):
             cursor = self.db.aql.execute(aql, bind_vars={"@col_name": col_name})
             for doc in cursor:  # type: ignore
                 for key, value in doc.items():
-                    properties.append({"name": key, "type": type(value).__name__})
+                    properties.append({key: type(value).__name__})
 
             collection_schema_entry = {
                 "name": col_name,
@@ -245,7 +257,7 @@ class ArangoGraph(GraphStore):
 
             if include_examples and col_size > 0:
                 collection_schema_entry["example"] = self._sanitize_input(
-                    doc, list_limit
+                    doc, list_limit, schema_string_limit
                 )
 
             collection_schema.append(collection_schema_entry)
@@ -273,13 +285,14 @@ class ArangoGraph(GraphStore):
         """
         top_k = params.pop("top_k", None)
         list_limit = params.pop("list_limit", 32)
+        string_limit = params.pop("string_limit", 256)
         cursor = self.__db.aql.execute(query, **params)
 
         results = []
 
         i = 0
         for doc in cursor:  # type: ignore
-            results.append(self._sanitize_input(doc, list_limit))
+            results.append(self._sanitize_input(doc, list_limit, string_limit))
 
             if top_k and i >= top_k:
                 break
@@ -806,7 +819,7 @@ class ArangoGraph(GraphStore):
 
         return name
 
-    def _sanitize_input(self, d: Any, list_limit: int) -> Any:
+    def _sanitize_input(self, d: Any, list_limit: int, string_limit: int) -> Any:
         """Sanitize the input dictionary or list.
 
         Sanitizes the input by removing embedding-like values,
@@ -826,14 +839,27 @@ class ArangoGraph(GraphStore):
             new_dict = {}
             for key, value in d.items():
                 if isinstance(value, dict):
-                    sanitized_value = self._sanitize_input(value, list_limit)
+                    sanitized_value = self._sanitize_input(
+                        value, list_limit, string_limit
+                    )
                     if sanitized_value is not None:
                         new_dict[key] = sanitized_value
                 elif isinstance(value, list):
                     if len(value) < list_limit:
-                        sanitized_value = self._sanitize_input(value, list_limit)
+                        sanitized_value = self._sanitize_input(
+                            value, list_limit, string_limit
+                        )
                         if sanitized_value is not None:
                             new_dict[key] = sanitized_value
+                    else:
+                        new_dict[key] = (
+                            f"List of {len(value)} elements of type {type(value[0])}"
+                        )
+                elif isinstance(value, str):
+                    if len(value) > string_limit:
+                        new_dict[key] = f"String of {len(value)} characters"
+                    else:
+                        new_dict[key] = value
                 else:
                     new_dict[key] = value
             return new_dict
@@ -843,7 +869,9 @@ class ArangoGraph(GraphStore):
             elif len(d) < list_limit:
                 arr = []
                 for item in d:
-                    sanitized_item = self._sanitize_input(item, list_limit)
+                    sanitized_item = self._sanitize_input(
+                        item, list_limit, string_limit
+                    )
                     if sanitized_item is not None:
                         arr.append(sanitized_item)
                 return arr

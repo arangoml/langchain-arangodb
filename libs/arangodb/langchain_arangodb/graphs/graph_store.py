@@ -8,13 +8,13 @@ class GraphStore(Protocol):
     """Abstract class for graph operations."""
 
     @property
-    def get_schema(self) -> str:
-        """Return the schema of the Graph database"""
+    def schema_json(self) -> str:
+        """Return the schema of the Graph database as JSON."""
         ...
 
     @property
-    def get_structured_schema(self) -> Dict[str, Any]:
-        """Return the schema of the Graph database"""
+    def schema_yaml(self) -> str:
+        """Return the schema of the Graph database as YAML."""
         ...
 
     def query(self, query: str, params: dict = {}) -> List[Dict[str, Any]]:

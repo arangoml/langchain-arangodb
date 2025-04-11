@@ -56,8 +56,13 @@ class ArangoGraphQAChain(Chain):
     execute_aql_query: bool = True
     """If False, the AQL Query is only explained & returned, not executed"""
     allow_dangerous_requests: bool = False
-    """Forced user opt-in to acknowledge that the chain can make dangerous requests.
+    """Forced user opt-in to acknowledge that the chain can make dangerous requests."""
+    output_list_limit: int = 32
+    """Maximum list length to include in the response prompt. Truncated if longer."""
+    output_string_length: int = 256
+    """Maximum string length to include in the response prompt. Truncated if longer."""
 
+    """
     *Security note*: Make sure that the database connection uses credentials
         that are narrowly-scoped to only include necessary permissions.
         Failure to do so may result in data corruption or loss, since the calling
@@ -156,6 +161,16 @@ class ArangoGraphQAChain(Chain):
         :var execute_aql_query: If False, the AQL Query is only
             explained & returned, not executed. Defaults to True.
         :type execute_aql_query: bool
+
+        :var output_list_limit: The maximum list length to display
+            in the output. If the list is longer, it will be truncated.
+            Defaults to 32.
+        :type output_list_limit: int
+
+        :var output_string_length: The maximum string length to display
+            in the output. If the string is longer, it will be truncated.
+            Defaults to 256.
+        :type output_string_length: int
         """
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
@@ -167,7 +182,7 @@ class ArangoGraphQAChain(Chain):
 
         aql_generation_output = self.aql_generation_chain.invoke(
             {
-                "adb_schema": self.graph.get_schema,
+                "adb_schema": self.graph.schema_yaml,
                 "aql_examples": self.aql_examples,
                 "user_input": user_input,
             },
@@ -225,7 +240,13 @@ class ArangoGraphQAChain(Chain):
             #############################
 
             try:
-                aql_result = aql_execution_func(aql_query, {"top_k": self.top_k})
+                params = {
+                    "top_k": self.top_k,
+                    "list_limit": self.output_list_limit,
+                    "string_limit": self.output_string_length,
+                }
+
+                aql_result = aql_execution_func(aql_query, params)
             except (AQLQueryExecuteError, AQLQueryExplainError) as e:
                 aql_error = str(e.error_message)
 
@@ -242,7 +263,7 @@ class ArangoGraphQAChain(Chain):
 
                 aql_generation_output = self.aql_fix_chain.invoke(
                     {
-                        "adb_schema": self.graph.get_schema,
+                        "adb_schema": self.graph.schema_yaml,
                         "aql_query": aql_query,
                         "aql_error": aql_error,
                     },
@@ -276,7 +297,7 @@ class ArangoGraphQAChain(Chain):
 
         result = self.qa_chain.invoke(  # type: ignore
             {
-                "adb_schema": self.graph.get_structured_schema,
+                "adb_schema": self.graph.schema_yaml,
                 "user_input": user_input,
                 "aql_query": aql_query,
                 "aql_result": aql_result,
