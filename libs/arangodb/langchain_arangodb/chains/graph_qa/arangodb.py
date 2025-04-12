@@ -18,7 +18,7 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_GENERATION_PROMPT,
     AQL_QA_PROMPT,
 )
-from langchain_arangodb.graphs.graph_store import GraphStore
+from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 
 
 class ArangoGraphQAChain(Chain):
@@ -36,7 +36,7 @@ class ArangoGraphQAChain(Chain):
         See https://python.langchain.com/docs/security for more information.
     """
 
-    graph: GraphStore = Field(exclude=True)
+    graph: ArangoGraph = Field(exclude=True)
     aql_generation_chain: RunnableSerializable[dict, Any]
     aql_fix_chain: RunnableSerializable[dict, Any]
     qa_chain: RunnableSerializable[dict, Any]
