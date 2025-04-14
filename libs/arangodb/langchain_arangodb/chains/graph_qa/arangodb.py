@@ -59,7 +59,7 @@ class ArangoGraphQAChain(Chain):
     """Forced user opt-in to acknowledge that the chain can make dangerous requests."""
     output_list_limit: int = 32
     """Maximum list length to include in the response prompt. Truncated if longer."""
-    output_string_length: int = 256
+    output_string_limit: int = 256
     """Maximum string length to include in the response prompt. Truncated if longer."""
 
     """
@@ -167,10 +167,10 @@ class ArangoGraphQAChain(Chain):
             Defaults to 32.
         :type output_list_limit: int
 
-        :var output_string_length: The maximum string length to display
+        :var output_string_limit: The maximum string length to display
             in the output. If the string is longer, it will be truncated.
             Defaults to 256.
-        :type output_string_length: int
+        :type output_string_limit: int
         """
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
@@ -243,7 +243,7 @@ class ArangoGraphQAChain(Chain):
                 params = {
                     "top_k": self.top_k,
                     "list_limit": self.output_list_limit,
-                    "string_limit": self.output_string_length,
+                    "string_limit": self.output_string_limit,
                 }
 
                 aql_result = aql_execution_func(aql_query, params)
