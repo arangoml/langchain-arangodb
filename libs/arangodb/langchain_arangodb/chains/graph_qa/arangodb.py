@@ -10,7 +10,7 @@ from langchain.chains.base import Chain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts import BasePromptTemplate
-from langchain_core.runnables import RunnableSerializable
+from langchain_core.runnables import Runnable
 from pydantic import Field
 
 from langchain_arangodb.chains.graph_qa.prompts import (
@@ -37,9 +37,9 @@ class ArangoGraphQAChain(Chain):
     """
 
     graph: ArangoGraph = Field(exclude=True)
-    aql_generation_chain: RunnableSerializable[dict, Any]
-    aql_fix_chain: RunnableSerializable[dict, Any]
-    qa_chain: RunnableSerializable[dict, Any]
+    aql_generation_chain: Runnable[Dict[str, Any], Any]
+    aql_fix_chain: Runnable[Dict[str, Any], Any]
+    qa_chain: Runnable[Dict[str, Any], Any]
     input_key: str = "query"  #: :meta private:
     output_key: str = "result"  #: :meta private:
 
