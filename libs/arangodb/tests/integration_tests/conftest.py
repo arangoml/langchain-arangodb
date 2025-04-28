@@ -5,17 +5,12 @@ from arango import ArangoClient
 
 from tests.integration_tests.utils import ArangoCredentials
 
-url = os.environ.get("ARANGODB_URI", "http://localhost:8529")
-username = os.environ.get("ARANGODB_USERNAME", "root")
-password = os.environ.get("ARANGODB_PASSWORD", "openSesame")
-
-os.environ["ARANGODB_URI"] = url
-os.environ["ARANGODB_USERNAME"] = username
-os.environ["ARANGODB_PASSWORD"] = password
-
+url = os.environ.get("ARANGO_URL", "http://localhost:8529")
+username = os.environ.get("ARANGO_USERNAME", "root")
+password = os.environ.get("ARANGO_PASSWORD", "test")
 
 @pytest.fixture
-def clear_arangodb_database() -> None:
+def clear_arangodb_database():
     client = ArangoClient(url)
     db = client.db(username=username, password=password, verify=True)
 
@@ -30,9 +25,16 @@ def clear_arangodb_database() -> None:
 
 
 @pytest.fixture(scope="session")
-def arangodb_credentials() -> ArangoCredentials:
+def arangodb_credentials():
     return {
         "url": url,
         "username": username,
         "password": password,
     }
+
+@pytest.fixture(scope="session")
+def db(arangodb_credentials: ArangoCredentials):
+    client = ArangoClient(arangodb_credentials["url"])
+    db = client.db(username=arangodb_credentials["username"], password=arangodb_credentials["password"])
+    yield db
+    client.close()

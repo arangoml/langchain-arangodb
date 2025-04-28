@@ -34,6 +34,11 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
           cache-key: core
 
+      - name: Provision ArangoDB
+        shell: bash
+        run: |
+          docker compose -f ${{ inputs.working-directory }}/tests/integration_tests/docker-compose/arangodb.yml up -d
+
       - name: Install dependencies
         shell: bash
         run: poetry install --with test
