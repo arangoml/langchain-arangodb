@@ -37,7 +37,7 @@ jobs:
       - name: Provision ArangoDB
         shell: bash
         run: |
-          docker compose -f ${{ inputs.working-directory }}/tests/integration_tests/docker-compose/arangodb.yml up -d
+          docker compose -f tests/integration_tests/docker-compose/arangodb.yml up -d
 
       - name: Install dependencies
         shell: bash
