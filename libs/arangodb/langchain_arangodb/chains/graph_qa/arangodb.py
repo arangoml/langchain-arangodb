@@ -9,9 +9,9 @@ from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain.chains.base import Chain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
+from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
-from langchain_core.messages import AIMessage
 from pydantic import Field
 
 from langchain_arangodb.chains.graph_qa.prompts import (
@@ -230,7 +230,7 @@ class ArangoGraphQAChain(Chain):
                     verbose=self.verbose,
                 )
 
-                m = f"Unable to extract AQL Query from response: {aql_generation_output_content}"
+                m = f"Unable to extract AQL Query from response: {aql_generation_output_content}"  # noqa: E501
                 raise ValueError(m)
 
             aql_query = matches[0]

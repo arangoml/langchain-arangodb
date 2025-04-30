@@ -24,8 +24,12 @@ def test_aql_generating_run(db: StandardDatabase) -> None:
     graph.db.create_collection("ActedIn", edge=True)
 
     graph.db.collection("Actor").insert({"_key": "BruceWillis", "name": "Bruce Willis"})
-    graph.db.collection("Movie").insert({"_key": "PulpFiction", "title": "Pulp Fiction"})
-    graph.db.collection("ActedIn").insert({"_from": "Actor/BruceWillis", "_to": "Movie/PulpFiction"})
+    graph.db.collection("Movie").insert(
+        {"_key": "PulpFiction", "title": "Pulp Fiction"}
+    )
+    graph.db.collection("ActedIn").insert(
+        {"_from": "Actor/BruceWillis", "_to": "Movie/PulpFiction"}
+    )
 
     # Refresh schema information
     graph.refresh_schema()
@@ -48,7 +52,7 @@ def test_aql_generating_run(db: StandardDatabase) -> None:
         llm=llm,
         graph=graph,
         allow_dangerous_requests=True,
-        max_aql_generation_attempts = 1,
+        max_aql_generation_attempts=1,
     )
 
     output = chain.invoke("Who starred in Pulp Fiction?")
