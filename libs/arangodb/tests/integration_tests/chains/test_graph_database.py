@@ -55,5 +55,5 @@ def test_aql_generating_run(db: StandardDatabase) -> None:
         max_aql_generation_attempts=1,
     )
 
-    output = chain.invoke("Who starred in Pulp Fiction?")
+    output = chain.invoke("Who starred in Pulp Fiction?")  # type: ignore
     assert output["result"] == "Bruce Willis"
