@@ -11,6 +11,7 @@ from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
+from langchain_core.messages import AIMessage
 from pydantic import Field
 
 from langchain_arangodb.chains.graph_qa.prompts import (
@@ -202,7 +203,13 @@ class ArangoGraphQAChain(Chain):
             aql_result is None
             and aql_generation_attempt < self.max_aql_generation_attempts + 1
         ):
-            aql_generation_output_content = str(aql_generation_output.content)
+            if isinstance(aql_generation_output, str):
+                aql_generation_output_content = aql_generation_output
+            elif isinstance(aql_generation_output, AIMessage):
+                aql_generation_output_content = str(aql_generation_output.content)
+            else:
+                m = f"Invalid AQL Generation Output: {aql_generation_output} (type: {type(aql_generation_output)})"  # noqa: E501
+                raise ValueError(m)
 
             #####################
             # Extract AQL Query #
@@ -223,7 +230,7 @@ class ArangoGraphQAChain(Chain):
                     verbose=self.verbose,
                 )
 
-                m = f"Response is Invalid: {aql_generation_output_content}"
+                m = f"Unable to extract AQL Query from response: {aql_generation_output_content}"
                 raise ValueError(m)
 
             aql_query = matches[0]
