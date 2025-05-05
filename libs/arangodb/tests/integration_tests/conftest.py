@@ -11,6 +11,10 @@ url = os.environ.get("ARANGO_URL", "http://localhost:8529")
 username = os.environ.get("ARANGO_USERNAME", "root")
 password = os.environ.get("ARANGO_PASSWORD", "test")
 
+os.environ["ARANGO_URL"] = url
+os.environ["ARANGO_USERNAME"] = username
+os.environ["ARANGO_PASSWORD"] = password
+
 
 @pytest.fixture
 def clear_arangodb_database() -> None:
