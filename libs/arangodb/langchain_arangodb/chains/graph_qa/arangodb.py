@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain.chains.base import Chain
@@ -62,6 +62,17 @@ class ArangoGraphQAChain(Chain):
     """Maximum list length to include in the response prompt. Truncated if longer."""
     output_string_limit: int = 256
     """Maximum string length to include in the response prompt. Truncated if longer."""
+    raise_on_write_operation: bool = False
+    """If True, the query is checked for write operations and raises an
+    error if a write operation is detected."""
+
+    WRITE_OPERATIONS = [
+        "INSERT",
+        "UPDATE",
+        "REPLACE",
+        "REMOVE",
+        "UPSERT",
+    ]
 
     """
     *Security note*: Make sure that the database connection uses credentials
@@ -216,7 +227,9 @@ class ArangoGraphQAChain(Chain):
             #####################
 
             pattern = r"```(?i:aql)?(.*?)```"
-            matches = re.findall(pattern, aql_generation_output_content, re.DOTALL)
+            matches: List[str] = re.findall(
+                pattern, aql_generation_output_content, re.DOTALL
+            )
 
             if not matches:
                 _run_manager.on_text(
@@ -233,7 +246,17 @@ class ArangoGraphQAChain(Chain):
                 m = f"Unable to extract AQL Query from response: {aql_generation_output_content}"  # noqa: E501
                 raise ValueError(m)
 
-            aql_query = matches[0]
+            aql_query = matches[0].strip()
+
+            if self.raise_on_write_operation:
+                has_write, write_operation = self._has_write_operation(aql_query)
+
+                if has_write:
+                    error_msg = f"""
+                        Security violation: Write operations are not allowed.
+                        Detected write operation in query: {write_operation}
+                    """
+                    raise ValueError(error_msg)
 
             _run_manager.on_text(
                 f"AQL Query ({aql_generation_attempt}):", verbose=self.verbose
@@ -321,3 +344,20 @@ class ArangoGraphQAChain(Chain):
             results["aql_result"] = aql_result
 
         return results
+
+    def _has_write_operation(self, aql_query: str) -> Tuple[bool, Optional[str]]:
+        """Check if the AQL query has a write operation.
+
+        Args:
+            aql_query: The AQL query to check.
+
+        Returns:
+            bool: True if the query has a write operation, False otherwise.
+        """
+        normalized_query = aql_query.upper()
+
+        for op in self.WRITE_OPERATIONS:
+            if op in normalized_query:
+                return True, op
+
+        return False, None
