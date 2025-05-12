@@ -21,6 +21,13 @@ from langchain_arangodb.chains.graph_qa.prompts import (
 )
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 
+AQL_WRITE_OPERATIONS: List[str] = [
+    "INSERT",
+    "UPDATE",
+    "REPLACE",
+    "REMOVE",
+    "UPSERT",
+]
 
 class ArangoGraphQAChain(Chain):
     """Chain for question-answering against a graph by generating AQL statements.
@@ -65,14 +72,6 @@ class ArangoGraphQAChain(Chain):
     force_read_only_query: bool = False
     """If True, the query is checked for write operations and raises an
     error if a write operation is detected."""
-
-    WRITE_OPERATIONS = [
-        "INSERT",
-        "UPDATE",
-        "REPLACE",
-        "REMOVE",
-        "UPSERT",
-    ]
 
     """
     *Security note*: Make sure that the database connection uses credentials
@@ -356,7 +355,7 @@ class ArangoGraphQAChain(Chain):
         """
         normalized_query = aql_query.upper()
 
-        for op in self.WRITE_OPERATIONS:
+        for op in AQL_WRITE_OPERATIONS:
             if op in normalized_query:
                 return False, op
 
