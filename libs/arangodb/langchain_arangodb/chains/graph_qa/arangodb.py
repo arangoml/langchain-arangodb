@@ -29,6 +29,7 @@ AQL_WRITE_OPERATIONS: List[str] = [
     "UPSERT",
 ]
 
+
 class ArangoGraphQAChain(Chain):
     """Chain for question-answering against a graph by generating AQL statements.
 
