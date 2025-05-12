@@ -62,7 +62,7 @@ class ArangoGraphQAChain(Chain):
     """Maximum list length to include in the response prompt. Truncated if longer."""
     output_string_limit: int = 256
     """Maximum string length to include in the response prompt. Truncated if longer."""
-    raise_on_write_operation: bool = False
+    force_read_only_query: bool = False
     """If True, the query is checked for write operations and raises an
     error if a write operation is detected."""
 
@@ -248,10 +248,10 @@ class ArangoGraphQAChain(Chain):
 
             aql_query = matches[0].strip()
 
-            if self.raise_on_write_operation:
-                has_write, write_operation = self._has_write_operation(aql_query)
+            if self.force_read_only_query:
+                is_read_only, write_operation = self._is_read_only_query(aql_query)
 
-                if has_write:
+                if not is_read_only:
                     error_msg = f"""
                         Security violation: Write operations are not allowed.
                         Detected write operation in query: {write_operation}
@@ -345,19 +345,19 @@ class ArangoGraphQAChain(Chain):
 
         return results
 
-    def _has_write_operation(self, aql_query: str) -> Tuple[bool, Optional[str]]:
-        """Check if the AQL query has a write operation.
+    def _is_read_only_query(self, aql_query: str) -> Tuple[bool, Optional[str]]:
+        """Check if the AQL query is read-only.
 
         Args:
             aql_query: The AQL query to check.
 
         Returns:
-            bool: True if the query has a write operation, False otherwise.
+            bool: True if the query is read-only, False otherwise.
         """
         normalized_query = aql_query.upper()
 
         for op in self.WRITE_OPERATIONS:
             if op in normalized_query:
-                return True, op
+                return False, op
 
-        return False, None
+        return True, None
