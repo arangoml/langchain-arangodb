@@ -583,9 +583,23 @@ class ArangoVector(VectorStore):
 
         return store
 
-    def _select_relevance_score_fn(self) -> Callable[[float], float]:
-        if self.override_relevance_score_fn is not None:
-            return self.override_relevance_score_fn
+    @classmethod
+    def from_existing_collection(
+        cls: Type[ArangoVector],
+        collection_name: str,
+        text_properties_to_embed: List[str],
+        embedding: Embeddings,
+        database: StandardDatabase,
+        embedding_field: str = "embedding",
+        text_field: str = "text",
+        batch_size: int = 1000,
+        aql_return_text_query: str = "",
+        insert_text: bool = False,
+        skip_existing_embeddings: bool = False,
+        **kwargs: Any,
+    ) -> ArangoVector:
+        """
+        Return ArangoDBVector initialized from existing collection.
 
         Args:
             collection_name: Name of the collection to use.
