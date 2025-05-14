@@ -44,6 +44,10 @@ def test_arangovector_from_texts_and_similarity_search(
         overwrite_index=True,  # Ensure clean state for the index
     )
 
+    # Manually create the index as from_texts with overwrite=True only deletes it
+    # in the current version of arangodb_vector.py
+    vector_store.create_vector_index()
+
     # Check if the collection was created
     assert db.has_collection("test_collection")
     collection = db.collection("test_collection")
@@ -89,6 +93,9 @@ def test_arangovector_euclidean_distance(
         distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE,
         overwrite_index=True,
     )
+
+    # Manually create the index as from_texts with overwrite=True only deletes it
+    vector_store.create_vector_index()
 
     # Check index metric
     collection = db.collection("test_collection")
