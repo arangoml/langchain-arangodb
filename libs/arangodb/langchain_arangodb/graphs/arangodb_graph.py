@@ -279,6 +279,9 @@ class ArangoGraph(GraphStore):
                 Defaults to None.
             - list_limit: Removes lists above **list_limit** size
                 that have been returned from the AQL query.
+            - string_limit: Removes strings above **string_limit** size
+                that have been returned from the AQL query.
+            - Remaining params are passed to the AQL query execution.
 
         Returns:
         - A list of dictionaries containing the query results.
@@ -823,13 +826,15 @@ class ArangoGraph(GraphStore):
         """Sanitize the input dictionary or list.
 
         Sanitizes the input by removing embedding-like values,
-        lists with more than 128 elements, that are mostly irrelevant for
+        lists with more than **list_limit** elements, that are mostly irrelevant for
         generating answers in a LLM context. These properties, if left in
         results, can occupy significant context space and detract from
         the LLM's performance by introducing unnecessary noise and cost.
 
         Args:
             d (Any): The input dictionary or list to sanitize.
+            list_limit (int): The limit for the number of elements in a list.
+            string_limit (int): The limit for the number of characters in a string.
 
         Returns:
             Any: The sanitized dictionary or list.
