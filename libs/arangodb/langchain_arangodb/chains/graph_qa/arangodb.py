@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain.chains.base import Chain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
+from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import Field
@@ -19,6 +20,14 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_QA_PROMPT,
 )
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
+
+AQL_WRITE_OPERATIONS: List[str] = [
+    "INSERT",
+    "UPDATE",
+    "REPLACE",
+    "REMOVE",
+    "UPSERT",
+]
 
 
 class ArangoGraphQAChain(Chain):
@@ -61,6 +70,9 @@ class ArangoGraphQAChain(Chain):
     """Maximum list length to include in the response prompt. Truncated if longer."""
     output_string_limit: int = 256
     """Maximum string length to include in the response prompt. Truncated if longer."""
+    force_read_only_query: bool = False
+    """If True, the query is checked for write operations and raises an
+    error if a write operation is detected."""
 
     """
     *Security note*: Make sure that the database connection uses credentials
@@ -202,14 +214,22 @@ class ArangoGraphQAChain(Chain):
             aql_result is None
             and aql_generation_attempt < self.max_aql_generation_attempts + 1
         ):
-            aql_generation_output_content = str(aql_generation_output.content)
+            if isinstance(aql_generation_output, str):
+                aql_generation_output_content = aql_generation_output
+            elif isinstance(aql_generation_output, AIMessage):
+                aql_generation_output_content = str(aql_generation_output.content)
+            else:
+                m = f"Invalid AQL Generation Output: {aql_generation_output} (type: {type(aql_generation_output)})"  # noqa: E501
+                raise ValueError(m)
 
             #####################
             # Extract AQL Query #
             #####################
 
             pattern = r"```(?i:aql)?(.*?)```"
-            matches = re.findall(pattern, aql_generation_output_content, re.DOTALL)
+            matches: List[str] = re.findall(
+                pattern, aql_generation_output_content, re.DOTALL
+            )
 
             if not matches:
                 _run_manager.on_text(
@@ -223,10 +243,20 @@ class ArangoGraphQAChain(Chain):
                     verbose=self.verbose,
                 )
 
-                m = f"Response is Invalid: {aql_generation_output_content}"
+                m = f"Unable to extract AQL Query from response: {aql_generation_output_content}"  # noqa: E501
                 raise ValueError(m)
 
-            aql_query = matches[0]
+            aql_query = matches[0].strip()
+
+            if self.force_read_only_query:
+                is_read_only, write_operation = self._is_read_only_query(aql_query)
+
+                if not is_read_only:
+                    error_msg = f"""
+                        Security violation: Write operations are not allowed.
+                        Detected write operation in query: {write_operation}
+                    """
+                    raise ValueError(error_msg)
 
             _run_manager.on_text(
                 f"AQL Query ({aql_generation_attempt}):", verbose=self.verbose
@@ -314,3 +344,20 @@ class ArangoGraphQAChain(Chain):
             results["aql_result"] = aql_result
 
         return results
+
+    def _is_read_only_query(self, aql_query: str) -> Tuple[bool, Optional[str]]:
+        """Check if the AQL query is read-only.
+
+        Args:
+            aql_query: The AQL query to check.
+
+        Returns:
+            bool: True if the query is read-only, False otherwise.
+        """
+        normalized_query = aql_query.upper()
+
+        for op in AQL_WRITE_OPERATIONS:
+            if op in normalized_query:
+                return False, op
+
+        return True, None
