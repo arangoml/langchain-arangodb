@@ -552,8 +552,8 @@ class ArangoVector(VectorStore):
         )
 
         if overwrite_index:
-            store.delete_vector_index()
-
+            store.delete_vector_index()  
+            
         store.add_embeddings(texts, embeddings, metadatas=metadatas, ids=ids, **kwargs)
 
         return store

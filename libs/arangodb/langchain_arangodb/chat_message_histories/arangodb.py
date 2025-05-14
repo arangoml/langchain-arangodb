@@ -38,7 +38,7 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
                 break
 
         if not has_index:
-            self._collection.add_persistent_index(["session_id"], unique=True)
+            self._collection.add_persistent_index(["session_id"], unique=False)
 
         super().__init__(*args, **kwargs)
 
@@ -56,7 +56,10 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
 
         cursor = self._db.aql.execute(query, bind_vars=bind_vars)  # type: ignore
 
-        messages = [{"data": res["content"], "type": res["role"]} for res in cursor]  # type: ignore
+        messages = [
+            {"data": {"content": res["content"]}, "type": res["role"]}
+            for res in cursor  # type: ignore
+        ]
 
         return messages_from_dict(messages)
 
