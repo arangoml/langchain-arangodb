@@ -61,7 +61,7 @@ def test_arangovector_from_texts_and_similarity_search(
 
     # Test similarity search
     query = "hello"
-    results = vector_store.similarity_search(query, k=1)
+    results = vector_store.similarity_search(query, k=1, return_fields={"source"})
 
     assert len(results) == 1
     assert results[0].page_content == "hello world"
@@ -129,7 +129,9 @@ def test_arangovector_similarity_search_with_score(
     )
 
     query = "foo"
-    results_with_scores = vector_store.similarity_search_with_score(query, k=1)
+    results_with_scores = vector_store.similarity_search_with_score(
+        query, k=1, return_fields={"id"}
+    )
 
     assert len(results_with_scores) == 1
     doc, score = results_with_scores[0]
@@ -139,7 +141,7 @@ def test_arangovector_similarity_search_with_score(
 
     # Test with exact cosine similarity
     results_with_scores_exact = vector_store.similarity_search_with_score(
-        query, k=1, use_approx=False
+        query, k=1, use_approx=False, return_fields={"id"}
     )
     assert len(results_with_scores_exact) == 1
     doc_exact, score_exact = results_with_scores_exact[0]
@@ -160,7 +162,9 @@ def test_arangovector_similarity_search_with_score(
         distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE,
         overwrite_index=True,
     )
-    results_with_scores_l2 = vector_store_l2.similarity_search_with_score(query, k=1)
+    results_with_scores_l2 = vector_store_l2.similarity_search_with_score(
+        query, k=1, return_fields={"id"}
+    )
     assert len(results_with_scores_l2) == 1
     doc_l2, score_l2 = results_with_scores_l2[0]
     assert doc_l2.page_content == "alpha"
@@ -211,7 +215,7 @@ def test_arangovector_add_embeddings_and_search(
 
     # Perform search
     query = "apple"
-    results = vector_store.similarity_search(query, k=1)
+    results = vector_store.similarity_search(query, k=1, return_fields={"fruit_type"})
     assert len(results) == 1
     assert results[0].page_content == "apple"
     assert results[0].metadata.get("fruit_type") == "pome"
@@ -251,7 +255,7 @@ def test_arangovector_retriever_search_threshold(
     retriever = vector_store.as_retriever(
         search_type="similarity_score_threshold",
         score_threshold=0.95,
-        search_kwargs={"k": 3, "use_approx": False, "score_threshold": 0.95},
+        search_kwargs={"k": 3, "use_approx": False, "score_threshold": 0.95, "return_fields": {"animal_type"}},
     )
 
     query = "foo"
@@ -265,7 +269,7 @@ def test_arangovector_retriever_search_threshold(
     retriever_strict = vector_store.as_retriever(
         search_type="similarity_score_threshold",
         score_threshold=1.01,
-        search_kwargs={"k": 3, "use_approx": False, "score_threshold": 1.01},
+        search_kwargs={"k": 3, "use_approx": False, "score_threshold": 1.01, "return_fields": {"animal_type"}},
     )
     results_strict = retriever_strict.invoke(query)
     assert len(results_strict) == 0
@@ -377,7 +381,9 @@ def test_arangovector_similarity_search_with_return_fields(
     query_text = "alpha beta"
 
     # Test 1: No return_fields (should return all metadata except embedding_field)
-    results_all_meta = vector_store.similarity_search(query_text, k=1)
+    results_all_meta = vector_store.similarity_search(
+        query_text, k=1, return_fields={"source", "chapter", "page", "author"}
+    )
     assert len(results_all_meta) == 1
     assert results_all_meta[0].page_content == query_text
     expected_meta_all = {"source": "doc1", "chapter": "ch1", "page": 10, "author": "A"}
@@ -395,7 +401,7 @@ def test_arangovector_similarity_search_with_return_fields(
 
     # Test 3: Empty return_fields set (should also return all metadata as per current logic)
     results_empty_set_meta = vector_store.similarity_search(
-        query_text, k=1, return_fields=set()
+        query_text, k=1, return_fields={"source", "chapter", "page", "author"}
     )
     assert len(results_empty_set_meta) == 1
     assert results_empty_set_meta[0].page_content == query_text
