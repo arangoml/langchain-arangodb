@@ -1,5 +1,6 @@
 # 🦜️🔗 LangChain ArangoDB
 
+
 This repository contains 1 package with ArangoDB integrations with LangChain:
 
 - [langchain-arangodb](https://pypi.org/project/langchain-arangodb/)
