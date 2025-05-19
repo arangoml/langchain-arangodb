@@ -126,7 +126,7 @@ def test_arangodb_message_history_clear_messages(
 ) -> None:
     """Test adding multiple messages at once to ArangoChatMessageHistory."""
     # Specify a custom collection name that includes the session_id
-    collection_name = f"chat_history_123"
+    collection_name = "chat_history_123"
     message_history = ArangoChatMessageHistory(
         session_id="123", db=db, collection_name=collection_name
     )

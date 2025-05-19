@@ -1,6 +1,4 @@
-"""Test ArangoVector functionality."""
-
-from typing import Any, Callable, Optional, Type
+from typing import Any, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,7 +6,6 @@ import pytest
 from langchain_arangodb.vectorstores.arangodb_vector import (
     ArangoVector,
     DistanceStrategy,
-    SearchType,
     StandardDatabase,
 )
 
@@ -39,7 +36,8 @@ def mock_vector_store() -> ArangoVector:
 
 @pytest.fixture
 def arango_vector_factory() -> Any:
-    """Factory fixture to create ArangoVector instances with different configurations."""
+    """Factory fixture to create ArangoVector instances
+    with different configurations."""
 
     def _create_vector_store(
         method: Optional[str] = None,
@@ -234,7 +232,7 @@ def test_delete_vector_index_not_exists(arango_vector_factory: Any) -> None:
 def test_delete_vector_index_with_real_index_data(arango_vector_factory: Any) -> None:
     """Test deleting vector index with real index data structure."""
     vector_store = arango_vector_factory(vector_index_exists=True)
-    
+
     # Create a realistic index object with all expected fields
     mock_index = {
         "id": "vector_index_12345",
@@ -246,23 +244,18 @@ def test_delete_vector_index_with_real_index_data(arango_vector_factory: Any) ->
         "unique": False,
         "deduplicate": False,
     }
-    
+
     # Mock retrieve_vector_index to return our realistic index
-    with patch.object(
-        vector_store, "retrieve_vector_index", return_value=mock_index
-    ):
+    with patch.object(vector_store, "retrieve_vector_index", return_value=mock_index):
         # Call the method under test
         vector_store.delete_vector_index()
-    
+
     # Verify delete_index was called with the exact ID from our mock index
     vector_store.collection.delete_index.assert_called_once_with("vector_index_12345")
-    
-    # Test the case where the index doesn't have an id field (this shouldn't happen in practice,
-    # but let's ensure the code is robust)
+
+    # Test the case where the index doesn't have an id field
     bad_index = {"name": "vector_index", "type": "vector"}
-    with patch.object(
-        vector_store, "retrieve_vector_index", return_value=bad_index
-    ):
+    with patch.object(vector_store, "retrieve_vector_index", return_value=bad_index):
         with pytest.raises(KeyError):
             vector_store.delete_vector_index()
 
@@ -271,13 +264,15 @@ def test_add_embeddings_with_mismatched_lengths(arango_vector_factory: Any) -> N
     """Test adding embeddings with mismatched lengths raises ValueError."""
     vector_store = arango_vector_factory()
 
-    # To make the existing condition `len(ids) != len(texts) != len(embeddings) != len(metadatas)` True,
-    # we need each adjacent pair of lengths to be different.
-    ids = ["id1"]  # len = 1
-    texts = ["text1", "text2"]  # len = 2 (1 != 2 is True)
-    embeddings = [[0.1] * 64, [0.2] * 64, [0.3] * 64]  # len = 3 (2 != 3 is True)
-    # len = 4 (3 != 4 is True)
-    metadatas = [{"key": "value1"}, {"key": "value2"}, {"key": "value3"}, {"key": "value4"}]
+    ids = ["id1"]
+    texts = ["text1", "text2"]
+    embeddings = [[0.1] * 64, [0.2] * 64, [0.3] * 64]
+    metadatas = [
+        {"key": "value1"},
+        {"key": "value2"},
+        {"key": "value3"},
+        {"key": "value4"},
+    ]
 
     with pytest.raises(ValueError) as exc_info:
         vector_store.add_embeddings(
@@ -451,7 +446,6 @@ def test_max_marginal_relevance_search(arango_vector_factory: Any) -> None:
     mock_docs = [MagicMock(), MagicMock(), MagicMock()]
     mock_similarities = [0.9, 0.8, 0.7]
 
-    # Mock similarity_search_by_vector_with_score to return the mock documents and scores
     with (
         patch.object(
             vector_store,
@@ -473,12 +467,6 @@ def test_max_marginal_relevance_search(arango_vector_factory: Any) -> None:
     # Verify embed_query was called with query
     vector_store.embedding.embed_query.assert_called_once_with("test query")
 
-    # Verify maximal_marginal_relevance was called with correct parameters
-    mock_embeddings = [
-        [0.1] * 64,
-        [0.1] * 64,
-        [0.1] * 64,
-    ]  # These should be the document embeddings
     mmr_call_kwargs = mock_mmr.call_args[1]
     assert mmr_call_kwargs["k"] == 2
     assert mmr_call_kwargs["lambda_mult"] == 0.5
@@ -500,7 +488,7 @@ def test_from_texts(arango_vector_factory: Any) -> None:
     mock_db_instance.has_collection.return_value = (
         True  # Assume collection exists or is created by __init__
     )
-    mock_collection_instance.indexes.return_value = []  # Simulate no vector index exists
+    mock_collection_instance.indexes.return_value = []
 
     with patch.object(ArangoVector, "add_embeddings", return_value=["id1", "id2"]):
         vector_store = ArangoVector.from_texts(
@@ -514,7 +502,7 @@ def test_from_texts(arango_vector_factory: Any) -> None:
         assert vector_store.collection_name == "custom_collection"
         assert vector_store.embedding == mock_embedding
         assert vector_store.embedding_dimension == 64
-        
+
         # Note: create_vector_index is not automatically called in from_texts
         # so we don't verify it was called here
 
@@ -568,45 +556,45 @@ def test_get_by_ids(arango_vector_factory: Any) -> None:
     # Test case 2: No documents returned (empty result)
     vector_store.collection.get_many.reset_mock()
     vector_store.collection.get_many.return_value = []
-    
+
     empty_docs = vector_store.get_by_ids(["non_existent_id"])
-    
+
     # Verify collection.get_many was called with the non-existent ID
     vector_store.collection.get_many.assert_called_with(["non_existent_id"])
-    
+
     # Verify an empty list was returned
     assert empty_docs == []
-    
+
     # Test case 3: Custom text field
     vector_store = arango_vector_factory(text_field="custom_text")
-    
+
     custom_field_docs = [
         {"_key": "id3", "custom_text": "custom content", "tag": "important"},
     ]
-    
+
     vector_store.collection.get_many.return_value = custom_field_docs
-    
+
     result_docs = vector_store.get_by_ids(["id3"])
-    
+
     # Verify collection.get_many was called
     vector_store.collection.get_many.assert_called_with(["id3"])
-    
+
     # Verify the document was correctly processed with the custom text field
     assert len(result_docs) == 1
     assert result_docs[0].page_content == "custom content"
     assert result_docs[0].id == "id3"
     assert result_docs[0].metadata["tag"] == "important"
-    
+
     # Test case 4: Document is missing the text field
     vector_store = arango_vector_factory()
-    
+
     # Document without the text field
     incomplete_docs = [
         {"_key": "id4", "other_field": "some value"},
     ]
-    
+
     vector_store.collection.get_many.return_value = incomplete_docs
-    
+
     # This should raise a KeyError when trying to access the missing text field
     with pytest.raises(KeyError):
         vector_store.get_by_ids(["id4"])
@@ -646,9 +634,9 @@ def test_select_relevance_score_fn_default_strategies(
 def test_select_relevance_score_fn_invalid_strategy_raises_error(
     arango_vector_factory: Any,
 ) -> None:
-    """Test that an invalid distance strategy raises a ValueError if _distance_strategy is mutated post-init."""
+    """Test that an invalid distance strategy raises a ValueError
+    if _distance_strategy is mutated post-init."""
     vector_store = arango_vector_factory()
-    # Manually set an unsupported distance strategy to test the method's robustness
     vector_store._distance_strategy = "INVALID_STRATEGY"
 
     with pytest.raises(ValueError) as exc_info:

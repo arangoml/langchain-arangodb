@@ -12,10 +12,12 @@ from .fake_embeddings import FakeEmbeddings
 
 EMBEDDING_DIMENSION = 10
 
+
 @pytest.fixture(scope="session")
 def fake_embedding_function() -> FakeEmbeddings:
     """Provides a FakeEmbeddings instance."""
     return FakeEmbeddings()
+
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangovector_from_texts_and_similarity_search(
@@ -72,6 +74,7 @@ def test_arangovector_from_texts_and_similarity_search(
     assert results[0].page_content == "hello world"
     assert results[0].metadata.get("source") == "doc1"
 
+
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangovector_euclidean_distance(
     arangodb_credentials: ArangoCredentials,
@@ -111,6 +114,7 @@ def test_arangovector_euclidean_distance(
     results = vector_store.similarity_search(query, k=1)
     assert len(results) == 1
     assert results[0].page_content == "docA"
+
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangovector_similarity_search_with_score(
@@ -263,7 +267,12 @@ def test_arangovector_retriever_search_threshold(
     retriever = vector_store.as_retriever(
         search_type="similarity_score_threshold",
         score_threshold=0.95,
-        search_kwargs={"k": 3, "use_approx": False, "score_threshold": 0.95, "return_fields": {"animal_type"}},
+        search_kwargs={
+            "k": 3,
+            "use_approx": False,
+            "score_threshold": 0.95,
+            "return_fields": {"animal_type"},
+        },
     )
 
     query = "foo"
@@ -273,11 +282,15 @@ def test_arangovector_retriever_search_threshold(
     assert results[0].page_content == "dog"
     assert results[0].metadata.get("animal_type") == "canine"
 
-    # Test with a threshold that should include nothing if no perfect match or if approx score is lower
     retriever_strict = vector_store.as_retriever(
         search_type="similarity_score_threshold",
         score_threshold=1.01,
-        search_kwargs={"k": 3, "use_approx": False, "score_threshold": 1.01, "return_fields": {"animal_type"}},
+        search_kwargs={
+            "k": 3,
+            "use_approx": False,
+            "score_threshold": 1.01,
+            "return_fields": {"animal_type"},
+        },
     )
     results_strict = retriever_strict.invoke(query)
     assert len(results_strict) == 0
@@ -363,7 +376,7 @@ def test_arangovector_similarity_search_with_return_fields(
 ) -> None:
     """Test similarity search with specified return_fields for metadata."""
     client = ArangoClient(hosts=arangodb_credentials["url"])
-    db = client.db( 
+    db = client.db(
         username=arangodb_credentials["username"],
         password=arangodb_credentials["password"],
     )
@@ -407,7 +420,7 @@ def test_arangovector_similarity_search_with_return_fields(
     expected_meta_specific = {"source": "doc1", "page": 10}
     assert results_specific_meta[0].metadata == expected_meta_specific
 
-    # Test 3: Empty return_fields set (should also return all metadata as per current logic)
+    # Test 3: Empty return_fields set
     results_empty_set_meta = vector_store.similarity_search(
         query_text, k=1, return_fields={"source", "chapter", "page", "author"}
     )
@@ -415,7 +428,7 @@ def test_arangovector_similarity_search_with_return_fields(
     assert results_empty_set_meta[0].page_content == query_text
     assert results_empty_set_meta[0].metadata == expected_meta_all
 
-    # Test 4: return_fields requesting a non-existent field (should be ignored gracefully)
+    # Test 4: return_fields requesting a non-existent field
     # and one existing field
     fields_with_non_existent = {"source", "non_existent_field"}
     results_non_existent_meta = vector_store.similarity_search(
@@ -466,15 +479,7 @@ def test_arangovector_max_marginal_relevance_search(
         overwrite_index=True,
     )
 
-    # Query for "apple". FakeEmbeddings.embed_query("apple") will use its internal logic.
-    # If "apple" is not in fake_texts global, it gets default vec [..., -1.0]
-    # If "apple" is in fake_texts (it is not by default), it gets that specific vec.
-    # Let's use a query known to FakeEmbeddings to make it simpler: "foo"
-    # "foo" embeds to [..., 0.0] with current FakeEmbeddings
-    # This will make "apple" (doc embedding [1.0]*9 + [0.0]) the most similar.
     query_text = "foo"
-
-    # k=2: fetch 2 diverse documents. fetch_k=4: consider top 4 for MMR.
 
     # Test with lambda_mult = 0.5 (balance between similarity and diversity)
     mmr_results = vector_store.max_marginal_relevance_search(
@@ -505,6 +510,7 @@ def test_arangovector_max_marginal_relevance_search(
     assert mmr_results_div[0].page_content == "apple"
     assert mmr_results_div[1].page_content == "apricot"
 
+
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangovector_delete_vector_index(
     arangodb_credentials: ArangoCredentials,
@@ -527,10 +533,10 @@ def test_arangovector_delete_vector_index(
         index_name="test_index",
         overwrite_index=False,
     )
-    
+
     # Create the index explicitly
     vector_store.create_vector_index()
-    
+
     # Verify the index exists
     collection = db.collection("test_collection")
     index_info = None
@@ -539,12 +545,12 @@ def test_arangovector_delete_vector_index(
         if index.get("name") == "test_index" and index.get("type") == "vector":
             index_info = index
             break
-    
+
     assert index_info is not None, "Vector index was not created"
-    
+
     # Now delete the index
     vector_store.delete_vector_index()
-    
+
     # Verify the index no longer exists
     indexes_after_delete = collection.indexes()
     index_after_delete = None
@@ -552,23 +558,24 @@ def test_arangovector_delete_vector_index(
         if index.get("name") == "test_index" and index.get("type") == "vector":
             index_after_delete = index
             break
-    
+
     assert index_after_delete is None, "Vector index was not deleted"
-    
+
     # Ensure delete_vector_index is idempotent (calling it again doesn't cause errors)
     vector_store.delete_vector_index()
-    
+
     # Recreate the index and verify
     vector_store.create_vector_index()
-    
+
     indexes_after_recreate = collection.indexes()
     index_after_recreate = None
     for index in indexes_after_recreate:
         if index.get("name") == "test_index" and index.get("type") == "vector":
             index_after_recreate = index
             break
-    
+
     assert index_after_recreate is not None, "Vector index was not recreated"
+
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangovector_get_by_ids(
@@ -581,7 +588,7 @@ def test_arangovector_get_by_ids(
         username=arangodb_credentials["username"],
         password=arangodb_credentials["password"],
     )
-    
+
     # Create test data with specific IDs
     texts = ["apple", "banana", "cherry", "date"]
     custom_ids = ["fruit_1", "fruit_2", "fruit_3", "fruit_4"]
@@ -591,7 +598,7 @@ def test_arangovector_get_by_ids(
         {"type": "drupe", "color": "red", "calories": 50},
         {"type": "drupe", "color": "brown", "calories": 20},
     ]
-    
+
     # Create the vector store with custom IDs
     vector_store = ArangoVector.from_texts(
         texts=texts,
@@ -601,10 +608,10 @@ def test_arangovector_get_by_ids(
         database=db,
         collection_name="test_collection",
     )
-    
+
     # Create the index explicitly
     vector_store.create_vector_index()
-    
+
     # Test retrieving a single document by ID
     single_doc = vector_store.get_by_ids(["fruit_1"])
     assert len(single_doc) == 1
@@ -613,38 +620,39 @@ def test_arangovector_get_by_ids(
     assert single_doc[0].metadata["type"] == "pome"
     assert single_doc[0].metadata["color"] == "red"
     assert single_doc[0].metadata["calories"] == 95
-    
+
     # Test retrieving multiple documents by ID
     docs = vector_store.get_by_ids(["fruit_2", "fruit_4"])
     assert len(docs) == 2
-    
+
     # Verify each document has the correct content and metadata
     banana_doc = next((doc for doc in docs if doc.id == "fruit_2"), None)
     date_doc = next((doc for doc in docs if doc.id == "fruit_4"), None)
-    
+
     assert banana_doc is not None
     assert banana_doc.page_content == "banana"
     assert banana_doc.metadata["type"] == "berry"
     assert banana_doc.metadata["color"] == "yellow"
-    
+
     assert date_doc is not None
     assert date_doc.page_content == "date"
     assert date_doc.metadata["type"] == "drupe"
     assert date_doc.metadata["color"] == "brown"
-    
+
     # Test with non-existent ID (should return empty list for that ID)
     non_existent_docs = vector_store.get_by_ids(["fruit_999"])
     assert len(non_existent_docs) == 0
-    
+
     # Test with mix of existing and non-existing IDs
     mixed_docs = vector_store.get_by_ids(["fruit_1", "fruit_999", "fruit_3"])
     assert len(mixed_docs) == 2  # Only fruit_1 and fruit_3 should be found
-    
+
     # Verify the documents match the expected content
     found_ids = [doc.id for doc in mixed_docs]
     assert "fruit_1" in found_ids
     assert "fruit_3" in found_ids
     assert "fruit_999" not in found_ids
+
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangovector_core_functionality(
@@ -657,7 +665,7 @@ def test_arangovector_core_functionality(
         username=arangodb_credentials["username"],
         password=arangodb_credentials["password"],
     )
-    
+
     # 1. Setup - Create a vector store with documents
     corpus = [
         "The quick brown fox jumps over the lazy dog",
@@ -666,7 +674,7 @@ def test_arangovector_core_functionality(
         "Amazingly few discotheques provide jukeboxes",
         "Sphinx of black quartz, judge my vow",
     ]
-    
+
     metadatas = [
         {"source": "english", "pangram": True, "length": len(corpus[0])},
         {"source": "english", "pangram": True, "length": len(corpus[1])},
@@ -674,9 +682,9 @@ def test_arangovector_core_functionality(
         {"source": "english", "pangram": True, "length": len(corpus[3])},
         {"source": "english", "pangram": True, "length": len(corpus[4])},
     ]
-    
+
     custom_ids = ["pangram_1", "pangram_2", "pangram_3", "pangram_4", "pangram_5"]
-    
+
     vector_store = ArangoVector.from_texts(
         texts=corpus,
         embedding=fake_embedding_function,
@@ -685,26 +693,26 @@ def test_arangovector_core_functionality(
         database=db,
         collection_name="test_pangrams",
     )
-    
+
     # Create the vector index
     vector_store.create_vector_index()
-    
+
     # 2. Test similarity_search - the most basic search function
     query = "jumps"
     results = vector_store.similarity_search(query, k=2)
-    
+
     # Should return documents with "jumps" in them
     assert len(results) == 2
     text_contents = [doc.page_content for doc in results]
     # The most relevant results should include docs with "jumps"
     has_jump_docs = [doc for doc in text_contents if "jump" in doc.lower()]
     assert len(has_jump_docs) > 0
-    
+
     # 3. Test similarity_search_with_score - core search with relevance scores
     results_with_scores = vector_store.similarity_search_with_score(
         query, k=3, return_fields={"source", "pangram"}
     )
-    
+
     assert len(results_with_scores) == 3
     # Check result format
     for doc, score in results_with_scores:
@@ -713,16 +721,15 @@ def test_arangovector_core_functionality(
         # Verify metadata got properly transferred
         assert doc.metadata["source"] == "english"
         assert doc.metadata["pangram"] is True
-    
-    # 4. Test similarity_search_by_vector_with_score - the lowest level vector search API
-    # This is the method called by other search methods, so test it directly
+
+    # 4. Test similarity_search_by_vector_with_score
     query_embedding = fake_embedding_function.embed_query(query)
     vector_results = vector_store.similarity_search_by_vector_with_score(
         embedding=query_embedding,
         k=2,
         return_fields={"source", "length"},
     )
-    
+
     assert len(vector_results) == 2
     # Check result format
     for doc, score in vector_results:
@@ -733,52 +740,52 @@ def test_arangovector_core_functionality(
         assert "length" in doc.metadata
         # Verify length is a number (as defined in metadatas)
         assert isinstance(doc.metadata["length"], int)
-    
+
     # 5. Test with exact search (non-approximate)
     exact_results = vector_store.similarity_search_with_score(
         query, k=2, use_approx=False
     )
     assert len(exact_results) == 2
-    
+
     # 6. Test max_marginal_relevance_search - for getting diverse results
     mmr_results = vector_store.max_marginal_relevance_search(
         query, k=3, fetch_k=5, lambda_mult=0.5
     )
     assert len(mmr_results) == 3
     # MMR results should be diverse, so they might differ from regular search
-    
+
     # 7. Test adding new documents to the existing vector store
     new_texts = ["The five boxing wizards jump quickly"]
-    new_metadatas = [{"source": "english", "pangram": True, "length": len(new_texts[0])}]
-    new_ids = vector_store.add_texts(
-        texts=new_texts, metadatas=new_metadatas
-    )
-    
+    new_metadatas = [
+        {"source": "english", "pangram": True, "length": len(new_texts[0])}
+    ]
+    new_ids = vector_store.add_texts(texts=new_texts, metadatas=new_metadatas)
+
     # Verify the document was added by directly checking the collection
     collection = db.collection("test_pangrams")
     assert collection.count() == 6  # Original 5 + 1 new document
-    
+
     # Verify retrieving by ID works
     added_doc = vector_store.get_by_ids([new_ids[0]])
     assert len(added_doc) == 1
     assert added_doc[0].page_content == new_texts[0]
     assert "wizard" in added_doc[0].page_content.lower()
-    
-    # 8. Testing search by ID - This is more reliable than relying on the embedding similarity
-    # with fake embeddings, which might not capture semantic meaning correctly
+
+    # 8. Testing search by ID
     all_docs = collection.all()
     all_ids = [doc["_key"] for doc in all_docs]
     assert new_ids[0] in all_ids
-    
+
     # 9. Test deleting documents
     vector_store.delete(ids=[new_ids[0]])
-    
+
     # Verify the document was deleted
     deleted_check = vector_store.get_by_ids([new_ids[0]])
     assert len(deleted_check) == 0
-    
+
     # Also verify via direct collection count
     assert collection.count() == 5  # Back to the original 5 documents
+
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangovector_from_existing_collection(
@@ -791,58 +798,84 @@ def test_arangovector_from_existing_collection(
         username=arangodb_credentials["username"],
         password=arangodb_credentials["password"],
     )
-    
+
     # Create a test collection with documents that have multiple text fields
     collection_name = "test_source_collection"
-    
+
     if db.has_collection(collection_name):
         db.delete_collection(collection_name)
-    
+
     collection = db.create_collection(collection_name)
-    
+
     # Create documents with multiple text fields to test different scenarios
     documents = [
         {
             "_key": "doc1",
             "title": "The Solar System",
-            "abstract": "The Solar System is the gravitationally bound system of the Sun and the objects that orbit it.",
-            "content": "The Solar System formed 4.6 billion years ago from the gravitational collapse of a giant interstellar molecular cloud.",
+            "abstract": (
+                "The Solar System is the gravitationally bound system of the "
+                "Sun and the objects that orbit it."
+            ),
+            "content": (
+                "The Solar System formed 4.6 billion years ago from the "
+                "gravitational collapse of a giant interstellar molecular cloud."
+            ),
             "tags": ["astronomy", "science", "space"],
             "author": "John Doe",
         },
         {
             "_key": "doc2",
             "title": "Machine Learning",
-            "abstract": "Machine learning is a field of inquiry devoted to understanding and building methods that 'learn'.",
-            "content": "Machine learning approaches are traditionally divided into three broad categories: supervised, unsupervised, and reinforcement learning.",
+            "abstract": (
+                "Machine learning is a field of inquiry devoted to understanding and "
+                "building methods that 'learn'."
+            ),
+            "content": (
+                "Machine learning approaches are traditionally divided into three broad"
+                " categories: supervised, unsupervised, and reinforcement learning."
+            ),
             "tags": ["ai", "computer science", "data science"],
             "author": "Jane Smith",
         },
         {
             "_key": "doc3",
             "title": "The Theory of Relativity",
-            "abstract": "The theory of relativity usually encompasses two interrelated theories by Albert Einstein.",
-            "content": "Special relativity applies to all physical phenomena in the absence of gravity. General relativity explains the law of gravitation and its relation to other forces of nature.",
+            "abstract": (
+                "The theory of relativity usually encompasses two interrelated"
+                " theories by Albert Einstein."
+            ),
+            "content": (
+                "Special relativity applies to all physical phenomena in the absence of"
+                " gravity. General relativity explains the law of gravitation and its"
+                " relation to other forces of nature."
+            ),
             "tags": ["physics", "science", "Einstein"],
             "author": "Albert Einstein",
         },
         {
-            "_key": "doc4", 
+            "_key": "doc4",
             "title": "Quantum Mechanics",
-            "abstract": "Quantum mechanics is a fundamental theory in physics that provides a description of the physical properties of nature at the scale of atoms and subatomic particles.",
-            "content": "Quantum mechanics allows the calculation of properties and behaviour of physical systems.",
+            "abstract": (
+                "Quantum mechanics is a fundamental theory in physics that provides a"
+                " description of the physical properties of nature "
+                " at the scale of atoms and subatomic particles."
+            ),
+            "content": (
+                "Quantum mechanics allows the calculation of properties and behaviour "
+                "of physical systems."
+            ),
             "tags": ["physics", "science", "quantum"],
             "author": "Max Planck",
         },
     ]
-    
+
     # Import documents to the collection
     collection.import_bulk(documents)
     assert collection.count() == 4
-    
+
     # 1. Basic usage - embedding title and abstract
     text_properties = ["title", "abstract"]
-    
+
     vector_store = ArangoVector.from_existing_collection(
         collection_name=collection_name,
         text_properties_to_embed=text_properties,
@@ -850,29 +883,29 @@ def test_arangovector_from_existing_collection(
         database=db,
         embedding_field="embedding",
         text_field="combined_text",
-        insert_text=True,  # Important: Need to set this to True to store the combined text
+        insert_text=True,
     )
-    
+
     # Create the vector index
     vector_store.create_vector_index()
-    
+
     # Verify the vector store was created correctly
     # First, check that the original collection still has 4 documents
     assert collection.count() == 4
-    
+
     # Check that embeddings were added to the original documents
     doc = collection.get("doc1")
     assert "embedding" in doc
     assert isinstance(doc["embedding"], list)
     assert "combined_text" in doc  # Now this field should exist
-    
+
     # Perform a search to verify functionality
     results = vector_store.similarity_search("astronomy")
     assert len(results) > 0
-    
+
     # 2. Test with custom AQL query to modify the text extraction
     custom_aql_query = "RETURN CONCAT(doc[p], ' by ', doc.author)"
-    
+
     vector_store_custom = ArangoVector.from_existing_collection(
         collection_name=collection_name,
         text_properties_to_embed=["title"],  # Only embed titles
@@ -880,25 +913,23 @@ def test_arangovector_from_existing_collection(
         database=db,
         embedding_field="custom_embedding",
         text_field="custom_text",
-        index_name="custom_vector_index",  # Use a different index name to avoid conflicts
+        index_name="custom_vector_index",
         aql_return_text_query=custom_aql_query,
-        insert_text=True,  # Set this to True to store the extracted text
+        insert_text=True,
     )
-    
+
     # Create the vector index
     vector_store_custom.create_vector_index()
-    
+
     # Check that custom embeddings were added
     doc = collection.get("doc1")
     assert "custom_embedding" in doc
     assert "custom_text" in doc
     assert "by John Doe" in doc["custom_text"]  # Check the custom extraction format
-    
+
     # 3. Test with skip_existing_embeddings=True
-    # Delete the original index on "embedding" field to allow setting it to null
     vector_store.delete_vector_index()
 
-    # Set the embedding field of doc3 to None (JSON null) to test skipping
     collection.update({"_key": "doc3", "embedding": None})
 
     vector_store_skip = ArangoVector.from_existing_collection(
@@ -912,11 +943,11 @@ def test_arangovector_from_existing_collection(
         skip_existing_embeddings=True,
         insert_text=True,  # Important for search to work
     )
-    
+
     # Create the vector index
     vector_store_skip.create_vector_index()
-    
-    # 4. Test with insert_text=True (we're already doing this, but let's test a different field)
+
+    # 4. Test with insert_text=True
     vector_store_insert = ArangoVector.from_existing_collection(
         collection_name=collection_name,
         text_properties_to_embed=["title", "content"],
@@ -927,26 +958,26 @@ def test_arangovector_from_existing_collection(
         index_name="content_vector_index",  # Use a different index name
         insert_text=True,  # Already set to True, but kept for clarity
     )
-    
+
     # Create the vector index
     vector_store_insert.create_vector_index()
-    
+
     # Check that the combined text was inserted
     doc = collection.get("doc1")
     assert "combined_title_content" in doc
     assert "The Solar System" in doc["combined_title_content"]
     assert "formed 4.6 billion years ago" in doc["combined_title_content"]
-    
+
     # 5. Test searching in the custom store
     results_custom = vector_store_custom.similarity_search("Einstein", k=1)
     assert len(results_custom) == 1
-    
+
     # 6. Test max_marginal_relevance search
     mmr_results = vector_store.max_marginal_relevance_search(
         "science", k=2, fetch_k=4, lambda_mult=0.5
     )
     assert len(mmr_results) == 2
-    
+
     # 7. Test the get_by_ids method
     docs = vector_store.get_by_ids(["doc1", "doc3"])
     assert len(docs) == 2

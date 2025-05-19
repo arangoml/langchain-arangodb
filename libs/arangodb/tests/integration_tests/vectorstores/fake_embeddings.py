@@ -19,9 +19,6 @@ class FakeEmbeddings(Embeddings):
         self.dimension = dimension
         # global_fake_texts maps query texts to the 'i' in [1.0]*(dim-1) + [float(i)]
         self.global_fake_texts = ["foo", "bar", "baz", "qux", "quux", "corge", "grault"]
-        # For unknown queries, we can use a distinct embedding, e.g., float(-1.0) as the last component
-        # or a rolling counter if multiple distinct unknown queries are needed.
-        # For simplicity, let's use a fixed 'unknown' embedding index like -1.
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Return simple embeddings.
