@@ -5,6 +5,7 @@ from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Typ
 
 import farmhash
 import numpy as np
+from arango.aql import Cursor
 from arango.database import StandardDatabase
 from arango.exceptions import ArangoServerError
 from langchain_core.documents import Document
@@ -170,6 +171,7 @@ class ArangoVector(VectorStore):
         ids: Optional[List[str]] = None,
         batch_size: int = 500,
         use_async_db: bool = False,
+        insert_text: bool = True,
         **kwargs: Any,
     ) -> List[str]:
         """Add embeddings to the vectorstore."""
@@ -190,14 +192,16 @@ class ArangoVector(VectorStore):
 
         data = []
         for _key, text, embedding, metadata in zip(ids, texts, embeddings, metadatas):
-            data.append(
-                {
-                    **metadata,
-                    "_key": _key,
-                    self.text_field: text,
-                    self.embedding_field: embedding,
-                }
-            )
+            doc = {
+                **metadata,
+                "_key": _key,
+                self.embedding_field: embedding,
+            }
+
+            if insert_text:
+                doc[self.text_field] = text
+
+            data.append(doc)
 
             if len(data) == batch_size:
                 collection.import_bulk(data, on_duplicate="update", **kwargs)
@@ -509,6 +513,24 @@ class ArangoVector(VectorStore):
 
         return selected_docs
 
+    def _select_relevance_score_fn(self) -> Callable[[float], float]:
+        if self.override_relevance_score_fn is not None:
+            return self.override_relevance_score_fn
+
+        # Default strategy is to rely on distance strategy provided
+        # in vectorstore constructor
+        if self._distance_strategy in [
+            DistanceStrategy.COSINE,
+            DistanceStrategy.EUCLIDEAN_DISTANCE,
+        ]:
+            return lambda x: x
+        else:
+            raise ValueError(
+                "No supported normalization function"
+                f" for distance_strategy of {self._distance_strategy}."
+                "Consider providing relevance_score_fn to ArangoVector constructor."
+            )
+
     @classmethod
     def from_texts(
         cls: Type[ArangoVector],
@@ -525,6 +547,7 @@ class ArangoVector(VectorStore):
         num_centroids: int = 1,
         ids: Optional[List[str]] = None,
         overwrite_index: bool = False,
+        insert_text: bool = True,
         **kwargs: Any,
     ) -> ArangoVector:
         """
@@ -554,24 +577,120 @@ class ArangoVector(VectorStore):
         if overwrite_index:
             store.delete_vector_index()
 
-        store.add_embeddings(texts, embeddings, metadatas=metadatas, ids=ids, **kwargs)
+        store.add_embeddings(
+            texts, embeddings, metadatas=metadatas, ids=ids, insert_text=insert_text
+        )
 
         return store
 
-    def _select_relevance_score_fn(self) -> Callable[[float], float]:
-        if self.override_relevance_score_fn is not None:
-            return self.override_relevance_score_fn
+    @classmethod
+    def from_existing_collection(
+        cls: Type[ArangoVector],
+        collection_name: str,
+        text_properties_to_embed: List[str],
+        embedding: Embeddings,
+        database: StandardDatabase,
+        embedding_field: str = "embedding",
+        text_field: str = "text",
+        batch_size: int = 1000,
+        aql_return_text_query: str = "",
+        insert_text: bool = False,
+        skip_existing_embeddings: bool = False,
+        **kwargs: Any,
+    ) -> ArangoVector:
+        """
+        Return ArangoDBVector initialized from existing collection.
 
-        # Default strategy is to rely on distance strategy provided
-        # in vectorstore constructor
-        if self._distance_strategy in [
-            DistanceStrategy.COSINE,
-            DistanceStrategy.EUCLIDEAN_DISTANCE,
-        ]:
-            return lambda x: x
-        else:
-            raise ValueError(
-                "No supported normalization function"
-                f" for distance_strategy of {self._distance_strategy}."
-                "Consider providing relevance_score_fn to ArangoVector constructor."
+        Args:
+            collection_name: Name of the collection to use.
+            text_properties_to_embed: List of properties to embed.
+            embedding: Embedding function to use.
+            database: Database to use.
+            embedding_field: Field name to store the embedding.
+            text_field: Field name to store the text.
+            batch_size: Read batch size.
+            aql_return_text_query: Custom AQL query to return the content of
+                the text properties.
+            insert_text: Whether to insert the new text (i.e concatenated text
+                properties) into the collection.
+            skip_existing_embeddings: Whether to skip documents with existing
+                embeddings.
+            **kwargs: Additional keyword arguments passed to the ArangoVector
+                constructor.
+
+        Returns:
+            ArangoDBVector initialized from existing collection.
+        """
+        if not text_properties_to_embed:
+            m = "Parameter `text_properties_to_embed` must not be an empty list"
+            raise ValueError(m)
+
+        if text_field in text_properties_to_embed:
+            m = "Parameter `text_field` must not be in `text_properties_to_embed`"
+            raise ValueError(m)
+
+        if not aql_return_text_query:
+            aql_return_text_query = "RETURN doc[p]"
+
+        filter_clause = ""
+        if skip_existing_embeddings:
+            filter_clause = f"FILTER doc.{embedding_field} == null"
+
+        query = f"""
+            FOR doc IN @@collection
+                {filter_clause}
+
+                LET texts = (
+                    FOR p IN @properties
+                        FILTER doc[p] != null
+                        {aql_return_text_query}
+                )
+
+                RETURN {{
+                    key: doc._key,
+                    text: CONCAT_SEPARATOR(" ", texts),
+                }}
+        """
+
+        bind_vars = {
+            "@collection": collection_name,
+            "properties": text_properties_to_embed,
+        }
+
+        cursor: Cursor = database.aql.execute(
+            query,
+            bind_vars=bind_vars,  # type: ignore
+            batch_size=batch_size,
+            stream=True,
+        )
+
+        store: ArangoVector | None = None
+
+        while not cursor.empty():
+            batch = cursor.batch()
+            batch_list = list(batch)  # type: ignore
+
+            texts = [doc["text"] for doc in batch_list]
+            ids = [doc["key"] for doc in batch_list]
+
+            store = cls.from_texts(
+                texts=texts,
+                embedding=embedding,
+                database=database,
+                collection_name=collection_name,
+                embedding_field=embedding_field,
+                text_field=text_field,
+                ids=ids,
+                insert_text=insert_text,
+                **kwargs,
             )
+
+            batch.clear()  # type: ignore
+
+            if cursor.has_more():
+                cursor.fetch()
+
+        if store is None:
+            raise ValueError(f"No documents found in collection in {collection_name}")
+
+        return store
