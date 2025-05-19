@@ -503,3 +503,144 @@ def test_arangovector_max_marginal_relevance_search(
     assert len(mmr_results_div) == 2
     assert mmr_results_div[0].page_content == "apple"
     assert mmr_results_div[1].page_content == "apricot"
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_arangovector_delete_vector_index(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test creating and deleting a vector index."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+    texts_to_embed = ["alpha", "beta", "gamma"]
+
+    # Create the vector store
+    vector_store = ArangoVector.from_texts(
+        texts=texts_to_embed,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_collection",
+        index_name="test_index",
+        overwrite_index=False,
+    )
+    
+    # Create the index explicitly
+    vector_store.create_vector_index()
+    
+    # Verify the index exists
+    collection = db.collection("test_collection")
+    index_info = None
+    indexes = collection.indexes()
+    for index in indexes:
+        if index.get("name") == "test_index" and index.get("type") == "vector":
+            index_info = index
+            break
+    
+    assert index_info is not None, "Vector index was not created"
+    
+    # Now delete the index
+    vector_store.delete_vector_index()
+    
+    # Verify the index no longer exists
+    indexes_after_delete = collection.indexes()
+    index_after_delete = None
+    for index in indexes_after_delete:
+        if index.get("name") == "test_index" and index.get("type") == "vector":
+            index_after_delete = index
+            break
+    
+    assert index_after_delete is None, "Vector index was not deleted"
+    
+    # Ensure delete_vector_index is idempotent (calling it again doesn't cause errors)
+    vector_store.delete_vector_index()
+    
+    # Recreate the index and verify
+    vector_store.create_vector_index()
+    
+    indexes_after_recreate = collection.indexes()
+    index_after_recreate = None
+    for index in indexes_after_recreate:
+        if index.get("name") == "test_index" and index.get("type") == "vector":
+            index_after_recreate = index
+            break
+    
+    assert index_after_recreate is not None, "Vector index was not recreated"
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_arangovector_get_by_ids(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test retrieving documents by their IDs."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+    
+    # Create test data with specific IDs
+    texts = ["apple", "banana", "cherry", "date"]
+    custom_ids = ["fruit_1", "fruit_2", "fruit_3", "fruit_4"]
+    metadatas = [
+        {"type": "pome", "color": "red", "calories": 95},
+        {"type": "berry", "color": "yellow", "calories": 105},
+        {"type": "drupe", "color": "red", "calories": 50},
+        {"type": "drupe", "color": "brown", "calories": 20},
+    ]
+    
+    # Create the vector store with custom IDs
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        metadatas=metadatas,
+        ids=custom_ids,
+        database=db,
+        collection_name="test_collection",
+    )
+    
+    # Create the index explicitly
+    vector_store.create_vector_index()
+    
+    # Test retrieving a single document by ID
+    single_doc = vector_store.get_by_ids(["fruit_1"])
+    assert len(single_doc) == 1
+    assert single_doc[0].page_content == "apple"
+    assert single_doc[0].id == "fruit_1"
+    assert single_doc[0].metadata["type"] == "pome"
+    assert single_doc[0].metadata["color"] == "red"
+    assert single_doc[0].metadata["calories"] == 95
+    
+    # Test retrieving multiple documents by ID
+    docs = vector_store.get_by_ids(["fruit_2", "fruit_4"])
+    assert len(docs) == 2
+    
+    # Verify each document has the correct content and metadata
+    banana_doc = next((doc for doc in docs if doc.id == "fruit_2"), None)
+    date_doc = next((doc for doc in docs if doc.id == "fruit_4"), None)
+    
+    assert banana_doc is not None
+    assert banana_doc.page_content == "banana"
+    assert banana_doc.metadata["type"] == "berry"
+    assert banana_doc.metadata["color"] == "yellow"
+    
+    assert date_doc is not None
+    assert date_doc.page_content == "date"
+    assert date_doc.metadata["type"] == "drupe"
+    assert date_doc.metadata["color"] == "brown"
+    
+    # Test with non-existent ID (should return empty list for that ID)
+    non_existent_docs = vector_store.get_by_ids(["fruit_999"])
+    assert len(non_existent_docs) == 0
+    
+    # Test with mix of existing and non-existing IDs
+    mixed_docs = vector_store.get_by_ids(["fruit_1", "fruit_999", "fruit_3"])
+    assert len(mixed_docs) == 2  # Only fruit_1 and fruit_3 should be found
+    
+    # Verify the documents match the expected content
+    found_ids = [doc.id for doc in mixed_docs]
+    assert "fruit_1" in found_ids
+    assert "fruit_3" in found_ids
+    assert "fruit_999" not in found_ids

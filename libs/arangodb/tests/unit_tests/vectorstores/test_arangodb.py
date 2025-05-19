@@ -231,6 +231,42 @@ def test_delete_vector_index_not_exists(arango_vector_factory: Any) -> None:
     vector_store.collection.delete_index.assert_not_called()
 
 
+def test_delete_vector_index_with_real_index_data(arango_vector_factory: Any) -> None:
+    """Test deleting vector index with real index data structure."""
+    vector_store = arango_vector_factory(vector_index_exists=True)
+    
+    # Create a realistic index object with all expected fields
+    mock_index = {
+        "id": "vector_index_12345",
+        "name": "vector_index",
+        "type": "vector",
+        "fields": ["embedding"],
+        "selectivity": 1,
+        "sparse": False,
+        "unique": False,
+        "deduplicate": False,
+    }
+    
+    # Mock retrieve_vector_index to return our realistic index
+    with patch.object(
+        vector_store, "retrieve_vector_index", return_value=mock_index
+    ):
+        # Call the method under test
+        vector_store.delete_vector_index()
+    
+    # Verify delete_index was called with the exact ID from our mock index
+    vector_store.collection.delete_index.assert_called_once_with("vector_index_12345")
+    
+    # Test the case where the index doesn't have an id field (this shouldn't happen in practice,
+    # but let's ensure the code is robust)
+    bad_index = {"name": "vector_index", "type": "vector"}
+    with patch.object(
+        vector_store, "retrieve_vector_index", return_value=bad_index
+    ):
+        with pytest.raises(KeyError):
+            vector_store.delete_vector_index()
+
+
 def test_add_embeddings_with_mismatched_lengths(arango_vector_factory: Any) -> None:
     """Test adding embeddings with mismatched lengths raises ValueError."""
     vector_store = arango_vector_factory()
@@ -502,10 +538,11 @@ def test_get_by_ids(arango_vector_factory: Any) -> None:
     """Test getting documents by IDs."""
     vector_store = arango_vector_factory()
 
+    # Test case 1: Multiple documents returned
     # Mock documents to be returned
     mock_docs = [
-        {"_key": "id1", "text": "content1", "metadata": {"key": "value1"}},
-        {"_key": "id2", "text": "content2", "metadata": {"key": "value2"}},
+        {"_key": "id1", "text": "content1", "color": "red", "size": 10},
+        {"_key": "id2", "text": "content2", "color": "blue", "size": 20},
     ]
 
     # Mock collection.get_many to return the mock documents
@@ -515,14 +552,64 @@ def test_get_by_ids(arango_vector_factory: Any) -> None:
     docs = vector_store.get_by_ids(ids)
 
     # Verify collection.get_many was called with correct IDs
-    vector_store.collection.get_many.assert_called_once_with(ids)
+    vector_store.collection.get_many.assert_called_with(ids)
 
     # Verify the correct documents were returned
     assert len(docs) == 2
     assert docs[0].page_content == "content1"
-    assert docs[0].metadata == {"metadata": {"key": "value1"}}
+    assert docs[0].id == "id1"
+    assert docs[0].metadata["color"] == "red"
+    assert docs[0].metadata["size"] == 10
     assert docs[1].page_content == "content2"
-    assert docs[1].metadata == {"metadata": {"key": "value2"}}
+    assert docs[1].id == "id2"
+    assert docs[1].metadata["color"] == "blue"
+    assert docs[1].metadata["size"] == 20
+
+    # Test case 2: No documents returned (empty result)
+    vector_store.collection.get_many.reset_mock()
+    vector_store.collection.get_many.return_value = []
+    
+    empty_docs = vector_store.get_by_ids(["non_existent_id"])
+    
+    # Verify collection.get_many was called with the non-existent ID
+    vector_store.collection.get_many.assert_called_with(["non_existent_id"])
+    
+    # Verify an empty list was returned
+    assert empty_docs == []
+    
+    # Test case 3: Custom text field
+    vector_store = arango_vector_factory(text_field="custom_text")
+    
+    custom_field_docs = [
+        {"_key": "id3", "custom_text": "custom content", "tag": "important"},
+    ]
+    
+    vector_store.collection.get_many.return_value = custom_field_docs
+    
+    result_docs = vector_store.get_by_ids(["id3"])
+    
+    # Verify collection.get_many was called
+    vector_store.collection.get_many.assert_called_with(["id3"])
+    
+    # Verify the document was correctly processed with the custom text field
+    assert len(result_docs) == 1
+    assert result_docs[0].page_content == "custom content"
+    assert result_docs[0].id == "id3"
+    assert result_docs[0].metadata["tag"] == "important"
+    
+    # Test case 4: Document is missing the text field
+    vector_store = arango_vector_factory()
+    
+    # Document without the text field
+    incomplete_docs = [
+        {"_key": "id4", "other_field": "some value"},
+    ]
+    
+    vector_store.collection.get_many.return_value = incomplete_docs
+    
+    # This should raise a KeyError when trying to access the missing text field
+    with pytest.raises(KeyError):
+        vector_store.get_by_ids(["id4"])
 
 
 def test_select_relevance_score_fn_override(arango_vector_factory: Any) -> None:
