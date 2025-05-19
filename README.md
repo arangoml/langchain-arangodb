@@ -1,6 +1,5 @@
 # 🦜️🔗 LangChain ArangoDB
 
-temp
 
 This repository contains 1 package with ArangoDB integrations with LangChain:
 
