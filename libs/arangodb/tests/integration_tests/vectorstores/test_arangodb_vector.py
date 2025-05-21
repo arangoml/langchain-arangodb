@@ -831,9 +831,9 @@ def test_arangovector_core_functionality(
     # 8. Testing search by ID
     all_docs_cursor = collection_core.all()
     assert all_docs_cursor is not None, "collection.all() returned None"
-    assert isinstance(
-        all_docs_cursor, Cursor
-    ), f"collection.all() expected Cursor, got {type(all_docs_cursor)}"
+    assert isinstance(all_docs_cursor, Cursor), (
+        f"collection.all() expected Cursor, got {type(all_docs_cursor)}"
+    )
     all_ids = [doc["_key"] for doc in all_docs_cursor]
     assert new_ids[0] in all_ids
 
@@ -1036,12 +1036,12 @@ def test_arangovector_from_existing_collection(
 
     # Check that the combined text was inserted
     doc_data3 = collection_exist.get("doc1")
-    assert (
-        doc_data3 is not None
-    ), "Document 'doc1' not found after insert_text processing"
-    assert isinstance(
-        doc_data3, dict
-    ), f"Expected 'doc1' after insert_text to be a dict, got {type(doc_data3)}"
+    assert doc_data3 is not None, (
+        "Document 'doc1' not found after insert_text processing"
+    )
+    assert isinstance(doc_data3, dict), (
+        f"Expected 'doc1' after insert_text to be a dict, got {type(doc_data3)}"
+    )
     doc3: Dict[str, Any] = doc_data3
     assert "combined_title_content" in doc3
     assert "The Solar System" in doc3["combined_title_content"]
