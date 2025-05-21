@@ -992,8 +992,7 @@ def test_arangovector_from_existing_collection(
     doc_data2 = collection_exist.get("doc1")
     assert doc_data2 is not None, "Document 'doc1' not found after custom processing"
     assert isinstance(doc_data2, dict), (
-        f"Expected 'doc1' after custom processing to be a dict, "
-        f"got {type(doc_data2)}"
+        f"Expected 'doc1' after custom processing to be a dict, got {type(doc_data2)}"
     )
     doc2: Dict[str, Any] = doc_data2
     assert "custom_embedding" in doc2
@@ -1041,8 +1040,7 @@ def test_arangovector_from_existing_collection(
         "Document 'doc1' not found after insert_text processing"
     )
     assert isinstance(doc_data3, dict), (
-        f"Expected 'doc1' after insert_text to be a dict, "
-        f"got {type(doc_data3)}"
+        f"Expected 'doc1' after insert_text to be a dict, got {type(doc_data3)}"
     )
     doc3: Dict[str, Any] = doc_data3
     assert "combined_title_content" in doc3
