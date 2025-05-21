@@ -958,9 +958,9 @@ def test_arangovector_from_existing_collection(
     # Check that embeddings were added to the original documents
     doc_data1 = collection_exist.get("doc1")
     assert doc_data1 is not None, "Document 'doc1' not found in collection_exist"
-    assert isinstance(doc_data1, dict), (
-        f"Expected 'doc1' to be a dict, got {type(doc_data1)}"
-    )
+    assert isinstance(
+        doc_data1, dict
+    ), f"Expected 'doc1' to be a dict, got {type(doc_data1)}"
     doc1: Dict[str, Any] = doc_data1
     assert "embedding" in doc1
     assert isinstance(doc1["embedding"], list)
@@ -991,9 +991,9 @@ def test_arangovector_from_existing_collection(
     # Check that custom embeddings were added
     doc_data2 = collection_exist.get("doc1")
     assert doc_data2 is not None, "Document 'doc1' not found after custom processing"
-    assert isinstance(doc_data2, dict), (
-        f"Expected 'doc1' after custom processing to be a dict, got {type(doc_data2)}"
-    )
+    assert isinstance(
+        doc_data2, dict
+    ), f"Expected 'doc1' after custom processing to be a dict, got {type(doc_data2)}"
     doc2: Dict[str, Any] = doc_data2
     assert "custom_embedding" in doc2
     assert "custom_text" in doc2
@@ -1039,9 +1039,9 @@ def test_arangovector_from_existing_collection(
     assert doc_data3 is not None, (
         "Document 'doc1' not found after insert_text processing"
     )
-    assert isinstance(doc_data3, dict), (
-        f"Expected 'doc1' after insert_text to be a dict, got {type(doc_data3)}"
-    )
+    assert isinstance(
+        doc_data3, dict
+    ), f"Expected 'doc1' after insert_text to be a dict, got {type(doc_data3)}"
     doc3: Dict[str, Any] = doc_data3
     assert "combined_title_content" in doc3
     assert "The Solar System" in doc3["combined_title_content"]
