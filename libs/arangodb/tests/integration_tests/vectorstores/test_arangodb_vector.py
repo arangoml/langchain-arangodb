@@ -1,7 +1,11 @@
 """Integration tests for ArangoVector."""
 
+from typing import Any, Dict, List
+
 import pytest
 from arango import ArangoClient
+from arango.collection import StandardCollection
+from arango.cursor import Cursor
 from langchain_core.documents import Document
 
 from langchain_arangodb.vectorstores.arangodb_vector import ArangoVector
@@ -31,8 +35,11 @@ def test_arangovector_from_texts_and_similarity_search(
         password=arangodb_credentials["password"],
     )
     # Try to create a collection to force a connection error
-    if not db.has_collection("test_collection"):
-        db.create_collection("test_collection")
+    if not db.has_collection(
+        "test_collection_init"
+    ):  # Use a different name to avoid conflict if already exists
+        _test_init_coll = db.create_collection("test_collection_init")
+        assert isinstance(_test_init_coll, StandardCollection)
 
     texts_to_embed = ["hello world", "hello arango", "test document"]
     metadatas = [{"source": "doc1"}, {"source": "doc2"}, {"source": "doc3"}]
@@ -53,12 +60,19 @@ def test_arangovector_from_texts_and_similarity_search(
 
     # Check if the collection was created
     assert db.has_collection("test_collection")
-    collection = db.collection("test_collection")
+    _collection_obj = db.collection("test_collection")
+    assert isinstance(_collection_obj, StandardCollection)
+    collection: StandardCollection = _collection_obj
     assert collection.count() == len(texts_to_embed)
 
     # Check if the index was created
     index_info = None
-    indexes = collection.indexes()
+    indexes_raw = collection.indexes()
+    assert indexes_raw is not None, "collection.indexes() returned None"
+    assert isinstance(indexes_raw, list), (
+        f"collection.indexes() expected list, got {type(indexes_raw)}"
+    )
+    indexes: List[Dict[str, Any]] = indexes_raw
     for index in indexes:
         if index.get("name") == "test_index" and index.get("type") == "vector":
             index_info = index
@@ -102,10 +116,20 @@ def test_arangovector_euclidean_distance(
     vector_store.create_vector_index()
 
     # Check index metric
-    collection = db.collection("test_collection")
+    _collection_obj_euclidean = db.collection("test_collection")
+    assert isinstance(_collection_obj_euclidean, StandardCollection)
+    collection_euclidean: StandardCollection = _collection_obj_euclidean
     index_info = None
-    indexes = collection.indexes()
-    for index in indexes:
+    indexes_raw_euclidean = collection_euclidean.indexes()
+    assert indexes_raw_euclidean is not None, (
+        "collection_euclidean.indexes() returned None"
+    )
+    assert isinstance(indexes_raw_euclidean, list), (
+        f"collection_euclidean.indexes() expected list, \
+            got {type(indexes_raw_euclidean)}"
+    )
+    indexes_euclidean: List[Dict[str, Any]] = indexes_raw_euclidean
+    for index in indexes_euclidean:
         if index.get("name") == "test_index" and index.get("type") == "vector":
             index_info = index
             break
@@ -222,8 +246,10 @@ def test_arangovector_add_embeddings_and_search(
         vector_store.create_vector_index()
 
     # Check collection count
-    collection = db.collection("test_collection")
-    assert collection.count() == len(texts_to_embed)
+    _collection_obj_add_embed = db.collection("test_collection")
+    assert isinstance(_collection_obj_add_embed, StandardCollection)
+    collection_add_embed: StandardCollection = _collection_obj_add_embed
+    assert collection_add_embed.count() == len(texts_to_embed)
 
     # Perform search
     query = "apple"
@@ -336,8 +362,10 @@ def test_arangovector_delete_documents(
     )
 
     # Verify initial count
-    collection = db.collection("test_collection")
-    assert collection.count() == 4
+    _collection_obj_delete = db.collection("test_collection")
+    assert isinstance(_collection_obj_delete, StandardCollection)
+    collection_delete: StandardCollection = _collection_obj_delete
+    assert collection_delete.count() == 4
 
     # IDs to delete
     ids_to_delete = ["id_delete1", "id_delete2"]
@@ -345,18 +373,34 @@ def test_arangovector_delete_documents(
     assert delete_result is True
 
     # Verify count after deletion
-    assert collection.count() == 2
+    assert collection_delete.count() == 2
 
     # Verify that specific documents are gone and others remain
     # Use direct DB checks for presence/absence of docs by ID
 
     # Check that deleted documents are indeed gone
-    deleted_docs_check = collection.get_many(ids_to_delete)
+    deleted_docs_check_raw = collection_delete.get_many(ids_to_delete)
+    assert deleted_docs_check_raw is not None, (
+        "collection.get_many() returned None for deleted_docs_check"
+    )
+    assert isinstance(deleted_docs_check_raw, list), (
+        f"collection.get_many() expected list for deleted_docs_check,\
+              got {type(deleted_docs_check_raw)}"
+    )
+    deleted_docs_check: List[Dict[str, Any]] = deleted_docs_check_raw
     assert len(deleted_docs_check) == 0
 
     # Check that remaining documents are still present
     remaining_ids_expected = ["id_keep1", "id_keep2"]
-    remaining_docs_check = collection.get_many(remaining_ids_expected)
+    remaining_docs_check_raw = collection_delete.get_many(remaining_ids_expected)
+    assert remaining_docs_check_raw is not None, (
+        "collection.get_many() returned None for remaining_docs_check"
+    )
+    assert isinstance(remaining_docs_check_raw, list), (
+        f"collection.get_many() expected list for remaining_docs_check,\
+              got {type(remaining_docs_check_raw)}"
+    )
+    remaining_docs_check: List[Dict[str, Any]] = remaining_docs_check_raw
     assert len(remaining_docs_check) == 2
 
     # Optionally, verify content of remaining documents if needed
@@ -538,10 +582,15 @@ def test_arangovector_delete_vector_index(
     vector_store.create_vector_index()
 
     # Verify the index exists
-    collection = db.collection("test_collection")
+    _collection_obj_del_idx = db.collection("test_collection")
+    assert isinstance(_collection_obj_del_idx, StandardCollection)
+    collection_del_idx: StandardCollection = _collection_obj_del_idx
     index_info = None
-    indexes = collection.indexes()
-    for index in indexes:
+    indexes_raw_del_idx = collection_del_idx.indexes()
+    assert indexes_raw_del_idx is not None
+    assert isinstance(indexes_raw_del_idx, list)
+    indexes_del_idx: List[Dict[str, Any]] = indexes_raw_del_idx
+    for index in indexes_del_idx:
         if index.get("name") == "test_index" and index.get("type") == "vector":
             index_info = index
             break
@@ -552,7 +601,10 @@ def test_arangovector_delete_vector_index(
     vector_store.delete_vector_index()
 
     # Verify the index no longer exists
-    indexes_after_delete = collection.indexes()
+    indexes_after_delete_raw = collection_del_idx.indexes()
+    assert indexes_after_delete_raw is not None
+    assert isinstance(indexes_after_delete_raw, list)
+    indexes_after_delete: List[Dict[str, Any]] = indexes_after_delete_raw
     index_after_delete = None
     for index in indexes_after_delete:
         if index.get("name") == "test_index" and index.get("type") == "vector":
@@ -567,7 +619,10 @@ def test_arangovector_delete_vector_index(
     # Recreate the index and verify
     vector_store.create_vector_index()
 
-    indexes_after_recreate = collection.indexes()
+    indexes_after_recreate_raw = collection_del_idx.indexes()
+    assert indexes_after_recreate_raw is not None
+    assert isinstance(indexes_after_recreate_raw, list)
+    indexes_after_recreate: List[Dict[str, Any]] = indexes_after_recreate_raw
     index_after_recreate = None
     for index in indexes_after_recreate:
         if index.get("name") == "test_index" and index.get("type") == "vector":
@@ -762,8 +817,10 @@ def test_arangovector_core_functionality(
     new_ids = vector_store.add_texts(texts=new_texts, metadatas=new_metadatas)
 
     # Verify the document was added by directly checking the collection
-    collection = db.collection("test_pangrams")
-    assert collection.count() == 6  # Original 5 + 1 new document
+    _collection_obj_core = db.collection("test_pangrams")
+    assert isinstance(_collection_obj_core, StandardCollection)
+    collection_core: StandardCollection = _collection_obj_core
+    assert collection_core.count() == 6  # Original 5 + 1 new document
 
     # Verify retrieving by ID works
     added_doc = vector_store.get_by_ids([new_ids[0]])
@@ -772,8 +829,12 @@ def test_arangovector_core_functionality(
     assert "wizard" in added_doc[0].page_content.lower()
 
     # 8. Testing search by ID
-    all_docs = collection.all()
-    all_ids = [doc["_key"] for doc in all_docs]
+    all_docs_cursor = collection_core.all()
+    assert all_docs_cursor is not None, "collection.all() returned None"
+    assert isinstance(all_docs_cursor, Cursor), (
+        f"collection.all() expected Cursor, got {type(all_docs_cursor)}"
+    )
+    all_ids = [doc["_key"] for doc in all_docs_cursor]
     assert new_ids[0] in all_ids
 
     # 9. Test deleting documents
@@ -784,7 +845,7 @@ def test_arangovector_core_functionality(
     assert len(deleted_check) == 0
 
     # Also verify via direct collection count
-    assert collection.count() == 5  # Back to the original 5 documents
+    assert collection_core.count() == 5  # Back to the original 5 documents
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -805,8 +866,9 @@ def test_arangovector_from_existing_collection(
     if db.has_collection(collection_name):
         db.delete_collection(collection_name)
 
-    collection = db.create_collection(collection_name)
-
+    _collection_obj_exist = db.create_collection(collection_name)
+    assert isinstance(_collection_obj_exist, StandardCollection)
+    collection_exist: StandardCollection = _collection_obj_exist
     # Create documents with multiple text fields to test different scenarios
     documents = [
         {
@@ -870,8 +932,8 @@ def test_arangovector_from_existing_collection(
     ]
 
     # Import documents to the collection
-    collection.import_bulk(documents)
-    assert collection.count() == 4
+    collection_exist.import_bulk(documents)
+    assert collection_exist.count() == 4
 
     # 1. Basic usage - embedding title and abstract
     text_properties = ["title", "abstract"]
@@ -891,13 +953,18 @@ def test_arangovector_from_existing_collection(
 
     # Verify the vector store was created correctly
     # First, check that the original collection still has 4 documents
-    assert collection.count() == 4
+    assert collection_exist.count() == 4
 
     # Check that embeddings were added to the original documents
-    doc = collection.get("doc1")
-    assert "embedding" in doc
-    assert isinstance(doc["embedding"], list)
-    assert "combined_text" in doc  # Now this field should exist
+    doc_data1 = collection_exist.get("doc1")
+    assert doc_data1 is not None, "Document 'doc1' not found in collection_exist"
+    assert isinstance(doc_data1, dict), (
+        f"Expected 'doc1' to be a dict, got {type(doc_data1)}"
+    )
+    doc1: Dict[str, Any] = doc_data1
+    assert "embedding" in doc1
+    assert isinstance(doc1["embedding"], list)
+    assert "combined_text" in doc1  # Now this field should exist
 
     # Perform a search to verify functionality
     results = vector_store.similarity_search("astronomy")
@@ -922,15 +989,21 @@ def test_arangovector_from_existing_collection(
     vector_store_custom.create_vector_index()
 
     # Check that custom embeddings were added
-    doc = collection.get("doc1")
-    assert "custom_embedding" in doc
-    assert "custom_text" in doc
-    assert "by John Doe" in doc["custom_text"]  # Check the custom extraction format
+    doc_data2 = collection_exist.get("doc1")
+    assert doc_data2 is not None, "Document 'doc1' not found after custom processing"
+    assert isinstance(doc_data2, dict), (
+        f"Expected 'doc1' after custom processing to be a dict, "
+        f"got {type(doc_data2)}"
+    )
+    doc2: Dict[str, Any] = doc_data2
+    assert "custom_embedding" in doc2
+    assert "custom_text" in doc2
+    assert "by John Doe" in doc2["custom_text"]  # Check the custom extraction format
 
     # 3. Test with skip_existing_embeddings=True
     vector_store.delete_vector_index()
 
-    collection.update({"_key": "doc3", "embedding": None})
+    collection_exist.update({"_key": "doc3", "embedding": None})
 
     vector_store_skip = ArangoVector.from_existing_collection(
         collection_name=collection_name,
@@ -963,10 +1036,18 @@ def test_arangovector_from_existing_collection(
     vector_store_insert.create_vector_index()
 
     # Check that the combined text was inserted
-    doc = collection.get("doc1")
-    assert "combined_title_content" in doc
-    assert "The Solar System" in doc["combined_title_content"]
-    assert "formed 4.6 billion years ago" in doc["combined_title_content"]
+    doc_data3 = collection_exist.get("doc1")
+    assert doc_data3 is not None, (
+        "Document 'doc1' not found after insert_text processing"
+    )
+    assert isinstance(doc_data3, dict), (
+        f"Expected 'doc1' after insert_text to be a dict, "
+        f"got {type(doc_data3)}"
+    )
+    doc3: Dict[str, Any] = doc_data3
+    assert "combined_title_content" in doc3
+    assert "The Solar System" in doc3["combined_title_content"]
+    assert "formed 4.6 billion years ago" in doc3["combined_title_content"]
 
     # 5. Test searching in the custom store
     results_custom = vector_store_custom.similarity_search("Einstein", k=1)
