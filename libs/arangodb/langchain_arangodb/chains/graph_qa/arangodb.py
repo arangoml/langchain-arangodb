@@ -20,6 +20,7 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_QA_PROMPT,
 )
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
+from langchain_arangodb.graphs.graph_store import GraphStore
 
 AQL_WRITE_OPERATIONS: List[str] = [
     "INSERT",
@@ -45,7 +46,7 @@ class ArangoGraphQAChain(Chain):
         See https://python.langchain.com/docs/security for more information.
     """
 
-    graph: ArangoGraph = Field(exclude=True)
+    graph: GraphStore = Field(exclude=True)
     aql_generation_chain: Runnable[Dict[str, Any], Any]
     aql_fix_chain: Runnable[Dict[str, Any], Any]
     qa_chain: Runnable[Dict[str, Any], Any]
@@ -361,3 +362,6 @@ class ArangoGraphQAChain(Chain):
                 return False, op
 
         return True, None
+    
+
+

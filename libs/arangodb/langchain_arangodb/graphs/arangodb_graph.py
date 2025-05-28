@@ -42,10 +42,10 @@ def get_arangodb_client(
     Returns:
         An arango.database.StandardDatabase.
     """
-    _url: str = url or os.environ.get("ARANGODB_URL", "http://localhost:8529")  # type: ignore[assignment]
-    _dbname: str = dbname or os.environ.get("ARANGODB_DBNAME", "_system")  # type: ignore[assignment]
-    _username: str = username or os.environ.get("ARANGODB_USERNAME", "root")  # type: ignore[assignment]
-    _password: str = password or os.environ.get("ARANGODB_PASSWORD", "")  # type: ignore[assignment]
+    _url: str = url or os.environ.get("ARANGODB_URL", "http://localhost:8529")  
+    _dbname: str = dbname or os.environ.get("ARANGODB_DBNAME", "_system")  
+    _username: str = username or os.environ.get("ARANGODB_USERNAME", "root")  
+    _password: str = password or os.environ.get("ARANGODB_PASSWORD", "")  
 
     return ArangoClient(_url).db(_dbname, _username, _password, verify=True)
 
@@ -407,14 +407,13 @@ class ArangoGraph(GraphStore):
             return res
 
         if capitalization_strategy == "none":
-            capitalization_fn = lambda x: x  # noqa: E731
-        if capitalization_strategy == "lower":
+            capitalization_fn = lambda x: x
+        elif capitalization_strategy == "lower":
             capitalization_fn = str.lower
         elif capitalization_strategy == "upper":
             capitalization_fn = str.upper
         else:
-            m = "**capitalization_strategy** must be 'lower', 'upper', or 'none'."
-            raise ValueError(m)
+            raise ValueError("**capitalization_strategy** must be 'lower', 'upper', or 'none'.")
 
         #########
         # Setup #
@@ -884,3 +883,4 @@ class ArangoGraph(GraphStore):
                 return f"List of {len(d)} elements of type {type(d[0])}"
         else:
             return d
+
