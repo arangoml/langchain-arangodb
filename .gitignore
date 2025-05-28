@@ -6,3 +6,4 @@ __pycache__
 .env
 .venv*
 libs/arangodb/doc/_build
+.DS_Store

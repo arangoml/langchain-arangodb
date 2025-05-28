@@ -121,7 +121,4 @@ Expect documentation to grow over time:
    :maxdepth: 2
 
    quickstart
-   classes/index
-   dict/index
-   algorithms/index
-   views/index
+   mydirectory/index

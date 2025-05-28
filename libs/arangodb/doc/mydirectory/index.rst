@@ -1,0 +1,4 @@
+.. _mydirectory:
+
+Hello World
+============

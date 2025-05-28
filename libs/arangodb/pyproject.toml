@@ -93,3 +93,6 @@ markers = [
   "compile: mark placeholder test used to compile integration tests without running them",
 ]
 asyncio_mode = "auto"
+
+[tool.poetry.extras]
+docs = ["sphinx", "sphinx-rtd-theme", "myst-parser"]
