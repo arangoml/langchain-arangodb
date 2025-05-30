@@ -10,14 +10,14 @@ integration_test integration_tests: TEST_FILE = tests/integration_tests/
 
 # unit tests are run with the --disable-socket flag to prevent network calls
 test tests:
-	poetry run pytest --disable-socket --allow-unix-socket $(TEST_FILE) --cov-report=term-missing --cov=langchain_arangodb
+	poetry run pytest --disable-socket --allow-unix-socket $(TEST_FILE) --cov-report=term-missing --cov=langchain_arangodb --cov-report=html
 
 test_watch:
 	poetry run ptw --snapshot-update --now . -- -vv $(TEST_FILE)
 
 # integration tests are run without the --disable-socket flag to allow network calls
 integration_test integration_tests:
-	poetry run pytest $(TEST_FILE) --cov-report=term-missing --cov=langchain_arangodb
+	poetry run pytest $(TEST_FILE) --cov-report=term-missing --cov=langchain_arangodb --cov-report=html
 
 ######################
 # LINTING AND FORMATTING
