@@ -390,6 +390,7 @@ def test_similarity_search(arango_vector_factory: Any) -> None:
         k=2,
         return_fields={"field1", "field2"},
         use_approx=True,
+        filter_clause="",
     )
 
     # Verify the correct documents were returned
@@ -425,9 +426,9 @@ def test_similarity_search_with_score(arango_vector_factory: Any) -> None:
     mock_search_by_vector_with_score.assert_called_once_with(
         embedding=mock_embedding,
         k=2,
-        query="test query",
         return_fields={"field1", "field2"},
         use_approx=True,
+        filter_clause="",
     )
 
     # Verify the correct results were returned

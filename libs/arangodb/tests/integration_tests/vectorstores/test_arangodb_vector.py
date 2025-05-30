@@ -234,7 +234,7 @@ def test_arangovector_add_embeddings_and_search(
         embedding_dimension=EMBEDDING_DIMENSION,  # Should be 10 from FakeEmbeddings
         database=db,
         collection_name="test_collection",  # Will be created if not exists
-        index_name="test_index",
+        vector_index_name="test_index",
     )
 
     # Add embeddings first, so the index has data to train on

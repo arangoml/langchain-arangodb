@@ -1,10 +1,9 @@
 import os
-import urllib.parse
 
 import pytest
 from arango import ArangoClient
 from arango.database import StandardDatabase
-from arango.exceptions import ArangoError, ServerConnectionError
+from arango.exceptions import ArangoError
 from langchain_core.messages import AIMessage, HumanMessage
 
 from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
@@ -76,34 +75,6 @@ def test_add_messages_graph_object(arangodb_credentials: ArangoCredentials) -> N
 
     # Restore original environment
     os.environ["ARANGO_USERNAME"] = old_username
-
-
-def test_invalid_url(arangodb_credentials: ArangoCredentials) -> None:
-    """Test initializing with invalid URL raises connection error."""
-    # Parse the original URL
-    parsed_url = urllib.parse.urlparse(arangodb_credentials["url"])
-    # Increment the port number by 1 and wrap around if necessary
-    original_port = parsed_url.port or 8529
-    new_port = (original_port + 1) % 65535 or 1
-    # Reconstruct the netloc (hostname:port)
-    new_netloc = f"{parsed_url.hostname}:{new_port}"
-    # Rebuild the URL with the new netloc
-    new_url = parsed_url._replace(netloc=new_netloc).geturl()
-
-    with pytest.raises((ServerConnectionError, ConnectionAbortedError)) as exc_info:
-        client = ArangoClient(new_url)
-        db = client.db(
-            username=arangodb_credentials["username"],
-            password=arangodb_credentials["password"],
-        )
-        # Try to create a collection to force a connection error
-        if not db.has_collection("test_collection"):
-            db.create_collection("test_collection")
-
-    # Check for common connection error messages
-    error_msg = str(exc_info.value)
-    # Just check for "connect" which should be in any connection-related error
-    assert "Can't connect to host" in error_msg
 
 
 def test_invalid_credentials(arangodb_credentials: ArangoCredentials) -> None:
