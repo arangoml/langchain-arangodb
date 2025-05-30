@@ -65,7 +65,6 @@ class FakeLLM(LLM):
         pass
 
 
-
 # class FakeLLM(LLM):
 #     """Fake LLM wrapper for testing purposes."""
 
@@ -122,6 +121,6 @@ class FakeLLM(LLM):
 #     def bind_tools(self, tools: Any) -> None:
 #         pass
 
-    # def invoke(self, input: str, **kwargs: Any) -> str:
-    #     """Invoke the LLM with the given input."""
-    #     return self._call(input, **kwargs)
+# def invoke(self, input: str, **kwargs: Any) -> str:
+#     """Invoke the LLM with the given input."""
+#     return self._call(input, **kwargs)

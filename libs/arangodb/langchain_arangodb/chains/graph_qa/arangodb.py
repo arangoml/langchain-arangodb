@@ -19,7 +19,6 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_GENERATION_PROMPT,
     AQL_QA_PROMPT,
 )
-from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from langchain_arangodb.graphs.graph_store import GraphStore
 
 AQL_WRITE_OPERATIONS: List[str] = [
@@ -362,6 +361,3 @@ class ArangoGraphQAChain(Chain):
                 return False, op
 
         return True, None
-    
-
-

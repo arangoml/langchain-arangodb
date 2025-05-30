@@ -1,17 +1,18 @@
 """Test Graph Database Chain."""
 
-import pytest
-from arango.database import StandardDatabase
-from arango import ArangoClient
-from unittest.mock import MagicMock, patch
 import pprint
+from unittest.mock import MagicMock, patch
+
+import pytest
+from arango import ArangoClient
+from arango.database import StandardDatabase
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.messages import AIMessage
+from langchain_core.prompts import PromptTemplate
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from tests.llms.fake_llm import FakeLLM
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage
-from langchain_core.prompts import PromptTemplate
 
 # from langchain_arangodb.chains.graph_qa.arangodb import GraphAQLQAChain
 
@@ -67,7 +68,6 @@ def test_aql_generating_run(db: StandardDatabase) -> None:
     assert output["result"] == "Bruce Willis"
 
 
-
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_aql_top_k(db: StandardDatabase) -> None:
     """Test top_k parameter correctly limits the number of results in the context."""
@@ -121,8 +121,6 @@ def test_aql_top_k(db: StandardDatabase) -> None:
     assert len([output["result"]]) == TOP_K
 
 
-
-
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_aql_returns(db: StandardDatabase) -> None:
     """Test that chain returns direct results."""
@@ -137,10 +135,9 @@ def test_aql_returns(db: StandardDatabase) -> None:
     # Insert documents
     db.collection("Actor").insert({"_key": "BruceWillis", "name": "Bruce Willis"})
     db.collection("Movie").insert({"_key": "PulpFiction", "title": "Pulp Fiction"})
-    db.collection("ActedIn").insert({
-        "_from": "Actor/BruceWillis",
-        "_to": "Movie/PulpFiction"
-    })
+    db.collection("ActedIn").insert(
+        {"_from": "Actor/BruceWillis", "_to": "Movie/PulpFiction"}
+    )
 
     # Refresh schema information
     graph.refresh_schema()
@@ -155,8 +152,7 @@ def test_aql_returns(db: StandardDatabase) -> None:
 
     # Initialize the fake LLM with the query and expected response
     llm = FakeLLM(
-        queries={"query": query, "response": "Bruce Willis"},
-        sequential_responses=True
+        queries={"query": query, "response": "Bruce Willis"}, sequential_responses=True
     )
 
     # Initialize the QA chain with return_direct=True
@@ -174,17 +170,19 @@ def test_aql_returns(db: StandardDatabase) -> None:
     pprint.pprint(output)
 
     # Define the expected output
-    expected_output = {'aql_query': '```\n'
-              '    FOR m IN Movie\n'
-              "        FILTER m.title == 'Pulp Fiction'\n"
-              '        FOR actor IN 1..1 INBOUND m ActedIn\n'
-              '            RETURN actor.name\n'
-              '    ```',
- 'aql_result': ['Bruce Willis'],
- 'query': 'Who starred in Pulp Fiction?',
- 'result': 'Bruce Willis'}
+    expected_output = {
+        "aql_query": "```\n"
+        "    FOR m IN Movie\n"
+        "        FILTER m.title == 'Pulp Fiction'\n"
+        "        FOR actor IN 1..1 INBOUND m ActedIn\n"
+        "            RETURN actor.name\n"
+        "    ```",
+        "aql_result": ["Bruce Willis"],
+        "query": "Who starred in Pulp Fiction?",
+        "result": "Bruce Willis",
+    }
     # Assert that the output matches the expected output
-    assert output== expected_output
+    assert output == expected_output
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -201,10 +199,9 @@ def test_function_response(db: StandardDatabase) -> None:
     # Insert documents
     db.collection("Actor").insert({"_key": "BruceWillis", "name": "Bruce Willis"})
     db.collection("Movie").insert({"_key": "PulpFiction", "title": "Pulp Fiction"})
-    db.collection("ActedIn").insert({
-        "_from": "Actor/BruceWillis",
-        "_to": "Movie/PulpFiction"
-    })
+    db.collection("ActedIn").insert(
+        {"_from": "Actor/BruceWillis", "_to": "Movie/PulpFiction"}
+    )
 
     # Refresh schema information
     graph.refresh_schema()
@@ -219,8 +216,7 @@ def test_function_response(db: StandardDatabase) -> None:
 
     # Initialize the fake LLM with the query and expected response
     llm = FakeLLM(
-        queries={"query": query, "response": "Bruce Willis"},
-        sequential_responses=True
+        queries={"query": query, "response": "Bruce Willis"}, sequential_responses=True
     )
 
     # Initialize the QA chain with use_function_response=True
@@ -240,6 +236,7 @@ def test_function_response(db: StandardDatabase) -> None:
     # Assert that the output matches the expected output
     assert output == expected_output
 
+
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_exclude_types(db: StandardDatabase) -> None:
     """Test exclude types from schema."""
@@ -257,16 +254,14 @@ def test_exclude_types(db: StandardDatabase) -> None:
     db.collection("Actor").insert({"_key": "BruceWillis", "name": "Bruce Willis"})
     db.collection("Movie").insert({"_key": "PulpFiction", "title": "Pulp Fiction"})
     db.collection("Person").insert({"_key": "John", "name": "John"})
-    
+
     # Insert relationships
-    db.collection("ActedIn").insert({
-        "_from": "Actor/BruceWillis",
-        "_to": "Movie/PulpFiction"
-    })
-    db.collection("Directed").insert({
-        "_from": "Person/John",
-        "_to": "Movie/PulpFiction"
-    })
+    db.collection("ActedIn").insert(
+        {"_from": "Actor/BruceWillis", "_to": "Movie/PulpFiction"}
+    )
+    db.collection("Directed").insert(
+        {"_from": "Person/John", "_to": "Movie/PulpFiction"}
+    )
 
     # Refresh schema information
     graph.refresh_schema()
@@ -284,7 +279,7 @@ def test_exclude_types(db: StandardDatabase) -> None:
 
     # Print the full version of the schema
     # pprint.pprint(chain.graph.schema)
-    res=[]
+    res = []
     for collection in chain.graph.schema["collection_schema"]:
         res.append(collection["name"])
     assert set(res) == set(["Actor", "Movie", "Person", "ActedIn", "Directed"])
@@ -309,14 +304,12 @@ def test_exclude_examples(db: StandardDatabase) -> None:
     db.collection("Person").insert({"_key": "John", "name": "John"})
 
     # Insert edges
-    db.collection("ActedIn").insert({
-        "_from": "Actor/BruceWillis",
-        "_to": "Movie/PulpFiction"
-    })
-    db.collection("Directed").insert({
-        "_from": "Person/John",
-        "_to": "Movie/PulpFiction"
-    })
+    db.collection("ActedIn").insert(
+        {"_from": "Actor/BruceWillis", "_to": "Movie/PulpFiction"}
+    )
+    db.collection("Directed").insert(
+        {"_from": "Person/John", "_to": "Movie/PulpFiction"}
+    )
 
     # Refresh schema information
     graph.refresh_schema(include_examples=False)
@@ -333,45 +326,70 @@ def test_exclude_examples(db: StandardDatabase) -> None:
     )
     pprint.pprint(chain.graph.schema)
 
-    expected_schema = {'collection_schema': [{'name': 'ActedIn',
-                        'properties': [{'_key': 'str'},
-                                       {'_id': 'str'},
-                                       {'_from': 'str'},
-                                       {'_to': 'str'},
-                                       {'_rev': 'str'}],
-                        'size': 1,
-                        'type': 'edge'},
-                       {'name': 'Directed',
-                        'properties': [{'_key': 'str'},
-                                       {'_id': 'str'},
-                                       {'_from': 'str'},
-                                       {'_to': 'str'},
-                                       {'_rev': 'str'}],
-                        'size': 1,
-                        'type': 'edge'},
-                       {'name': 'Person',
-                        'properties': [{'_key': 'str'},
-                                       {'_id': 'str'},
-                                       {'_rev': 'str'},
-                                       {'name': 'str'}],
-                        'size': 1,
-                        'type': 'document'},
-                       {'name': 'Actor',
-                        'properties': [{'_key': 'str'},
-                                       {'_id': 'str'},
-                                       {'_rev': 'str'},
-                                       {'name': 'str'}],
-                        'size': 1,
-                        'type': 'document'},
-                       {'name': 'Movie',
-                        'properties': [{'_key': 'str'},
-                                       {'_id': 'str'},
-                                       {'_rev': 'str'},
-                                       {'title': 'str'}],
-                        'size': 1,
-                        'type': 'document'}],
- 'graph_schema': []}
+    expected_schema = {
+        "collection_schema": [
+            {
+                "name": "ActedIn",
+                "properties": [
+                    {"_key": "str"},
+                    {"_id": "str"},
+                    {"_from": "str"},
+                    {"_to": "str"},
+                    {"_rev": "str"},
+                ],
+                "size": 1,
+                "type": "edge",
+            },
+            {
+                "name": "Directed",
+                "properties": [
+                    {"_key": "str"},
+                    {"_id": "str"},
+                    {"_from": "str"},
+                    {"_to": "str"},
+                    {"_rev": "str"},
+                ],
+                "size": 1,
+                "type": "edge",
+            },
+            {
+                "name": "Person",
+                "properties": [
+                    {"_key": "str"},
+                    {"_id": "str"},
+                    {"_rev": "str"},
+                    {"name": "str"},
+                ],
+                "size": 1,
+                "type": "document",
+            },
+            {
+                "name": "Actor",
+                "properties": [
+                    {"_key": "str"},
+                    {"_id": "str"},
+                    {"_rev": "str"},
+                    {"name": "str"},
+                ],
+                "size": 1,
+                "type": "document",
+            },
+            {
+                "name": "Movie",
+                "properties": [
+                    {"_key": "str"},
+                    {"_id": "str"},
+                    {"_rev": "str"},
+                    {"title": "str"},
+                ],
+                "size": 1,
+                "type": "document",
+            },
+        ],
+        "graph_schema": [],
+    }
     assert set(chain.graph.schema) == set(expected_schema)
+
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_aql_fixing_mechanism_with_fake_llm(db: StandardDatabase) -> None:
@@ -390,7 +408,7 @@ def test_aql_fixing_mechanism_with_fake_llm(db: StandardDatabase) -> None:
     sequential_queries = {
         "first_call": f"```aql\n{faulty_query}\n```",
         "second_call": f"```aql\n{corrected_query}\n```",
-        "third_call": final_answer, # This response will not be used, but we leave it for clarity
+        "third_call": final_answer,  # This response will not be used, but we leave it for clarity
     }
 
     # Initialize FakeLLM in sequential mode
@@ -411,6 +429,7 @@ def test_aql_fixing_mechanism_with_fake_llm(db: StandardDatabase) -> None:
     # final result, skipping the final QA step. The assertion must match this.
     expected_result = f"```aql\n{corrected_query}\n```"
     assert output["result"] == expected_result
+
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_explain_only_mode(db: StandardDatabase) -> None:
@@ -443,6 +462,7 @@ def test_explain_only_mode(db: StandardDatabase) -> None:
     # We will assert its presence to confirm we have a plan and not a result.
     assert "nodes" in output["aql_result"]
 
+
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_force_read_only_with_write_query(db: StandardDatabase) -> None:
     """Test that a write query raises a ValueError when force_read_only_query is True."""
@@ -473,6 +493,7 @@ def test_force_read_only_with_write_query(db: StandardDatabase) -> None:
     assert "Write operations are not allowed" in str(excinfo.value)
     assert "Detected write operation in query: INSERT" in str(excinfo.value)
 
+
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_no_aql_query_in_response(db: StandardDatabase) -> None:
     """Test that a ValueError is raised if the LLM response contains no AQL query."""
@@ -499,6 +520,7 @@ def test_no_aql_query_in_response(db: StandardDatabase) -> None:
 
     assert "Unable to extract AQL Query from response" in str(excinfo.value)
 
+
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_max_generation_attempts_exceeded(db: StandardDatabase) -> None:
     """Test that the chain stops after the maximum number of AQL generation attempts."""
@@ -524,7 +546,7 @@ def test_max_generation_attempts_exceeded(db: StandardDatabase) -> None:
         llm,
         graph=graph,
         allow_dangerous_requests=True,
-        max_aql_generation_attempts=2, # This means 2 attempts *within* the loop
+        max_aql_generation_attempts=2,  # This means 2 attempts *within* the loop
     )
 
     with pytest.raises(ValueError) as excinfo:
@@ -624,6 +646,7 @@ def test_handles_aimessage_output(db: StandardDatabase) -> None:
     # was executed, and the qa_chain (using the real FakeLLM) was called.
     assert output["result"] == final_answer
 
+
 def test_chain_type_property() -> None:
     """
     Tests that the _chain_type property returns the correct hardcoded value.
@@ -646,6 +669,7 @@ def test_chain_type_property() -> None:
     # 4. Assert that the property returns the expected value.
     assert chain._chain_type == "graph_aql_chain"
 
+
 def test_is_read_only_query_returns_true_for_readonly_query() -> None:
     """
     Tests that _is_read_only_query returns (True, None) for a read-only AQL query.
@@ -661,7 +685,7 @@ def test_is_read_only_query_returns_true_for_readonly_query() -> None:
     chain = ArangoGraphQAChain.from_llm(
         llm=llm,
         graph=graph,
-        allow_dangerous_requests=True, # Necessary for instantiation
+        allow_dangerous_requests=True,  # Necessary for instantiation
     )
 
     # 4. Define a sample read-only AQL query.
@@ -673,6 +697,7 @@ def test_is_read_only_query_returns_true_for_readonly_query() -> None:
     # 6. Assert that the result is (True, None).
     assert is_read_only is True
     assert operation is None
+
 
 def test_is_read_only_query_returns_false_for_insert_query() -> None:
     """
@@ -691,6 +716,7 @@ def test_is_read_only_query_returns_false_for_insert_query() -> None:
     assert is_read_only is False
     assert operation == "INSERT"
 
+
 def test_is_read_only_query_returns_false_for_update_query() -> None:
     """
     Tests that _is_read_only_query returns (False, 'UPDATE') for an UPDATE query.
@@ -708,6 +734,7 @@ def test_is_read_only_query_returns_false_for_update_query() -> None:
     assert is_read_only is False
     assert operation == "UPDATE"
 
+
 def test_is_read_only_query_returns_false_for_remove_query() -> None:
     """
     Tests that _is_read_only_query returns (False, 'REMOVE') for a REMOVE query.
@@ -720,10 +747,13 @@ def test_is_read_only_query_returns_false_for_remove_query() -> None:
         graph=graph,
         allow_dangerous_requests=True,
     )
-    write_query = "FOR doc IN MyCollection FILTER doc._key == '123' REMOVE doc IN MyCollection"
+    write_query = (
+        "FOR doc IN MyCollection FILTER doc._key == '123' REMOVE doc IN MyCollection"
+    )
     is_read_only, operation = chain._is_read_only_query(write_query)
     assert is_read_only is False
     assert operation == "REMOVE"
+
 
 def test_is_read_only_query_returns_false_for_replace_query() -> None:
     """
@@ -741,6 +771,7 @@ def test_is_read_only_query_returns_false_for_replace_query() -> None:
     is_read_only, operation = chain._is_read_only_query(write_query)
     assert is_read_only is False
     assert operation == "REPLACE"
+
 
 def test_is_read_only_query_returns_false_for_upsert_query() -> None:
     """
@@ -763,6 +794,7 @@ def test_is_read_only_query_returns_false_for_upsert_query() -> None:
     assert is_read_only is False
     # FIX: The method finds "INSERT" before "UPSERT" because of the list order.
     assert operation == "INSERT"
+
 
 def test_is_read_only_query_is_case_insensitive() -> None:
     """
@@ -789,6 +821,7 @@ def test_is_read_only_query_is_case_insensitive() -> None:
     # FIX: The method finds "INSERT" before "UPSERT" regardless of case.
     assert operation_mixed == "INSERT"
 
+
 def test_init_raises_error_if_dangerous_requests_not_allowed() -> None:
     """
     Tests that the __init__ method raises a ValueError if
@@ -803,7 +836,7 @@ def test_init_raises_error_if_dangerous_requests_not_allowed() -> None:
     expected_error_message = (
         "In order to use this chain, you must acknowledge that it can make "
         "dangerous requests by setting `allow_dangerous_requests` to `True`."
-    ) # We only need to check for a substring
+    )  # We only need to check for a substring
 
     # 3. Attempt to instantiate the chain without allow_dangerous_requests=True
     #    (or explicitly setting it to False) and assert that a ValueError is raised.
@@ -826,6 +859,7 @@ def test_init_raises_error_if_dangerous_requests_not_allowed() -> None:
         )
     assert expected_error_message in str(excinfo_false.value)
 
+
 def test_init_succeeds_if_dangerous_requests_allowed() -> None:
     """
     Tests that the __init__ method succeeds if allow_dangerous_requests is True.
@@ -841,4 +875,6 @@ def test_init_succeeds_if_dangerous_requests_allowed() -> None:
             allow_dangerous_requests=True,
         )
     except ValueError:
-        pytest.fail("ValueError was raised unexpectedly when allow_dangerous_requests=True")
+        pytest.fail(
+            "ValueError was raised unexpectedly when allow_dangerous_requests=True"
+        )
