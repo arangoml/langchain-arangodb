@@ -1091,7 +1091,7 @@ class ArangoVector(VectorStore):
                     SORT score {sort_order}
                     LIMIT {k}
                     {filter_clause if use_approx else ""}
-                    RETURN {{ doc, score }}
+                    RETURN doc._key
             )
 
             LET keyword_results = (
@@ -1101,39 +1101,41 @@ class ArangoVector(VectorStore):
                     LET score = BM25(doc)
                     SORT score DESC
                     LIMIT {k}
-                    RETURN {{ doc, score }}
+                    RETURN doc._key
             )
 
             LET rrf_vector = (
                 FOR i IN RANGE(0, LENGTH(vector_results) - 1)
-                    LET doc = vector_results[i].doc
-                    FILTER doc != null
+                    LET key = vector_results[i]
+                    FILTER key != null
                     RETURN {{
-                        doc,
+                        key,
                         score: {vector_weight} / (@rrf_constant + i + 1)
                     }}
             )
 
             LET rrf_keyword = (
                 FOR i IN RANGE(0, LENGTH(keyword_results) - 1)
-                    LET doc = keyword_results[i].doc
-                    FILTER doc != null
+                    LET key = keyword_results[i]
+                    FILTER key != null
                     RETURN {{
-                        doc,
+                        key,
                         score: {keyword_weight} / (@rrf_constant + i + 1)
                     }}
             )
 
             FOR result IN APPEND(rrf_vector, rrf_keyword)
-                COLLECT doc_key = result.doc._key INTO group
-                LET rrf_score = SUM(group[*].result.score)
-                LET doc = group[0].result.doc
-                SORT rrf_score DESC
+                COLLECT key = result.key INTO group
+                LET score = SUM(group[*].result.score)
+                SORT score DESC
                 LIMIT @rrf_search_limit
-                RETURN {{
-                    data: KEEP(doc, {return_fields_list}),
-                    score: rrf_score
-                }}
+                LET data = FIRST(
+                    FOR doc IN @@collection
+                        FILTER doc._key == key
+                        LIMIT 1
+                        RETURN KEEP(doc, {return_fields_list})
+                )
+                RETURN {{ data, score }}
         """
 
         bind_vars = {
