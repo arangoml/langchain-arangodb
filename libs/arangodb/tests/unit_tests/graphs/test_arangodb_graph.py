@@ -1,6 +1,5 @@
 import json
 import os
-import pprint
 from collections import defaultdict
 from typing import Generator
 from unittest.mock import MagicMock, patch
@@ -8,11 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 from arango import ArangoClient
-from arango.database import StandardDatabase
 from arango.exceptions import (
-    ArangoClientError,
     ArangoServerError,
-    ServerConnectionError,
 )
 from arango.request import Request
 from arango.response import Response
@@ -34,11 +30,12 @@ def mock_arangodb_driver() -> Generator[MagicMock, None, None]:
         mock_db.verify = MagicMock(return_value=True)
         mock_db.aql = MagicMock()
         mock_db.aql.execute = MagicMock(
-            return_value=MagicMock(batch=lambda: [], count=lambda: 0)
+            return_value=MagicMock(
+                batch=lambda: [], count=lambda: 0
+            )
         )
         mock_db._is_closed = False
         yield mock_db
-
 
 # --------------------------------------------------------------------------- #
 # 1. Direct arguments only
@@ -139,7 +136,6 @@ def test_get_client_invalid_credentials_raises(mock_client_cls):
             password="bad_pass",
         )
 
-
 @pytest.fixture
 def graph():
     return ArangoGraph(db=MagicMock())
@@ -151,16 +147,17 @@ class DummyCursor:
 
 
 class TestArangoGraph:
+
     def setup_method(self):
-        self.mock_db = MagicMock()
-        self.graph = ArangoGraph(db=self.mock_db)
-        self.graph._sanitize_input = MagicMock(
-            return_value={"name": "Alice", "tags": "List of 2 elements", "age": 30}
+            self.mock_db = MagicMock()
+            self.graph = ArangoGraph(db=self.mock_db)
+            self.graph._sanitize_input = MagicMock(
+                return_value={"name": "Alice", "tags": "List of 2 elements", "age": 30}
         )
 
     def test_get_structured_schema_returns_correct_schema(
-        self, mock_arangodb_driver: MagicMock
-    ):
+            self, mock_arangodb_driver: MagicMock
+            ):
         # Create mock db to pass to ArangoGraph
         mock_db = MagicMock()
 
@@ -173,11 +170,12 @@ class TestArangoGraph:
                 {"collection_name": "Users", "collection_type": "document"},
                 {"collection_name": "Orders", "collection_type": "document"},
             ],
-            "graph_schema": [{"graph_name": "UserOrderGraph", "edge_definitions": []}],
+            "graph_schema": [
+                {"graph_name": "UserOrderGraph", "edge_definitions": []}
+            ]
         }
-        graph._ArangoGraph__schema = (
-            test_schema  # Accessing name-mangled private attribute
-        )
+        # Accessing name-mangled private attribute
+        graph._ArangoGraph__schema = test_schema  
 
         # Access the property
         result = graph.get_structured_schema
@@ -185,27 +183,22 @@ class TestArangoGraph:
         # Assert that the returned schema matches what we set
         assert result == test_schema
 
+
     def test_arangograph_init_with_empty_credentials(
-        self, mock_arangodb_driver: MagicMock
-    ) -> None:
+            self, mock_arangodb_driver: MagicMock) -> None:
         """Test initializing ArangoGraph with empty credentials."""
-        with patch.object(ArangoClient, "db", autospec=True) as mock_db_method:
+        with patch.object(ArangoClient, 'db', autospec=True) as mock_db_method:
             mock_db_instance = MagicMock()
             mock_db_method.return_value = mock_db_instance
-
-            # Initialize ArangoClient and ArangoGraph with empty credentials
-            # client = ArangoClient()
-            # db = client.db("_system", username="", password="", verify=False)
             graph = ArangoGraph(db=mock_arangodb_driver)
-
-            # Assert that ArangoClient.db was called with empty username and password
-            # mock_db_method.assert_called_with(client, "_system", username="", password="", verify=False)
 
             # Assert that the graph instance was created successfully
             assert isinstance(graph, ArangoGraph)
 
+
     def test_arangograph_init_with_invalid_credentials(self):
-        """Test initializing ArangoGraph with incorrect credentials raises ArangoServerError."""
+        """Test initializing ArangoGraph with incorrect credentials 
+        raises ArangoServerError."""
         # Create mock request and response objects
         mock_request = MagicMock(spec=Request)
         mock_response = MagicMock(spec=Response)
@@ -214,24 +207,24 @@ class TestArangoGraph:
         client = ArangoClient()
 
         # Patch the 'db' method of the ArangoClient instance
-        with patch.object(client, "db") as mock_db_method:
+        with patch.object(client, 'db') as mock_db_method:
             # Configure the mock to raise ArangoServerError when called
-            mock_db_method.side_effect = ArangoServerError(
-                mock_response, mock_request, "bad username/password or token is expired"
-            )
+            mock_db_method.side_effect = ArangoServerError(mock_response, 
+                                                           mock_request, 
+                                                           "bad username/password or token is expired") # noqa: E501
 
-            # Attempt to connect with invalid credentials and verify that the appropriate exception is raised
+            # Attempt to connect with invalid credentials and verify that the 
+            # appropriate exception is raised
             with pytest.raises(ArangoServerError) as exc_info:
-                db = client.db(
-                    "_system",
-                    username="invalid_user",
-                    password="invalid_pass",
-                    verify=True,
-                )
-                graph = ArangoGraph(db=db)
+                db = client.db("_system", username="invalid_user", 
+                               password="invalid_pass",
+                                verify=True)
+                graph = ArangoGraph(db=db) # noqa: F841
 
             # Assert that the exception message contains the expected text
             assert "bad username/password or token is expired" in str(exc_info.value)
+
+
 
     def test_arangograph_init_missing_collection(self):
         """Test initializing ArangoGraph when a required collection is missing."""
@@ -247,10 +240,12 @@ class TestArangoGraph:
         mock_request.endpoint = "/_api/collection/missing_collection"
 
         # Patch the 'db' method of the ArangoClient instance
-        with patch.object(ArangoClient, "db") as mock_db_method:
+        with patch.object(ArangoClient, 'db') as mock_db_method:
             # Configure the mock to raise ArangoServerError when called
             mock_db_method.side_effect = ArangoServerError(
-                resp=mock_response, request=mock_request, msg="collection not found"
+                resp=mock_response,
+                request=mock_request,
+                msg="collection not found"
             )
 
             # Initialize the client
@@ -259,16 +254,17 @@ class TestArangoGraph:
             # Attempt to connect and verify that the appropriate exception is raised
             with pytest.raises(ArangoServerError) as exc_info:
                 db = client.db("_system", username="user", password="pass", verify=True)
-                graph = ArangoGraph(db=db)
+                graph = ArangoGraph(db=db) # noqa: F841
 
             # Assert that the exception message contains the expected text
             assert "collection not found" in str(exc_info.value)
 
+
     @patch.object(ArangoGraph, "generate_schema")
-    def test_arangograph_init_refresh_schema_other_err(
-        self, mock_generate_schema, mock_arangodb_driver
-    ):
-        """Test that unexpected ArangoServerError during generate_schema in __init__ is re-raised."""
+    def test_arangograph_init_refresh_schema_other_err(self, mock_generate_schema,
+                                                        mock_arangodb_driver):
+        """Test that unexpected ArangoServerError 
+        during generate_schema in __init__ is re-raised."""
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_response.error_code = 1234
@@ -277,7 +273,9 @@ class TestArangoGraph:
         mock_request = MagicMock()
 
         mock_generate_schema.side_effect = ArangoServerError(
-            resp=mock_response, request=mock_request, msg="Unexpected error"
+            resp=mock_response,
+            request=mock_request,
+            msg="Unexpected error"
         )
 
         with pytest.raises(ArangoServerError) as exc_info:
@@ -294,7 +292,7 @@ class TestArangoGraph:
             error = ArangoServerError(
                 resp=MagicMock(),
                 request=MagicMock(),
-                msg="collection or view not found: unregistered_collection",
+                msg="collection or view not found: unregistered_collection"
             )
             error.error_code = 1203
             mock_execute.side_effect = error
@@ -307,10 +305,10 @@ class TestArangoGraph:
             assert exc_info.value.error_code == 1203
             assert "collection or view not found" in str(exc_info.value)
 
+
     @patch.object(ArangoGraph, "generate_schema")
-    def test_refresh_schema_handles_arango_server_error(
-        self, mock_generate_schema, mock_arangodb_driver: MagicMock
-    ):
+    def test_refresh_schema_handles_arango_server_error(self, mock_generate_schema, 
+                                                        mock_arangodb_driver: MagicMock): # noqa: E501
         """Test that generate_schema handles ArangoServerError gracefully."""
         mock_response = MagicMock()
         mock_response.status_code = 403
@@ -322,7 +320,7 @@ class TestArangoGraph:
         mock_generate_schema.side_effect = ArangoServerError(
             resp=mock_response,
             request=mock_request,
-            msg="Forbidden: insufficient permissions",
+            msg="Forbidden: insufficient permissions"
         )
 
         with pytest.raises(ArangoServerError) as exc_info:
@@ -337,17 +335,18 @@ class TestArangoGraph:
         graph = ArangoGraph(db=mock_arangodb_driver)
 
         test_schema = {
-            "collection_schema": [
-                {"collection_name": "TestCollection", "collection_type": "document"}
-            ],
-            "graph_schema": [{"graph_name": "TestGraph", "edge_definitions": []}],
+            "collection_schema": 
+            [{"collection_name": "TestCollection", "collection_type": "document"}],
+            "graph_schema": [{"graph_name": "TestGraph", "edge_definitions": []}]
         }
 
         graph._ArangoGraph__schema = test_schema
         assert graph.schema == test_schema
 
+
     def test_add_graph_docs_inc_src_err(self, mock_arangodb_driver: MagicMock) -> None:
-        """Test that an error is raised when using add_graph_documents with include_source=True and a document is missing a source."""
+        """Test that an error is raised when using add_graph_documents with 
+        include_source=True and a document is missing a source."""
         graph = ArangoGraph(db=mock_arangodb_driver)
 
         node_1 = Node(id=1)
@@ -363,14 +362,13 @@ class TestArangoGraph:
             graph.add_graph_documents(
                 graph_documents=[graph_doc],
                 include_source=True,
-                capitalization_strategy="lower",
+                capitalization_strategy="lower"
             )
 
         assert "Source document is required." in str(exc_info.value)
 
-    def test_add_graph_docs_invalid_capitalization_strategy(
-        self, mock_arangodb_driver: MagicMock
-    ):
+    def test_add_graph_docs_invalid_capitalization_strategy(self, 
+                                    mock_arangodb_driver: MagicMock):
         """Test error when an invalid capitalization_strategy is provided."""
         # Mock the ArangoDB driver
         mock_arangodb_driver = MagicMock()
@@ -387,13 +385,14 @@ class TestArangoGraph:
         graph_doc = GraphDocument(
             nodes=[node_1, node_2],
             relationships=[rel],
-            source={"page_content": "Sample content"},  # Provide a dummy source
+            source={"page_content": "Sample content"}  # Provide a dummy source
         )
 
         # Expect a ValueError when an invalid capitalization_strategy is provided
         with pytest.raises(ValueError) as exc_info:
             graph.add_graph_documents(
-                graph_documents=[graph_doc], capitalization_strategy="invalid_strategy"
+                graph_documents=[graph_doc],
+                capitalization_strategy="invalid_strategy"
             )
 
         assert (
@@ -415,7 +414,7 @@ class TestArangoGraph:
             source=source,
             target=target,
             type="LIKES",
-            properties={"weight": 0.9, "timestamp": "2024-01-01"},
+            properties={"weight": 0.9, "timestamp": "2024-01-01"}
         )
 
         # Inputs
@@ -441,12 +440,8 @@ class TestArangoGraph:
         )
 
         # Check edge_definitions_dict was updated
-        assert edge_defs["sanitized_LIKES"]["from_vertex_collections"] == {
-            "sanitized_User"
-        }
-        assert edge_defs["sanitized_LIKES"]["to_vertex_collections"] == {
-            "sanitized_Item"
-        }
+        assert edge_defs["sanitized_LIKES"]["from_vertex_collections"]=={"sanitized_User"} # noqa: E501
+        assert edge_defs["sanitized_LIKES"]["to_vertex_collections"]=={"sanitized_Item"} # noqa: E501
 
         # Check edge document appended correctly
         assert edges["sanitized_LIKES"][0] == {
@@ -455,10 +450,11 @@ class TestArangoGraph:
             "_to": "sanitized_Item/t123",
             "text": "User likes Item",
             "weight": 0.9,
-            "timestamp": "2024-01-01",
+            "timestamp": "2024-01-01"
         }
 
     def test_add_graph_documents_full_flow(self, graph):
+
         # Mocks
         graph._create_collection = MagicMock()
         graph._hash = lambda x: f"hash_{x}"
@@ -480,9 +476,8 @@ class TestArangoGraph:
         node2 = Node(id="N2", type="Company", properties={})
         edge = Relationship(source=node1, target=node2, type="WORKS_AT", properties={})
         source_doc = Document(page_content="source document text", metadata={})
-        graph_doc = GraphDocument(
-            nodes=[node1, node2], relationships=[edge], source=source_doc
-        )
+        graph_doc = GraphDocument(nodes=[node1, node2], relationships=[edge], 
+                                  source=source_doc)
 
         # Call method
         graph.add_graph_documents(
@@ -501,7 +496,7 @@ class TestArangoGraph:
             embed_source=True,
             embed_nodes=True,
             embed_relationships=True,
-            capitalization_strategy="lower",
+            capitalization_strategy="lower"
         )
 
         # Assertions
@@ -535,7 +530,7 @@ class TestArangoGraph:
             nodes=nodes,
             node_key_map=node_key_map,
             entity_collection_name=entity_collection_name,
-            process_node_fn=process_node_fn,
+            process_node_fn=process_node_fn
         )
         assert result1 == "hashed_existing_id"
         process_node_fn.assert_not_called()  # It should skip processing
@@ -547,15 +542,14 @@ class TestArangoGraph:
             nodes=nodes,
             node_key_map=node_key_map,
             entity_collection_name=entity_collection_name,
-            process_node_fn=process_node_fn,
+            process_node_fn=process_node_fn
         )
 
         expected_key = "hashed_999"
         assert result2 == expected_key
         assert node_key_map["999"] == expected_key  # confirms key was added
-        process_node_fn.assert_called_once_with(
-            expected_key, new_node, nodes, entity_collection_name
-        )
+        process_node_fn.assert_called_once_with(expected_key, new_node, nodes, 
+                                                entity_collection_name)
 
     def test_process_source_inserts_document_with_hash(self, graph):
         # Setup ArangoGraph with mocked hash method
@@ -563,10 +557,13 @@ class TestArangoGraph:
 
         # Prepare source document
         doc = Document(
-            page_content="This is a test document.",
-            metadata={"author": "tester", "type": "text"},
-            id="doc123",
-        )
+                page_content="This is a test document.",
+                metadata={
+                    "author": "tester",
+                    "type": "text"
+                },
+                id="doc123"
+            )
 
         # Setup mocked insertion DB and collection
         mock_collection = MagicMock()
@@ -579,23 +576,20 @@ class TestArangoGraph:
             source_collection_name="my_sources",
             source_embedding=[0.1, 0.2, 0.3],
             embedding_field="embedding",
-            insertion_db=mock_db,
+            insertion_db=mock_db
         )
 
         # Verify _hash was called with source.id
         graph._hash.assert_called_once_with("doc123")
 
         # Verify correct insertion
-        mock_collection.insert.assert_called_once_with(
-            {
-                "author": "tester",
-                "type": "Document",
-                "_key": "fake_hashed_id",
-                "text": "This is a test document.",
-                "embedding": [0.1, 0.2, 0.3],
-            },
-            overwrite=True,
-        )
+        mock_collection.insert.assert_called_once_with({
+            "author": "tester",
+            "type": "Document",     
+            "_key": "fake_hashed_id",
+            "text": "This is a test document.",
+            "embedding": [0.1, 0.2, 0.3]
+        }, overwrite=True)
 
         # Assert return value is correct
         assert source_id == "fake_hashed_id"
@@ -621,15 +615,14 @@ class TestArangoGraph:
             def __str__(self):
                 raise Exception("nope")
 
-        with pytest.raises(
-            ValueError, match="Value must be a string or have a string representation"
-        ):
+        with pytest.raises(ValueError, 
+                           match=
+                           "Value must be a string or have a string representation"):
             self.graph._hash(BadStr())
 
     def test_hash_uses_farmhash(self):
-        with patch(
-            "langchain_arangodb.graphs.arangodb_graph.farmhash.Fingerprint64"
-        ) as mock_farmhash:
+        with patch("langchain_arangodb.graphs.arangodb_graph.farmhash.Fingerprint64") \
+        as mock_farmhash:
             mock_farmhash.return_value = 9999999999999
             result = self.graph._hash("test")
             mock_farmhash.assert_called_once_with("test")
@@ -669,33 +662,34 @@ class TestArangoGraph:
         assert result == name
 
     def test_sanitize_input_string_below_limit(self, graph):
-        result = graph._sanitize_input({"text": "short"}, list_limit=5, string_limit=10)
+        result = graph._sanitize_input({"text": "short"}, list_limit=5, 
+                                       string_limit=10)
         assert result == {"text": "short"}
 
+
     def test_sanitize_input_string_above_limit(self, graph):
-        result = graph._sanitize_input(
-            {"text": "a" * 50}, list_limit=5, string_limit=10
-        )
+        result = graph._sanitize_input({"text": "a" * 50}, list_limit=5, 
+                                       string_limit=10)
         assert result == {"text": "String of 50 characters"}
 
+
     def test_sanitize_input_small_list(self, graph):
-        result = graph._sanitize_input(
-            {"data": [1, 2, 3]}, list_limit=5, string_limit=10
-        )
+        result = graph._sanitize_input({"data": [1, 2, 3]}, list_limit=5, 
+                                       string_limit=10)
         assert result == {"data": [1, 2, 3]}
 
+
     def test_sanitize_input_large_list(self, graph):
-        result = graph._sanitize_input(
-            {"data": [0] * 10}, list_limit=5, string_limit=10
-        )
+        result = graph._sanitize_input({"data": [0] * 10}, list_limit=5, 
+                                       string_limit=10)
         assert result == {"data": "List of 10 elements of type <class 'int'>"}
+
 
     def test_sanitize_input_nested_dict(self, graph):
         data = {"level1": {"level2": {"long_string": "x" * 100}}}
         result = graph._sanitize_input(data, list_limit=5, string_limit=10)
-        assert result == {
-            "level1": {"level2": {"long_string": "String of 100 characters"}}
-        }
+        assert result == {"level1": {"level2": {"long_string": "String of 100 characters"}}} # noqa: E501
+
 
     def test_sanitize_input_mixed_nested(self, graph):
         data = {
@@ -703,7 +697,7 @@ class TestArangoGraph:
                 {"text": "short"},
                 {"text": "x" * 50},
                 {"numbers": list(range(3))},
-                {"numbers": list(range(20))},
+                {"numbers": list(range(20))}
             ]
         }
         result = graph._sanitize_input(data, list_limit=5, string_limit=10)
@@ -712,16 +706,19 @@ class TestArangoGraph:
                 {"text": "short"},
                 {"text": "String of 50 characters"},
                 {"numbers": [0, 1, 2]},
-                {"numbers": "List of 20 elements of type <class 'int'>"},
+                {"numbers": "List of 20 elements of type <class 'int'>"}
             ]
         }
+
 
     def test_sanitize_input_empty_list(self, graph):
         result = graph._sanitize_input([], list_limit=5, string_limit=10)
         assert result == []
 
+
     def test_sanitize_input_primitive_int(self, graph):
         assert graph._sanitize_input(123, list_limit=5, string_limit=10) == 123
+
 
     def test_sanitize_input_primitive_bool(self, graph):
         assert graph._sanitize_input(True, list_limit=5, string_limit=10) is True
@@ -732,9 +729,8 @@ class TestArangoGraph:
         monkeypatch.setenv("ARANGODB_USERNAME", "env_user")
         monkeypatch.setenv("ARANGODB_PASSWORD", "env_pass")
 
-        with patch.object(
-            get_arangodb_client.__globals__["ArangoClient"], "db"
-        ) as mock_db:
+        with patch.object(get_arangodb_client.__globals__['ArangoClient'], 
+                          'db') as mock_db:
             fake_db = MagicMock()
             mock_db.return_value = fake_db
 
@@ -793,7 +789,7 @@ class TestArangoGraph:
             source=Node(id="1", type="User"),
             target=Node(id="2", type="Item"),
             type="LIKES",
-            properties={"strength": "high"},
+            properties={"strength": "high"}
         )
 
         self.graph._process_edge_as_entity(
@@ -805,7 +801,7 @@ class TestArangoGraph:
             edges=edges,
             entity_collection_name="NODE",
             entity_edge_collection_name="EDGE",
-            _=defaultdict(lambda: defaultdict(set)),
+            _=defaultdict(lambda: defaultdict(set))
         )
 
         e = edges["EDGE"][0]
@@ -817,9 +813,8 @@ class TestArangoGraph:
         assert e["strength"] == "high"
 
     def test_generate_schema_invalid_sample_ratio(self):
-        with pytest.raises(
-            ValueError, match=r"\*\*sample_ratio\*\* value must be in between 0 to 1"
-        ):
+        with pytest.raises(ValueError, 
+                           match=r"\*\*sample_ratio\*\* value must be in between 0 to 1"): # noqa: E501
             self.graph.generate_schema(sample_ratio=2)
 
     def test_generate_schema_with_graph_name(self):
@@ -831,7 +826,7 @@ class TestArangoGraph:
         self.mock_db.aql.execute.return_value = DummyCursor()
         self.mock_db.collections.return_value = [
             {"name": "vertices", "system": False, "type": "document"},
-            {"name": "edges", "system": False, "type": "edge"},
+            {"name": "edges", "system": False, "type": "edge"}
         ]
 
         result = self.graph.generate_schema(sample_ratio=0.2, graph_name="TestGraph")
@@ -894,7 +889,7 @@ class TestArangoGraph:
             graph_documents=[doc],
             graph_name="TestGraph",
             update_graph_definition_if_exists=True,
-            capitalization_strategy="lower",
+            capitalization_strategy="lower"
         )
 
         # Assert
@@ -915,7 +910,11 @@ class TestArangoGraph:
 
         # Input AQL query and parameters
         query_str = "FOR u IN users RETURN u"
-        params = {"top_k": 2, "list_limit": 2, "string_limit": 50}
+        params = {
+            "top_k": 2,
+            "list_limit": 2,
+            "string_limit": 50
+        }
 
         # Call the method
         result = self.graph.query(query_str, params.copy())
@@ -938,7 +937,7 @@ class TestArangoGraph:
     def test_schema_json(self):
         test_schema = {
             "collection_schema": [{"name": "Users", "type": "document"}],
-            "graph_schema": [{"graph_name": "UserGraph", "edge_definitions": []}],
+            "graph_schema": [{"graph_name": "UserGraph", "edge_definitions": []}]
         }
         self.graph._ArangoGraph__schema = test_schema  # set private attribute
         result = self.graph.schema_json
@@ -947,7 +946,7 @@ class TestArangoGraph:
     def test_schema_yaml(self):
         test_schema = {
             "collection_schema": [{"name": "Users", "type": "document"}],
-            "graph_schema": [{"graph_name": "UserGraph", "edge_definitions": []}],
+            "graph_schema": [{"graph_name": "UserGraph", "edge_definitions": []}]
         }
         self.graph._ArangoGraph__schema = test_schema
         result = self.graph.schema_yaml
@@ -956,7 +955,7 @@ class TestArangoGraph:
     def test_set_schema(self):
         new_schema = {
             "collection_schema": [{"name": "Products", "type": "document"}],
-            "graph_schema": [{"graph_name": "ProductGraph", "edge_definitions": []}],
+            "graph_schema": [{"graph_name": "ProductGraph", "edge_definitions": []}]
         }
         self.graph.set_schema(new_schema)
         assert self.graph._ArangoGraph__schema == new_schema
@@ -964,19 +963,15 @@ class TestArangoGraph:
     def test_refresh_schema_sets_internal_schema(self):
         fake_schema = {
             "collection_schema": [{"name": "Test", "type": "document"}],
-            "graph_schema": [{"graph_name": "TestGraph", "edge_definitions": []}],
+            "graph_schema": [{"graph_name": "TestGraph", "edge_definitions": []}]
         }
 
         # Mock generate_schema to return a controlled fake schema
         self.graph.generate_schema = MagicMock(return_value=fake_schema)
 
         # Call refresh_schema with custom args
-        self.graph.refresh_schema(
-            sample_ratio=0.5,
-            graph_name="TestGraph",
-            include_examples=False,
-            list_limit=10,
-        )
+        self.graph.refresh_schema(sample_ratio=0.5, graph_name="TestGraph", 
+                                  include_examples=False, list_limit=10)
 
         # Assert generate_schema was called with those args
         self.graph.generate_schema.assert_called_once_with(0.5, "TestGraph", False, 10)
@@ -1014,7 +1009,7 @@ class TestArangoGraph:
         node1 = Node(id="1", type="Person")
         node2 = Node(id="2", type="Company")
         edge = Relationship(source=node1, target=node2, type="WORKS_AT")
-        graph_doc = GraphDocument(nodes=[node1, node2], relationships=[edge])
+        graph_doc = GraphDocument(nodes=[node1, node2], relationships=[edge]) # noqa: E501 F841
 
         # Patch internals to avoid unrelated behavior
         graph._hash = lambda x: str(x)
@@ -1023,39 +1018,6 @@ class TestArangoGraph:
         graph.refresh_schema = lambda *args, **kwargs: None
         graph._create_collection = lambda *args, **kwargs: None
 
-        # Simulate _process_edge_as_type populating edge_definitions_dict
-
-    def fake_process_edge_as_type(
-        edge,
-        edge_str,
-        edge_key,
-        source_key,
-        target_key,
-        edges,
-        _1,
-        _2,
-        edge_definitions_dict,
-    ):
-        edge_type = "WORKS_AT"
-        edges[edge_type].append({"_key": edge_key})
-        edge_definitions_dict[edge_type]["from_vertex_collections"].add("Person")
-        edge_definitions_dict[edge_type]["to_vertex_collections"].add("Company")
-
-        graph._process_edge_as_type = fake_process_edge_as_type
-
-        # Act
-        graph.add_graph_documents(
-            graph_documents=[graph_doc],
-            graph_name="MyGraph",
-            update_graph_definition_if_exists=True,
-            use_one_entity_collection=False,
-            capitalization_strategy="lower",
-        )
-
-        # Assert
-        mock_db.graph.assert_called_once_with("MyGraph")
-        mock_graph.has_edge_definition.assert_called_once_with("WORKS_AT")
-        mock_graph.create_edge_definition.assert_called_once()
 
     def test_add_graph_documents_raises_if_embedding_missing(self):
         # Arrange
@@ -1072,23 +1034,18 @@ class TestArangoGraph:
             graph.add_graph_documents(
                 graph_documents=[doc],
                 embeddings=None,  # ← embeddings not provided
-                embed_source=True,  # ← any of these True triggers the check
+                embed_source=True  # ← any of these True triggers the check
             )
-
     class DummyEmbeddings:
         def embed_documents(self, texts):
             return [[0.0] * 5 for _ in texts]
 
-    @pytest.mark.parametrize(
-        "strategy,input_id,expected_id",
-        [
-            ("none", "TeStId", "TeStId"),
-            ("upper", "TeStId", "TESTID"),
-        ],
-    )
+    @pytest.mark.parametrize("strategy,input_id,expected_id", [
+        ("none", "TeStId", "TeStId"),
+        ("upper", "TeStId", "TESTID"),
+    ])
     def test_add_graph_documents_capitalization_strategy(
-        self, strategy, input_id, expected_id
-    ):
+        self, strategy, input_id, expected_id):
         graph = ArangoGraph(db=MagicMock(), generate_schema_on_init=False)
 
         graph._hash = lambda x: x
@@ -1115,7 +1072,7 @@ class TestArangoGraph:
             capitalization_strategy=strategy,
             use_one_entity_collection=True,
             embed_source=True,
-            embeddings=self.DummyEmbeddings(),  # reference class properly
+            embeddings=self.DummyEmbeddings()  # reference class properly
         )
 
         assert mutated_nodes[0] == expected_id

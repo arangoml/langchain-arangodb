@@ -1,20 +1,14 @@
 import json
 import os
 import pprint
-import urllib.parse
 from collections import defaultdict
 from unittest.mock import MagicMock
 
 import pytest
 from arango import ArangoClient
 from arango.database import StandardDatabase
-from arango.exceptions import (
-    ArangoClientError,
-    ArangoServerError,
-    ServerConnectionError,
-)
+from arango.exceptions import ArangoServerError
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph, get_arangodb_client
 from langchain_arangodb.graphs.graph_document import GraphDocument, Node, Relationship
@@ -47,13 +41,13 @@ test_data_backticks = [
         source=Document(page_content="source document"),
     )
 ]
-url = os.environ.get("ARANGO_URL", "http://localhost:8529")  # type: ignore[assignment]
-username = os.environ.get("ARANGO_USERNAME", "root")  # type: ignore[assignment]
-password = os.environ.get("ARANGO_PASSWORD", "test")  # type: ignore[assignment]
+url = os.environ.get("ARANGO_URL", "http://localhost:8529")  # type: ignore[assignment] 
+username = os.environ.get("ARANGO_USERNAME", "root")  # type: ignore[assignment] 
+password = os.environ.get("ARANGO_PASSWORD", "test")  # type: ignore[assignment] 
 
-os.environ["ARANGO_URL"] = url  # type: ignore[assignment]
-os.environ["ARANGO_USERNAME"] = username  # type: ignore[assignment]
-os.environ["ARANGO_PASSWORD"] = password  # type: ignore[assignment]
+os.environ["ARANGO_URL"] = url  # type: ignore[assignment] 
+os.environ["ARANGO_USERNAME"] = username  # type: ignore[assignment] 
+os.environ["ARANGO_PASSWORD"] = password  # type: ignore[assignment] 
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -74,14 +68,15 @@ def test_connect_arangodb_env(db: StandardDatabase) -> None:
     assert os.environ.get("ARANGO_PASSWORD") is not None
     graph = ArangoGraph(db)
 
-    output = graph.query("RETURN 1")
+    output = graph.query('RETURN 1')
     expected_output = [1]
     assert output == expected_output
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangodb_schema_structure(db: StandardDatabase) -> None:
-    """Test that nodes and relationships with properties are correctly inserted and queried in ArangoDB."""
+    """Test that nodes and relationships with properties are correctly 
+    inserted and queried in ArangoDB."""
     graph = ArangoGraph(db)
 
     # Create nodes and relationships using the ArangoGraph API
@@ -95,20 +90,23 @@ def test_arangodb_schema_structure(db: StandardDatabase) -> None:
             Relationship(
                 source=Node(id="label_a", type="LabelA"),
                 target=Node(id="label_b", type="LabelB"),
-                type="REL_TYPE",
+                type="REL_TYPE"
             ),
             Relationship(
                 source=Node(id="label_a", type="LabelA"),
                 target=Node(id="label_c", type="LabelC"),
                 type="REL_TYPE",
-                properties={"rel_prop": "abc"},
+                properties={"rel_prop": "abc"}
             ),
         ],
         source=Document(page_content="sample document"),
     )
 
     # Use 'lower' to avoid capitalization_strategy bug
-    graph.add_graph_documents([doc], capitalization_strategy="lower")
+    graph.add_graph_documents(
+        [doc],
+        capitalization_strategy="lower"
+    )
 
     node_query = """
     FOR doc IN @@collection
@@ -127,33 +125,45 @@ def test_arangodb_schema_structure(db: StandardDatabase) -> None:
     """
 
     node_output = graph.query(
-        node_query, params={"bind_vars": {"@collection": "ENTITY", "label": "LabelA"}}
+        node_query,
+        params={"bind_vars": {"@collection": "ENTITY", "label": "LabelA"}}
     )
 
     relationship_output = graph.query(
-        rel_query, params={"bind_vars": {"@collection": "LINKS_TO"}}
+        rel_query,
+        params={"bind_vars": {"@collection": "LINKS_TO"}}
     )
 
-    expected_node_properties = [{"type": "LabelA", "properties": {"property_a": "a"}}]
+    expected_node_properties = [
+        {"type": "LabelA", "properties": {"property_a": "a"}}
+    ]
 
     expected_relationships = [
-        {"text": "label_a REL_TYPE label_b"},
-        {"text": "label_a REL_TYPE label_c"},
+    {
+        "text": "label_a REL_TYPE label_b"
+    },
+    {
+        "text": "label_a REL_TYPE label_c"
+    }
     ]
 
     assert node_output == expected_node_properties
-    assert relationship_output == expected_relationships
+    assert  relationship_output == expected_relationships
+
+   
+
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangodb_query_timeout(db: StandardDatabase):
+    
     long_running_query = "FOR i IN 1..10000000 FILTER i == 0 RETURN i"
 
     # Set a short maxRuntime to trigger a timeout
     try:
         cursor = db.aql.execute(
             long_running_query,
-            max_runtime=0.1,  # maxRuntime in seconds
+            max_runtime=0.1  # maxRuntime in seconds
         )
         # Force evaluation of the cursor
         list(cursor)
@@ -189,6 +199,9 @@ def test_arangodb_sanitize_values(db: StandardDatabase) -> None:
     assert len(result[0]) == 130
 
 
+
+
+
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangodb_add_data(db: StandardDatabase) -> None:
     """Test that ArangoDB correctly imports graph documents."""
@@ -205,7 +218,7 @@ def test_arangodb_add_data(db: StandardDatabase) -> None:
     )
 
     # Add graph documents
-    graph.add_graph_documents([test_data], capitalization_strategy="lower")
+    graph.add_graph_documents([test_data],capitalization_strategy="lower")
 
     # Query to count nodes by type
     query = """
@@ -216,12 +229,10 @@ def test_arangodb_add_data(db: StandardDatabase) -> None:
     """
 
     # Execute the query for each collection
-    foo_result = graph.query(
-        query, params={"bind_vars": {"@collection": "ENTITY", "type": "foo"}}
-    )
-    bar_result = graph.query(
-        query, params={"bind_vars": {"@collection": "ENTITY", "type": "bar"}}
-    )
+    foo_result = graph.query(query, 
+                             params={"bind_vars": {"@collection": "ENTITY", "type": "foo"}}) # noqa: E501
+    bar_result = graph.query(query, 
+                             params={"bind_vars": {"@collection": "ENTITY", "type": "bar"}}) # noqa: E501
 
     # Combine results
     output = foo_result + bar_result
@@ -230,9 +241,8 @@ def test_arangodb_add_data(db: StandardDatabase) -> None:
     expected_output = [{"label": "foo", "count": 1}, {"label": "bar", "count": 1}]
 
     # Assert the output matches expected
-    assert sorted(output, key=lambda x: x["label"]) == sorted(
-        expected_output, key=lambda x: x["label"]
-    )
+    assert sorted(output, key=lambda x: x["label"]) == sorted(expected_output, key=lambda x: x["label"]) # noqa: E501
+
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -250,13 +260,13 @@ def test_arangodb_rels(db: StandardDatabase) -> None:
             Relationship(
                 source=Node(id="foo`", type="foo"),
                 target=Node(id="bar`", type="bar"),
-                type="REL",
+                type="REL"
             ),
         ],
         source=Document(page_content="sample document"),
     )
 
-    # Add graph documents
+    # Add graph documents 
     graph.add_graph_documents([test_data_backticks], capitalization_strategy="lower")
 
     # Query nodes
@@ -267,12 +277,10 @@ def test_arangodb_rels(db: StandardDatabase) -> None:
             RETURN { labels: doc.type }
 
     """
-    foo_nodes = graph.query(
-        node_query, params={"bind_vars": {"@collection": "ENTITY", "type": "foo"}}
-    )
-    bar_nodes = graph.query(
-        node_query, params={"bind_vars": {"@collection": "ENTITY", "type": "bar"}}
-    )
+    foo_nodes = graph.query(node_query, params={"bind_vars": 
+                                                {"@collection": "ENTITY", "type": "foo"}}) # noqa: E501
+    bar_nodes = graph.query(node_query, params={"bind_vars": 
+                                                {"@collection": "ENTITY", "type": "bar"}}) # noqa: E501
 
     # Query relationships
     rel_query = """
@@ -289,11 +297,9 @@ def test_arangodb_rels(db: StandardDatabase) -> None:
     nodes = foo_nodes + bar_nodes
 
     # Assertions
-    assert sorted(nodes, key=lambda x: x["labels"]) == sorted(
-        expected_nodes, key=lambda x: x["labels"]
-    )
+    assert sorted(nodes, key=lambda x: x["labels"]) == sorted(expected_nodes, 
+                                                              key=lambda x: x["labels"]) # noqa: E501   
     assert rels == expected_rels
-
 
 # @pytest.mark.usefixtures("clear_arangodb_database")
 # def test_invalid_url() -> None:
@@ -325,9 +331,8 @@ def test_invalid_credentials() -> None:
 
     with pytest.raises(ArangoServerError) as exc_info:
         # Attempt to connect with invalid username and password
-        client.db(
-            "_system", username="invalid_user", password="invalid_pass", verify=True
-        )
+        client.db("_system", username="invalid_user", password="invalid_pass", 
+                  verify=True)
 
     assert "bad username/password" in str(exc_info.value)
 
@@ -341,14 +346,14 @@ def test_schema_refresh_updates_schema(db: StandardDatabase):
     doc = GraphDocument(
         nodes=[Node(id="x", type="X")],
         relationships=[],
-        source=Document(page_content="refresh test"),
+        source=Document(page_content="refresh test")
     )
     graph.add_graph_documents([doc], capitalization_strategy="lower")
 
     assert "collection_schema" in graph.schema
-    assert any(
-        col["name"].lower() == "entity" for col in graph.schema["collection_schema"]
-    )
+    assert any(col["name"].lower() == "entity" for col in
+                graph.schema["collection_schema"])
+
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -377,7 +382,6 @@ def test_sanitize_input_list_cases(db: StandardDatabase):
     result = sanitize(exact_limit_list, list_limit=5, string_limit=10)
     assert isinstance(result, str)  # Should still be replaced since `len == list_limit`
 
-
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_sanitize_input_dict_with_lists(db: StandardDatabase):
     graph = ArangoGraph(db, generate_schema_on_init=False)
@@ -399,7 +403,6 @@ def test_sanitize_input_dict_with_lists(db: StandardDatabase):
     result_empty = sanitize(input_data_empty, list_limit=5, string_limit=50)
     assert result_empty == {"empty": []}
 
-
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_sanitize_collection_name(db: StandardDatabase):
     graph = ArangoGraph(db, generate_schema_on_init=False)
@@ -408,15 +411,13 @@ def test_sanitize_collection_name(db: StandardDatabase):
     assert graph._sanitize_collection_name("validName123") == "validName123"
 
     # 2. Name with invalid characters (replaced with "_")
-    assert graph._sanitize_collection_name("name with spaces!") == "name_with_spaces_"
+    assert graph._sanitize_collection_name("name with spaces!") == "name_with_spaces_" # noqa: E501
 
     # 3. Name starting with a digit (prepends "Collection_")
-    assert (
-        graph._sanitize_collection_name("1invalidStart") == "Collection_1invalidStart"
-    )
+    assert graph._sanitize_collection_name("1invalidStart") == "Collection_1invalidStart" # noqa: E501
 
     # 4. Name starting with underscore (still not a letter → prepend)
-    assert graph._sanitize_collection_name("_underscore") == "Collection__underscore"
+    assert graph._sanitize_collection_name("_underscore") == "Collection__underscore" # noqa: E501
 
     # 5. Name too long (should trim to 256 characters)
     long_name = "x" * 300
@@ -427,12 +428,14 @@ def test_sanitize_collection_name(db: StandardDatabase):
     with pytest.raises(ValueError, match="Collection name cannot be empty."):
         graph._sanitize_collection_name("")
 
-
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_process_source(db: StandardDatabase):
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
-    source_doc = Document(page_content="Test content", metadata={"author": "Alice"})
+    source_doc = Document(
+        page_content="Test content",
+        metadata={"author": "Alice"}
+    )
     # Manually override the default type (not part of constructor)
     source_doc.type = "test_type"
 
@@ -446,7 +449,7 @@ def test_process_source(db: StandardDatabase):
         source_collection_name=collection_name,
         source_embedding=embedding,
         embedding_field="embedding",
-        insertion_db=db,
+        insertion_db=db
     )
 
     inserted_doc = db.collection(collection_name).get(source_id)
@@ -457,7 +460,6 @@ def test_process_source(db: StandardDatabase):
     assert inserted_doc["author"] == "Alice"
     assert inserted_doc["type"] == "test_type"
     assert inserted_doc["embedding"] == embedding
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_process_edge_as_type(db):
@@ -472,7 +474,7 @@ def test_process_edge_as_type(db):
         source=source_node,
         target=target_node,
         type="LIVES_IN",
-        properties={"since": "2020"},
+        properties={"since": "2020"}
     )
 
     edge_key = "edge123"
@@ -513,15 +515,8 @@ def test_process_edge_as_type(db):
     assert inserted_edge["since"] == "2020"
 
     # Edge definitions updated
-    assert (
-        sanitized_source_type
-        in edge_definitions_dict[sanitized_edge_type]["from_vertex_collections"]
-    )
-    assert (
-        sanitized_target_type
-        in edge_definitions_dict[sanitized_edge_type]["to_vertex_collections"]
-    )
-
+    assert sanitized_source_type in edge_definitions_dict[sanitized_edge_type]["from_vertex_collections"] # noqa: E501
+    assert sanitized_target_type in edge_definitions_dict[sanitized_edge_type]["to_vertex_collections"] # noqa: E501
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_graph_creation_and_edge_definitions(db: StandardDatabase):
@@ -537,10 +532,10 @@ def test_graph_creation_and_edge_definitions(db: StandardDatabase):
             Relationship(
                 source=Node(id="user1", type="User"),
                 target=Node(id="group1", type="Group"),
-                type="MEMBER_OF",
+                type="MEMBER_OF"
             )
         ],
-        source=Document(page_content="user joins group"),
+        source=Document(page_content="user joins group")
     )
 
     graph.add_graph_documents(
@@ -548,7 +543,7 @@ def test_graph_creation_and_edge_definitions(db: StandardDatabase):
         graph_name=graph_name,
         update_graph_definition_if_exists=True,
         capitalization_strategy="lower",
-        use_one_entity_collection=False,
+        use_one_entity_collection=False
     )
 
     assert db.has_graph(graph_name)
@@ -558,12 +553,10 @@ def test_graph_creation_and_edge_definitions(db: StandardDatabase):
     edge_collections = {e["edge_collection"] for e in edge_definitions}
     assert "MEMBER_OF" in edge_collections  # MATCH lowercased name
 
-    member_def = next(
-        e for e in edge_definitions if e["edge_collection"] == "MEMBER_OF"
-    )
+    member_def = next(e for e in edge_definitions 
+                      if e["edge_collection"] == "MEMBER_OF")
     assert "User" in member_def["from_vertex_collections"]
     assert "Group" in member_def["to_vertex_collections"]
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_include_source_collection_setup(db: StandardDatabase):
@@ -589,7 +582,7 @@ def test_include_source_collection_setup(db: StandardDatabase):
         graph_name=graph_name,
         include_source=True,
         capitalization_strategy="lower",
-        use_one_entity_collection=True,  # test common case
+        use_one_entity_collection=True  # test common case
     )
 
     # Assert source and edge collections were created
@@ -603,11 +596,10 @@ def test_include_source_collection_setup(db: StandardDatabase):
     assert edge["_to"].startswith(f"{source_col}/")
     assert edge["_from"].startswith(f"{entity_col}/")
 
-
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_graph_edge_definition_replacement(db: StandardDatabase):
     graph_name = "ReplaceGraph"
-
+    
     def insert_graph_with_node_type(node_type: str):
         graph = ArangoGraph(db, generate_schema_on_init=False)
         graph_doc = GraphDocument(
@@ -619,10 +611,10 @@ def test_graph_edge_definition_replacement(db: StandardDatabase):
                 Relationship(
                     source=Node(id="n1", type=node_type),
                     target=Node(id="n2", type=node_type),
-                    type="CONNECTS",
+                    type="CONNECTS"
                 )
             ],
-            source=Document(page_content="replace test"),
+            source=Document(page_content="replace test")
         )
 
         graph.add_graph_documents(
@@ -630,15 +622,14 @@ def test_graph_edge_definition_replacement(db: StandardDatabase):
             graph_name=graph_name,
             update_graph_definition_if_exists=True,
             capitalization_strategy="lower",
-            use_one_entity_collection=False,
+            use_one_entity_collection=False
         )
 
     # Step 1: Insert with type "TypeA"
     insert_graph_with_node_type("TypeA")
     g = db.graph(graph_name)
-    edge_defs_1 = [
-        ed for ed in g.edge_definitions() if ed["edge_collection"] == "CONNECTS"
-    ]
+    edge_defs_1 = [ed for ed in g.edge_definitions() 
+                   if ed["edge_collection"] == "CONNECTS"]
     assert len(edge_defs_1) == 1
 
     assert "TypeA" in edge_defs_1[0]["from_vertex_collections"]
@@ -646,15 +637,12 @@ def test_graph_edge_definition_replacement(db: StandardDatabase):
 
     # Step 2: Insert again with different type "TypeB" — should trigger replace
     insert_graph_with_node_type("TypeB")
-    edge_defs_2 = [
-        ed for ed in g.edge_definitions() if ed["edge_collection"] == "CONNECTS"
-    ]
+    edge_defs_2 = [ed for ed in g.edge_definitions() if ed["edge_collection"] == "CONNECTS"] # noqa: E501
     assert len(edge_defs_2) == 1
     assert "TypeB" in edge_defs_2[0]["from_vertex_collections"]
     assert "TypeB" in edge_defs_2[0]["to_vertex_collections"]
     # Should not contain old "typea" anymore
     assert "TypeA" not in edge_defs_2[0]["from_vertex_collections"]
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_generate_schema_with_graph_name(db: StandardDatabase):
@@ -676,26 +664,28 @@ def test_generate_schema_with_graph_name(db: StandardDatabase):
     # Insert test data
     db.collection(vertex_col1).insert({"_key": "alice", "role": "engineer"})
     db.collection(vertex_col2).insert({"_key": "acme", "industry": "tech"})
-    db.collection(edge_col).insert(
-        {"_from": f"{vertex_col1}/alice", "_to": f"{vertex_col2}/acme", "since": 2020}
-    )
+    db.collection(edge_col).insert({
+        "_from": f"{vertex_col1}/alice",
+        "_to": f"{vertex_col2}/acme",
+        "since": 2020
+    })
 
     # Create graph
     if not db.has_graph(graph_name):
         db.create_graph(
             graph_name,
-            edge_definitions=[
-                {
-                    "edge_collection": edge_col,
-                    "from_vertex_collections": [vertex_col1],
-                    "to_vertex_collections": [vertex_col2],
-                }
-            ],
+            edge_definitions=[{
+                "edge_collection": edge_col,
+                "from_vertex_collections": [vertex_col1],
+                "to_vertex_collections": [vertex_col2]
+            }]
         )
 
     # Call generate_schema
     schema = graph.generate_schema(
-        sample_ratio=1.0, graph_name=graph_name, include_examples=True
+        sample_ratio=1.0,
+        graph_name=graph_name,
+        include_examples=True
     )
 
     # Validate graph schema
@@ -720,7 +710,7 @@ def test_add_graph_documents_requires_embedding(db: StandardDatabase):
     doc = GraphDocument(
         nodes=[Node(id="A", type="TypeA")],
         relationships=[],
-        source=Document(page_content="doc without embedding"),
+        source=Document(page_content="doc without embedding")
     )
 
     with pytest.raises(ValueError, match="embedding.*required"):
@@ -728,12 +718,9 @@ def test_add_graph_documents_requires_embedding(db: StandardDatabase):
             [doc],
             embed_source=True,  # requires embedding, but embeddings=None
         )
-
-
 class FakeEmbeddings:
     def embed_documents(self, texts):
         return [[0.1, 0.2, 0.3] for _ in texts]
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_add_graph_documents_with_embedding(db: StandardDatabase):
@@ -742,7 +729,7 @@ def test_add_graph_documents_with_embedding(db: StandardDatabase):
     doc = GraphDocument(
         nodes=[Node(id="NodeX", type="TypeX")],
         relationships=[],
-        source=Document(page_content="sample text"),
+        source=Document(page_content="sample text")
     )
 
     # Provide FakeEmbeddings and enable source embedding
@@ -752,7 +739,7 @@ def test_add_graph_documents_with_embedding(db: StandardDatabase):
         embed_source=True,
         embeddings=FakeEmbeddings(),
         embedding_field="embedding",
-        capitalization_strategy="lower",
+        capitalization_strategy="lower"
     )
 
     # Verify the embedding was stored
@@ -765,25 +752,24 @@ def test_add_graph_documents_with_embedding(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-@pytest.mark.parametrize(
-    "strategy, expected_id",
-    [
-        ("lower", "node1"),
-        ("upper", "NODE1"),
-    ],
-)
-def test_capitalization_strategy_applied(
-    db: StandardDatabase, strategy: str, expected_id: str
-):
+@pytest.mark.parametrize("strategy, expected_id", [
+    ("lower", "node1"),
+    ("upper", "NODE1"),
+])
+def test_capitalization_strategy_applied(db: StandardDatabase, 
+                                         strategy: str, expected_id: str):
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     doc = GraphDocument(
         nodes=[Node(id="Node1", type="Entity")],
         relationships=[],
-        source=Document(page_content="source"),
+        source=Document(page_content="source")
     )
 
-    graph.add_graph_documents([doc], capitalization_strategy=strategy)
+    graph.add_graph_documents(
+        [doc],
+        capitalization_strategy=strategy
+    )
 
     results = list(db.collection("ENTITY").all())
     assert any(doc["text"] == expected_id for doc in results)
@@ -803,19 +789,18 @@ def test_capitalization_strategy_none_does_not_raise(db: StandardDatabase):
     doc = GraphDocument(
         nodes=[Node(id="Node1", type="Entity")],
         relationships=[],
-        source=Document(page_content="source"),
+        source=Document(page_content="source")
     )
 
     # Act (should NOT raise)
     graph.add_graph_documents([doc], capitalization_strategy="none")
-
 
 def test_get_arangodb_client_direct_credentials():
     db = get_arangodb_client(
         url="http://localhost:8529",
         dbname="_system",
         username="root",
-        password="test",  # adjust if your test instance uses a different password
+        password="test"  # adjust if your test instance uses a different password
     )
     assert isinstance(db, StandardDatabase)
     assert db.name == "_system"
@@ -839,9 +824,8 @@ def test_get_arangodb_client_invalid_url():
             url="http://localhost:9999",
             dbname="_system",
             username="root",
-            password="test",
+            password="test"
         )
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_batch_insert_triggers_import_data(db: StandardDatabase):
@@ -860,7 +844,9 @@ def test_batch_insert_triggers_import_data(db: StandardDatabase):
     )
 
     graph.add_graph_documents(
-        [doc], batch_size=batch_size, capitalization_strategy="lower"
+        [doc],
+        batch_size=batch_size,
+        capitalization_strategy="lower"
     )
 
     # Filter for node insert calls
@@ -882,42 +868,46 @@ def test_batch_insert_edges_triggers_import_data(db: StandardDatabase):
     # Prepare enough nodes to support relationships
     nodes = [Node(id=f"n{i}", type="Entity") for i in range(total_edges + 1)]
     relationships = [
-        Relationship(source=nodes[i], target=nodes[i + 1], type="LINKS_TO")
+        Relationship(
+            source=nodes[i],
+            target=nodes[i + 1],
+            type="LINKS_TO"
+        )
         for i in range(total_edges)
     ]
 
     doc = GraphDocument(
         nodes=nodes,
         relationships=relationships,
-        source=Document(page_content="edge batch test"),
+        source=Document(page_content="edge batch test")
     )
 
     graph.add_graph_documents(
-        [doc], batch_size=batch_size, capitalization_strategy="lower"
+        [doc],
+        batch_size=batch_size,
+        capitalization_strategy="lower"
     )
 
-    # Count how many times _import_data was called with is_edge=True AND non-empty edge data
+    # Count how many times _import_data was called with is_edge=True 
+    # AND non-empty edge data
     edge_calls = [
-        call
-        for call in graph._import_data.call_args_list
+        call for call in graph._import_data.call_args_list
         if call.kwargs.get("is_edge") is True and any(call.args[1].values())
     ]
 
     assert len(edge_calls) == 7  # 2 full batches (2, 4), 1 final flush (5)
-
 
 def test_from_db_credentials_direct() -> None:
     graph = ArangoGraph.from_db_credentials(
         url="http://localhost:8529",
         dbname="_system",
         username="root",
-        password="test",  # use "" if your ArangoDB has no password
+        password="test"  # use "" if your ArangoDB has no password
     )
 
     assert isinstance(graph, ArangoGraph)
     assert isinstance(graph.db, StandardDatabase)
     assert graph.db.name == "_system"
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_get_node_key_existing_entry(db: StandardDatabase):
@@ -941,7 +931,6 @@ def test_get_node_key_existing_entry(db: StandardDatabase):
     assert key == existing_key
     process_node_fn.assert_not_called()
 
-
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_get_node_key_new_entry(db: StandardDatabase):
     graph = ArangoGraph(db, generate_schema_on_init=False)
@@ -963,6 +952,8 @@ def test_get_node_key_new_entry(db: StandardDatabase):
     assert node.id in node_key_map
     assert node_key_map[node.id] == key
     process_node_fn.assert_called_once_with(key, node, nodes, "ENTITY")
+
+
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -1004,9 +995,9 @@ def test_hash_invalid_input_raises():
 def test_sanitize_input_short_string_preserved(db: StandardDatabase):
     graph = ArangoGraph(db, generate_schema_on_init=False)
     input_dict = {"key": "short"}
-
+    
     result = graph._sanitize_input(input_dict, list_limit=10, string_limit=10)
-
+    
     assert result["key"] == "short"
 
 
@@ -1015,91 +1006,89 @@ def test_sanitize_input_long_string_truncated(db: StandardDatabase):
     graph = ArangoGraph(db, generate_schema_on_init=False)
     long_value = "x" * 100
     input_dict = {"key": long_value}
-
+    
     result = graph._sanitize_input(input_dict, list_limit=10, string_limit=50)
-
+    
     assert result["key"] == f"String of {len(long_value)} characters"
-
-
-# @pytest.mark.usefixtures("clear_arangodb_database")
-# def test_create_edge_definition_called_when_missing(db: StandardDatabase):
-#     graph_name = "TestEdgeDefGraph"
-#     graph = ArangoGraph(db, generate_schema_on_init=False)
-
-#     # Patch internal graph methods
-#     graph._get_graph = MagicMock()
-#     mock_graph_obj = MagicMock()
-#     mock_graph_obj.has_edge_definition.return_value = False  # simulate missing edge definition
-#     graph._get_graph.return_value = mock_graph_obj
-
-#     # Create input graph document
-#     doc = GraphDocument(
-#         nodes=[
-#             Node(id="n1", type="X"),
-#             Node(id="n2", type="Y")
-#         ],
-#         relationships=[
-#             Relationship(
-#                 source=Node(id="n1", type="X"),
-#                 target=Node(id="n2", type="Y"),
-#                 type="CUSTOM_EDGE"
-#             )
-#         ],
-#         source=Document(page_content="edge test")
-#     )
-
-#     # Run insertion
-#     graph.add_graph_documents(
-#     [doc],
-#     graph_name=graph_name,
-#     update_graph_definition_if_exists=True,
-#     capitalization_strategy="lower",  # <-- TEMP FIX HERE
-#     use_one_entity_collection=False,
-# )
-#     # ✅ Assertion: should call `create_edge_definition` since has_edge_definition == False
-#     assert mock_graph_obj.create_edge_definition.called, "Expected create_edge_definition to be called"
-#     call_args = mock_graph_obj.create_edge_definition.call_args[1]
-#     assert "edge_collection" in call_args
-#     assert call_args["edge_collection"].lower() == "custom_edge"
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_create_edge_definition_called_when_missing(db: StandardDatabase):
-    graph_name = "test_graph"
-
-    # Mock db.graph(...) to return a fake graph object
-    mock_graph = MagicMock()
-    mock_graph.has_edge_definition.return_value = False
-    mock_graph.create_edge_definition = MagicMock()
-    db.graph = MagicMock(return_value=mock_graph)
-    db.has_graph = MagicMock(return_value=True)
-
-    # Define source and target nodes
-    source_node = Node(id="A", type="Type1")
-    target_node = Node(id="B", type="Type2")
-
-    # Create the document with actual Node instances in the Relationship
-    doc = GraphDocument(
-        nodes=[source_node, target_node],
-        relationships=[
-            Relationship(source=source_node, target=target_node, type="RelType")
-        ],
-        source=Document(page_content="source"),
-    )
-
+    graph_name = "TestEdgeDefGraph"
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
-    graph.add_graph_documents(
-        [doc],
-        graph_name=graph_name,
-        use_one_entity_collection=False,
-        update_graph_definition_if_exists=True,
-        capitalization_strategy="lower",
+    # Patch internal graph methods
+    graph._get_graph = MagicMock()
+    mock_graph_obj = MagicMock()
+     # simulate missing edge definition
+    mock_graph_obj.has_edge_definition.return_value = False 
+    graph._get_graph.return_value = mock_graph_obj
+
+    # Create input graph document
+    doc = GraphDocument(
+        nodes=[
+            Node(id="n1", type="X"),
+            Node(id="n2", type="Y")
+        ],
+        relationships=[
+            Relationship(
+                source=Node(id="n1", type="X"),
+                target=Node(id="n2", type="Y"),
+                type="CUSTOM_EDGE"
+            )
+        ],
+        source=Document(page_content="edge test")
     )
 
-    assert (
-        mock_graph.create_edge_definition.called
-    ), "Expected create_edge_definition to be called"
+    # Run insertion
+    graph.add_graph_documents(
+    [doc],
+    graph_name=graph_name,
+    update_graph_definition_if_exists=True,
+    capitalization_strategy="lower",  # <-- TEMP FIX HERE
+    use_one_entity_collection=False,
+)
+    # ✅ Assertion: should call `create_edge_definition` 
+    # since has_edge_definition == False
+    assert mock_graph_obj.create_edge_definition.called, "Expected create_edge_definition to be called" # noqa: E501
+    call_args = mock_graph_obj.create_edge_definition.call_args[1]
+    assert "edge_collection" in call_args
+    assert call_args["edge_collection"].lower() == "custom_edge"
+
+# @pytest.mark.usefixtures("clear_arangodb_database")
+# def test_create_edge_definition_called_when_missing(db: StandardDatabase):
+#     graph_name = "test_graph"
+
+#     # Mock db.graph(...) to return a fake graph object
+#     mock_graph = MagicMock()
+#     mock_graph.has_edge_definition.return_value = False
+#     mock_graph.create_edge_definition = MagicMock()
+#     db.graph = MagicMock(return_value=mock_graph)
+#     db.has_graph = MagicMock(return_value=True)
+
+#     # Define source and target nodes
+#     source_node = Node(id="A", type="Type1")
+#     target_node = Node(id="B", type="Type2")
+
+#     # Create the document with actual Node instances in the Relationship
+#     doc = GraphDocument(
+#         nodes=[source_node, target_node],
+#         relationships=[
+#             Relationship(source=source_node, target=target_node, type="RelType")
+#         ],
+#         source=Document(page_content="source"),
+#     )
+
+#     graph = ArangoGraph(db, generate_schema_on_init=False)
+
+#     graph.add_graph_documents(
+#         [doc],
+#         graph_name=graph_name,
+#         use_one_entity_collection=False,
+#         update_graph_definition_if_exists=True,
+#         capitalization_strategy="lower"
+#     )
+
+#     assert mock_graph.create_edge_definition.called, "Expected create_edge_definition to be called" # noqa: E501
 
 
 class DummyEmbeddings:
@@ -1121,7 +1110,7 @@ def test_embed_relationships_and_include_source(db):
             Relationship(
                 source=Node(id="A", type="Entity"),
                 target=Node(id="B", type="Entity"),
-                type="Rel",
+                type="Rel"
             ),
         ],
         source=Document(page_content="relationship source test"),
@@ -1134,10 +1123,11 @@ def test_embed_relationships_and_include_source(db):
         include_source=True,
         embed_relationships=True,
         embeddings=embeddings,
-        capitalization_strategy="lower",
+        capitalization_strategy="lower"
     )
 
-    # Only select edge batches that contain custom relationship types (i.e. with type="Rel")
+    # Only select edge batches that contain custom 
+    # relationship types (i.e. with type="Rel")
     relationship_edge_calls = []
     for call in graph._import_data.call_args_list:
         if call.kwargs.get("is_edge"):
@@ -1151,12 +1141,8 @@ def test_embed_relationships_and_include_source(db):
     all_relationship_edges = relationship_edge_calls[0]
     pprint.pprint(all_relationship_edges)
 
-    assert any(
-        "embedding" in e for e in all_relationship_edges
-    ), "Expected embedding in relationship"
-    assert any(
-        "source_id" in e for e in all_relationship_edges
-    ), "Expected source_id in relationship"
+    assert any("embedding" in e for e in all_relationship_edges), "Expected embedding in relationship" # noqa: E501
+    assert any("source_id" in e for e in all_relationship_edges), "Expected source_id in relationship" # noqa: E501
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -1166,13 +1152,12 @@ def test_set_schema_assigns_correct_value(db):
     custom_schema = {
         "collections": {
             "User": {"fields": ["name", "email"]},
-            "Transaction": {"fields": ["amount", "timestamp"]},
+            "Transaction": {"fields": ["amount", "timestamp"]}
         }
     }
 
     graph.set_schema(custom_schema)
     assert graph._ArangoGraph__schema == custom_schema
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_schema_json_returns_correct_json_string(db):
@@ -1181,7 +1166,7 @@ def test_schema_json_returns_correct_json_string(db):
     fake_schema = {
         "collections": {
             "Entity": {"fields": ["id", "name"]},
-            "Links": {"fields": ["source", "target"]},
+            "Links": {"fields": ["source", "target"]}
         }
     }
     graph._ArangoGraph__schema = fake_schema
@@ -1190,7 +1175,6 @@ def test_schema_json_returns_correct_json_string(db):
 
     assert isinstance(schema_json, str)
     assert json.loads(schema_json) == fake_schema
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_get_structured_schema_returns_schema(db):
@@ -1202,7 +1186,6 @@ def test_get_structured_schema_returns_schema(db):
 
     result = graph.get_structured_schema
     assert result == fake_schema
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_generate_schema_invalid_sample_ratio(db):
@@ -1216,7 +1199,6 @@ def test_generate_schema_invalid_sample_ratio(db):
     with pytest.raises(ValueError, match=".*sample_ratio.*"):
         graph.refresh_schema(sample_ratio=1.5)
 
-
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_add_graph_documents_noop_on_empty_input(db):
     graph = ArangoGraph(db, generate_schema_on_init=False)
@@ -1225,7 +1207,10 @@ def test_add_graph_documents_noop_on_empty_input(db):
     graph._import_data = MagicMock()
 
     # Call with empty input
-    graph.add_graph_documents([], capitalization_strategy="lower")
+    graph.add_graph_documents(
+        [],
+        capitalization_strategy="lower"
+    )
 
     # Assert _import_data was never triggered
     graph._import_data.assert_not_called()
