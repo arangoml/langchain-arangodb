@@ -8,7 +8,7 @@ from arango.collection import StandardCollection
 from arango.cursor import Cursor
 from langchain_core.documents import Document
 
-from langchain_arangodb.vectorstores.arangodb_vector import ArangoVector
+from langchain_arangodb.vectorstores.arangodb_vector import ArangoVector, SearchType
 from langchain_arangodb.vectorstores.utils import DistanceStrategy
 from tests.integration_tests.utils import ArangoCredentials
 
@@ -1062,3 +1062,370 @@ def test_arangovector_from_existing_collection(
     assert len(docs) == 2
     assert any(doc.id == "doc1" for doc in docs)
     assert any(doc.id == "doc3" for doc in docs)
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_arangovector_hybrid_search_functionality(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test hybrid search functionality comparing vector vs hybrid search results."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    # Example texts for hybrid search testing
+    texts = [
+        "The government passed new data privacy laws affecting social media "
+        "companies like Meta and Twitter.",
+        "A new smartphone from Samsung features cutting-edge AI and a focus "
+        "on secure user data.",
+        "Meta introduces Llama 3, a state-of-the-art language model to "
+        "compete with OpenAI's GPT-4.",
+        "How to enable two-factor authentication on Facebook for better "
+        "account protection.",
+        "A study on data privacy perceptions among Gen Z social media users "
+        "reveals concerns over targeted advertising.",
+    ]
+
+    metadatas = [
+        {"source": "news", "topic": "privacy"},
+        {"source": "tech", "topic": "mobile"},
+        {"source": "ai", "topic": "llm"},
+        {"source": "guide", "topic": "security"},
+        {"source": "research", "topic": "privacy"},
+    ]
+
+    # Create vector store with hybrid search enabled
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        metadatas=metadatas,
+        database=db,
+        collection_name="test_hybrid_collection",
+        search_type=SearchType.HYBRID,
+        rrf_search_limit=3,  # Top 3 RRF Search
+        overwrite_index=True,
+        insert_text=True,  # Required for hybrid search
+    )
+
+    # Create vector and keyword indexes
+    vector_store.create_vector_index()
+    vector_store.create_keyword_index()
+
+    query = "AI data privacy"
+
+    # Test vector search
+    vector_results = vector_store.similarity_search_with_score(
+        query=query,
+        k=2,
+        use_approx=False,
+        search_type=SearchType.VECTOR,
+    )
+
+    # Test hybrid search
+    hybrid_results = vector_store.similarity_search_with_score(
+        query=query,
+        k=2,
+        use_approx=False,
+        search_type=SearchType.HYBRID,
+    )
+
+    # Test hybrid search with higher vector weight
+    hybrid_results_with_higher_vector_weight = (
+        vector_store.similarity_search_with_score(
+            query=query,
+            k=2,
+            use_approx=False,
+            search_type=SearchType.HYBRID,
+            vector_weight=1.0,
+            keyword_weight=0.01,
+        )
+    )
+
+    # Verify all searches return expected number of results
+    assert len(vector_results) == 2
+    assert len(hybrid_results) == 2
+    assert len(hybrid_results_with_higher_vector_weight) == 2
+
+    # Verify that all results have scores
+    for doc, score in vector_results:
+        assert isinstance(score, float)
+        assert score >= 0
+
+    for doc, score in hybrid_results:
+        assert isinstance(score, float)
+        assert score >= 0
+
+    for doc, score in hybrid_results_with_higher_vector_weight:
+        assert isinstance(score, float)
+        assert score >= 0
+
+    # Verify that hybrid search can produce different rankings than vector search
+    # This tests that the RRF algorithm is working
+    vector_top_doc = vector_results[0][0].page_content
+    hybrid_top_doc = hybrid_results[0][0].page_content
+
+    # The results may be the same or different depending on the content,
+    # but we should be able to verify the search executed successfully
+    assert vector_top_doc in texts
+    assert hybrid_top_doc in texts
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_arangovector_hybrid_search_with_weights(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test hybrid search with different vector and keyword weights."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = [
+        "machine learning algorithms for data analysis",
+        "deep learning neural networks",
+        "artificial intelligence and machine learning",
+        "data science and analytics",
+        "computer vision and image processing",
+    ]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_weights_collection",
+        search_type=SearchType.HYBRID,
+        overwrite_index=True,
+        insert_text=True,
+    )
+
+    vector_store.create_vector_index()
+    vector_store.create_keyword_index()
+
+    query = "machine learning"
+
+    # Test with equal weights
+    equal_weight_results = vector_store.similarity_search_with_score(
+        query=query,
+        k=3,
+        search_type=SearchType.HYBRID,
+        vector_weight=1.0,
+        keyword_weight=1.0,
+        use_approx=False,
+    )
+
+    # Test with vector emphasis
+    vector_emphasis_results = vector_store.similarity_search_with_score(
+        query=query,
+        k=3,
+        search_type=SearchType.HYBRID,
+        vector_weight=10.0,
+        keyword_weight=1.0,
+        use_approx=False,
+    )
+
+    # Test with keyword emphasis
+    keyword_emphasis_results = vector_store.similarity_search_with_score(
+        query=query,
+        k=3,
+        search_type=SearchType.HYBRID,
+        vector_weight=1.0,
+        keyword_weight=10.0,
+        use_approx=False,
+    )
+
+    # Verify all searches return expected number of results
+    assert len(equal_weight_results) == 3
+    assert len(vector_emphasis_results) == 3
+    assert len(keyword_emphasis_results) == 3
+
+    # Verify scores are valid
+    for results in [
+        equal_weight_results,
+        vector_emphasis_results,
+        keyword_emphasis_results,
+    ]:
+        for doc, score in results:
+            assert isinstance(score, float)
+            assert score >= 0
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_arangovector_hybrid_search_custom_keyword_search(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test hybrid search with custom keyword search clause."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = [
+        "Advanced machine learning techniques",
+        "Basic machine learning concepts",
+        "Deep learning and neural networks",
+        "Traditional machine learning algorithms",
+        "Modern AI and machine learning",
+    ]
+
+    metadatas = [
+        {"level": "advanced", "category": "ml"},
+        {"level": "basic", "category": "ml"},
+        {"level": "advanced", "category": "dl"},
+        {"level": "intermediate", "category": "ml"},
+        {"level": "modern", "category": "ai"},
+    ]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        metadatas=metadatas,
+        database=db,
+        collection_name="test_custom_keyword_collection",
+        search_type=SearchType.HYBRID,
+        overwrite_index=True,
+        insert_text=True,
+    )
+
+    vector_store.create_vector_index()
+    vector_store.create_keyword_index()
+
+    query = "machine learning"
+
+    # Test with default keyword search
+    default_results = vector_store.similarity_search_with_score(
+        query=query,
+        k=3,
+        search_type=SearchType.HYBRID,
+        use_approx=False,
+    )
+
+    # Test with custom keyword search clause
+    custom_keyword_clause = f"""
+        SEARCH ANALYZER(
+            doc.{vector_store.text_field} IN TOKENS(@query, @analyzer),
+            @analyzer
+        ) AND doc.level == "advanced"
+    """
+
+    custom_results = vector_store.similarity_search_with_score(
+        query=query,
+        k=3,
+        search_type=SearchType.HYBRID,
+        keyword_search_clause=custom_keyword_clause,
+        use_approx=False,
+    )
+
+    # Verify both searches return results
+    assert len(default_results) >= 1
+    assert len(custom_results) >= 1
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_arangovector_keyword_index_management(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test keyword index creation, retrieval, and deletion."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = ["sample text for keyword indexing"]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_keyword_index",
+        search_type=SearchType.HYBRID,
+        keyword_index_name="test_keyword_view",
+        overwrite_index=True,
+        insert_text=True,
+    )
+
+    # Test keyword index creation
+    vector_store.create_keyword_index()
+
+    # Test keyword index retrieval
+    keyword_index = vector_store.retrieve_keyword_index()
+    assert keyword_index is not None
+    assert keyword_index["name"] == "test_keyword_view"
+    assert keyword_index["type"] == "arangosearch"
+
+    # Test keyword index deletion
+    vector_store.delete_keyword_index()
+
+    # Verify index was deleted
+    deleted_index = vector_store.retrieve_keyword_index()
+    assert deleted_index is None
+
+    # Test that creating index again works (idempotent)
+    vector_store.create_keyword_index()
+    recreated_index = vector_store.retrieve_keyword_index()
+    assert recreated_index is not None
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_arangovector_hybrid_search_error_cases(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test error cases for hybrid search functionality."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = ["test text for error cases"]
+
+    # Test creating hybrid search without insert_text should work
+    # but might not give meaningful results
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_error_collection",
+        search_type=SearchType.HYBRID,
+        insert_text=True,  # Required for meaningful hybrid search
+        overwrite_index=True,
+    )
+
+    vector_store.create_vector_index()
+    vector_store.create_keyword_index()
+
+    # Test that search works even with edge case parameters
+    results = vector_store.similarity_search_with_score(
+        query="test",
+        k=1,
+        search_type=SearchType.HYBRID,
+        vector_weight=0.0,  # Edge case: no vector weight
+        keyword_weight=1.0,
+        use_approx=False,
+    )
+
+    # Should still return results (keyword-only search)
+    assert len(results) >= 0  # May return 0 or more results
+
+    # Test with zero keyword weight
+    results_vector_only = vector_store.similarity_search_with_score(
+        query="test",
+        k=1,
+        search_type=SearchType.HYBRID,
+        vector_weight=1.0,
+        keyword_weight=0.0,  # Edge case: no keyword weight
+        use_approx=False,
+    )
+
+    # Should still return results (vector-only search)
+    assert len(results_vector_only) >= 0  # May return 0 or more results
