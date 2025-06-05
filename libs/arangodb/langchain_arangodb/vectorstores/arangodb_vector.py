@@ -230,22 +230,31 @@ class ArangoVector(VectorStore):
         if self.retrieve_keyword_index():
             return
 
-        view_properties = {
-            "links": {
-                self.collection_name: {
-                    "analyzers": [self.keyword_analyzer],
-                    "fields": {self.text_field: {"analyzers": [self.keyword_analyzer]}},
-                }
+        collection = self.db.collection(self.collection_name)
+        collection.add_index(
+            {
+                "type": "inverted",
+                "name": self.keyword_index_name,
+                "fields": [
+                    {"name": self.text_field, "analyzer": self.keyword_analyzer}
+                ],
             }
+        )
+        view_properties = {
+            "indexes": [
+                {"collection": self.collection_name, "index": self.keyword_index_name}
+            ]
         }
-
-        self.db.create_view(self.keyword_index_name, "arangosearch", view_properties)
+        self.db.create_view(self.keyword_index_name, "search-alias", view_properties)
 
     def delete_keyword_index(self) -> None:
         """Delete the keyword index from the collection."""
         view = self.retrieve_keyword_index()
         if view:
             self.db.delete_view(self.keyword_index_name)
+            self.db.collection(self.collection_name).delete_index(
+                self.keyword_index_name, ignore_missing=True
+            )
 
     def add_embeddings(
         self,
