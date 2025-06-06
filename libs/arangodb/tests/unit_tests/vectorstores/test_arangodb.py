@@ -391,6 +391,7 @@ def test_similarity_search(arango_vector_factory: Any) -> None:
         return_fields={"field1", "field2"},
         use_approx=True,
         filter_clause="",
+        metadata_clause="",
     )
 
     # Verify the correct documents were returned
@@ -429,6 +430,7 @@ def test_similarity_search_with_score(arango_vector_factory: Any) -> None:
         return_fields={"field1", "field2"},
         use_approx=True,
         filter_clause="",
+        metadata_clause="",
     )
 
     # Verify the correct results were returned
