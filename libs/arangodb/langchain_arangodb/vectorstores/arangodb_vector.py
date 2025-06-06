@@ -1136,7 +1136,7 @@ class ArangoVector(VectorStore):
                     LIMIT {k}
                     {filter_clause if use_approx else ""}
                     WINDOW {{ preceding: "unbounded", following: 0 }}
-                    AGGREGATE rank = COUNT(doc)
+                    AGGREGATE rank = COUNT(1)
                     LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
                     RETURN {{ key: doc._key, score: rrf_score }}
             )
@@ -1149,7 +1149,7 @@ class ArangoVector(VectorStore):
                     SORT score DESC
                     LIMIT {k}
                     WINDOW {{ preceding: "unbounded", following: 0 }}
-                    AGGREGATE rank = COUNT(doc)
+                    AGGREGATE rank = COUNT(1)
                     LET rrf_score = {keyword_weight} / ({self.rrf_constant} + rank)
                     RETURN {{ key: doc._key, score: rrf_score }}
             )
