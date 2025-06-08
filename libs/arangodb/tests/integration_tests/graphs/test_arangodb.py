@@ -1059,7 +1059,7 @@ def test_create_edge_definition_called_when_missing(db: StandardDatabase) -> Non
     )
     # ✅ Assertion: should call `create_edge_definition`
     # since has_edge_definition == False
-    assert mock_graph_obj.create_edge_definition.called, (
+    assert mock_graph_obj.create_edge_definition.called, ( # type: ignore
         "Expected create_edge_definition to be called"
     )  # noqa: E501
     call_args = mock_graph_obj.create_edge_definition.call_args[1]
