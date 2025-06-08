@@ -164,7 +164,7 @@ def test_aql_returns(db: StandardDatabase) -> None:
     )
 
     # Run the chain with the question
-    output = chain.invoke("Who starred in Pulp Fiction?")
+    output = chain.invoke("Who starred in Pulp Fiction?")  # type: ignore
     pprint.pprint(output)
 
     # Define the expected output
@@ -278,7 +278,7 @@ def test_exclude_types(db: StandardDatabase) -> None:
     # Print the full version of the schema
     # pprint.pprint(chain.graph.schema)
     res = []
-    for collection in chain.graph.schema["collection_schema"]:
+    for collection in chain.graph.schema["collection_schema"]:  # type: ignore
         res.append(collection["name"])
     assert set(res) == set(["Actor", "Movie", "Person", "ActedIn", "Directed"])
 
@@ -322,7 +322,7 @@ def test_exclude_examples(db: StandardDatabase) -> None:
         include_types=["Actor", "Movie", "ActedIn"],
         allow_dangerous_requests=True,
     )
-    pprint.pprint(chain.graph.schema)
+    pprint.pprint(chain.graph.schema)  # type: ignore
 
     expected_schema = {
         "collection_schema": [
@@ -386,7 +386,7 @@ def test_exclude_examples(db: StandardDatabase) -> None:
         ],
         "graph_schema": [],
     }
-    assert set(chain.graph.schema) == set(expected_schema)
+    assert set(chain.graph.schema) == set(expected_schema)  # type: ignore
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -420,7 +420,7 @@ def test_aql_fixing_mechanism_with_fake_llm(db: StandardDatabase) -> None:
     )
 
     # Execute the chain
-    output = chain.invoke("Get student names")
+    output = chain.invoke("Get student names")  # type: ignore
     pprint.pprint(output)
 
     # --- THIS IS THE FIX ---
@@ -452,7 +452,7 @@ def test_explain_only_mode(db: StandardDatabase) -> None:
         execute_aql_query=False,
     )
 
-    output = chain.invoke("Find expensive products")
+    output = chain.invoke("Find expensive products")  # type: ignore
 
     # The result should be the AQL query itself
     assert output["result"] == query
@@ -488,7 +488,7 @@ def test_force_read_only_with_write_query(db: StandardDatabase) -> None:
     )
 
     with pytest.raises(ValueError) as excinfo:
-        chain.invoke("Add a new user")
+        chain.invoke("Add a new user")  # type: ignore
 
     assert "Write operations are not allowed" in str(excinfo.value)
     assert "Detected write operation in query: INSERT" in str(excinfo.value)
@@ -516,7 +516,7 @@ def test_no_aql_query_in_response(db: StandardDatabase) -> None:
     )
 
     with pytest.raises(ValueError) as excinfo:
-        chain.invoke("Get customer data")
+        chain.invoke("Get customer data")  # type: ignore
 
     assert "Unable to extract AQL Query from response" in str(excinfo.value)
 
@@ -550,7 +550,7 @@ def test_max_generation_attempts_exceeded(db: StandardDatabase) -> None:
     )
 
     with pytest.raises(ValueError) as excinfo:
-        chain.invoke("Get tasks")
+        chain.invoke("Get tasks")  # type: ignore
 
     assert "Maximum amount of AQL Query Generation attempts reached" in str(
         excinfo.value
@@ -591,7 +591,7 @@ def test_unsupported_aql_generation_output_type(db: StandardDatabase) -> None:
 
         # We now expect our specific ValueError from the ArangoGraphQAChain.
         with pytest.raises(ValueError) as excinfo:
-            chain.invoke("This query will trigger the error")
+            chain.invoke("This query will trigger the error")  # type: ignore
 
     # Assert that the error message is the one we expect from the target code block.
     error_message = str(excinfo.value)
@@ -639,7 +639,7 @@ def test_handles_aimessage_output(db: StandardDatabase) -> None:
         mock_aql_chain.invoke.return_value = llm_output_as_message
 
         # 6. Run the full chain.
-        output = chain.invoke("What is the movie title?")
+        output = chain.invoke("What is the movie title?")  # type: ignore
 
     # 7. Assert that the final result is correct.
     # A correct result proves the AIMessage was successfully parsed, the query
@@ -692,7 +692,7 @@ def test_is_read_only_query_returns_true_for_readonly_query() -> None:
     read_only_query = "FOR doc IN MyCollection FILTER doc.name == 'test' RETURN doc"
 
     # 5. Call the method under test.
-    is_read_only, operation = chain._is_read_only_query(read_only_query)
+    is_read_only, operation = chain._is_read_only_query(read_only_query)  # type: ignore
 
     # 6. Assert that the result is (True, None).
     assert is_read_only is True
@@ -712,7 +712,7 @@ def test_is_read_only_query_returns_false_for_insert_query() -> None:
         allow_dangerous_requests=True,
     )
     write_query = "INSERT { name: 'test' } INTO MyCollection"
-    is_read_only, operation = chain._is_read_only_query(write_query)
+    is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
     assert operation == "INSERT"
 
@@ -731,7 +731,7 @@ def test_is_read_only_query_returns_false_for_update_query() -> None:
     )
     write_query = "FOR doc IN MyCollection FILTER doc._key == '123' \
     UPDATE doc WITH { name: 'new_test' } IN MyCollection"
-    is_read_only, operation = chain._is_read_only_query(write_query)
+    is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
     assert operation == "UPDATE"
 
@@ -750,7 +750,7 @@ def test_is_read_only_query_returns_false_for_remove_query() -> None:
     )
     write_query = "FOR doc IN MyCollection FILTER \
     doc._key== '123' REMOVE doc IN MyCollection"
-    is_read_only, operation = chain._is_read_only_query(write_query)
+    is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
     assert operation == "REMOVE"
 
@@ -769,7 +769,7 @@ def test_is_read_only_query_returns_false_for_replace_query() -> None:
     )
     write_query = "FOR doc IN MyCollection FILTER doc._key == '123' \
     REPLACE doc WITH { name: 'replaced_test' } IN MyCollection"
-    is_read_only, operation = chain._is_read_only_query(write_query)
+    is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
     assert operation == "REPLACE"
 
@@ -791,7 +791,7 @@ def test_is_read_only_query_returns_false_for_upsert_query() -> None:
 
     write_query = "UPSERT { _key: '123' } INSERT { name: 'new_upsert' } \
     UPDATE { name: 'updated_upsert' } IN MyCollection"
-    is_read_only, operation = chain._is_read_only_query(write_query)
+    is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
 
     assert is_read_only is False
     # FIX: The method finds "INSERT" before "UPSERT" because of the list order.
@@ -813,13 +813,13 @@ def test_is_read_only_query_is_case_insensitive() -> None:
     )
 
     write_query_lower = "insert { name: 'test' } into MyCollection"
-    is_read_only, operation = chain._is_read_only_query(write_query_lower)
+    is_read_only, operation = chain._is_read_only_query(write_query_lower)  # type: ignore
     assert is_read_only is False
     assert operation == "INSERT"
 
     write_query_mixed = "UpSeRt { _key: '123' } InSeRt { name: 'new' } \
     UpDaTe { name: 'updated' } In MyCollection"
-    is_read_only_mixed, operation_mixed = chain._is_read_only_query(write_query_mixed)
+    is_read_only_mixed, operation_mixed = chain._is_read_only_query(write_query_mixed)  # type: ignore
     assert is_read_only_mixed is False
     # FIX: The method finds "INSERT" before "UPSERT" regardless of case.
     assert operation_mixed == "INSERT"

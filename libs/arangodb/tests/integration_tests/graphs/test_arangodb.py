@@ -141,17 +141,17 @@ def test_arangodb_schema_structure(db: StandardDatabase) -> None:
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_arangodb_query_timeout(db: StandardDatabase):
+def test_arangodb_query_timeout(db: StandardDatabase) -> None:
     long_running_query = "FOR i IN 1..10000000 FILTER i == 0 RETURN i"
 
     # Set a short maxRuntime to trigger a timeout
     try:
         cursor = db.aql.execute(
             long_running_query,
-            max_runtime=0.1,  # maxRuntime in seconds
-        )
+            max_runtime=0.1,  # type: ignore # maxRuntime in seconds
+        )  # type: ignore
         # Force evaluation of the cursor
-        list(cursor)
+        list(cursor)  # type: ignore
         assert False, "Query did not timeout as expected"
     except ArangoServerError as e:
         # Check if the error code corresponds to a query timeout
@@ -176,7 +176,7 @@ def test_arangodb_sanitize_values(db: StandardDatabase) -> None:
             RETURN doc.large_list
     """
     cursor = db.aql.execute(query)
-    result = list(cursor)
+    result = list(cursor)  # type: ignore
 
     # Assert that the large list is present and has the expected length
     assert len(result) == 1
@@ -226,7 +226,8 @@ def test_arangodb_add_data(db: StandardDatabase) -> None:
 
     # Assert the output matches expected
     assert sorted(output, key=lambda x: x["label"]) == sorted(
-        expected_output, key=lambda x: x["label"]
+        expected_output,
+        key=lambda x: x["label"],  # type: ignore
     )  # noqa: E501
 
 
@@ -328,7 +329,7 @@ def test_invalid_credentials() -> None:
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_schema_refresh_updates_schema(db: StandardDatabase):
+def test_schema_refresh_updates_schema(db: StandardDatabase) -> None:
     """Test that schema is updated when add_graph_documents is called."""
     graph = ArangoGraph(db, generate_schema_on_init=False)
     assert graph.schema == {}
@@ -347,7 +348,7 @@ def test_schema_refresh_updates_schema(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_sanitize_input_list_cases(db: StandardDatabase):
+def test_sanitize_input_list_cases(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     sanitize = graph._sanitize_input
@@ -374,7 +375,7 @@ def test_sanitize_input_list_cases(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_sanitize_input_dict_with_lists(db: StandardDatabase):
+def test_sanitize_input_dict_with_lists(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
     sanitize = graph._sanitize_input
 
@@ -390,13 +391,13 @@ def test_sanitize_input_dict_with_lists(db: StandardDatabase):
     assert result_long["my_list"].startswith("List of 10 elements of type")
 
     # 3. Dict with empty list
-    input_data_empty = {"empty": []}
+    input_data_empty: dict[str, list[int]] = {"empty": []}
     result_empty = sanitize(input_data_empty, list_limit=5, string_limit=50)
     assert result_empty == {"empty": []}
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_sanitize_collection_name(db: StandardDatabase):
+def test_sanitize_collection_name(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     # 1. Valid name (no change)
@@ -424,12 +425,12 @@ def test_sanitize_collection_name(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_process_source(db: StandardDatabase):
+def test_process_source(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     source_doc = Document(page_content="Test content", metadata={"author": "Alice"})
     # Manually override the default type (not part of constructor)
-    source_doc.type = "test_type"
+    source_doc.type = "test_type"  # type: ignore
 
     collection_name = "TEST_SOURCE"
     if not db.has_collection(collection_name):
@@ -447,15 +448,15 @@ def test_process_source(db: StandardDatabase):
     inserted_doc = db.collection(collection_name).get(source_id)
 
     assert inserted_doc is not None
-    assert inserted_doc["_key"] == source_id
-    assert inserted_doc["text"] == "Test content"
-    assert inserted_doc["author"] == "Alice"
-    assert inserted_doc["type"] == "test_type"
-    assert inserted_doc["embedding"] == embedding
+    assert inserted_doc["_key"] == source_id  # type: ignore
+    assert inserted_doc["text"] == "Test content"  # type: ignore
+    assert inserted_doc["author"] == "Alice"  # type: ignore
+    assert inserted_doc["type"] == "test_type"  # type: ignore
+    assert inserted_doc["embedding"] == embedding  # type: ignore
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_process_edge_as_type(db):
+def test_process_edge_as_type(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     # Define source and target nodes
@@ -476,8 +477,8 @@ def test_process_edge_as_type(db):
     target_key = "t1_key"
 
     # Setup containers
-    edges = defaultdict(list)
-    edge_definitions_dict = defaultdict(lambda: defaultdict(set))
+    edges = defaultdict(list)  # type: ignore
+    edge_definitions_dict = defaultdict(lambda: defaultdict(set))  # type: ignore
 
     # Call the method
     graph._process_edge_as_type(
@@ -519,7 +520,7 @@ def test_process_edge_as_type(db):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_graph_creation_and_edge_definitions(db: StandardDatabase):
+def test_graph_creation_and_edge_definitions(db: StandardDatabase) -> None:
     graph_name = "TestGraph"
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
@@ -550,18 +551,20 @@ def test_graph_creation_and_edge_definitions(db: StandardDatabase):
     g = db.graph(graph_name)
 
     edge_definitions = g.edge_definitions()
-    edge_collections = {e["edge_collection"] for e in edge_definitions}
+    edge_collections = {e["edge_collection"] for e in edge_definitions}  # type: ignore
     assert "MEMBER_OF" in edge_collections  # MATCH lowercased name
 
     member_def = next(
-        e for e in edge_definitions if e["edge_collection"] == "MEMBER_OF"
+        e
+        for e in edge_definitions  # type: ignore
+        if e["edge_collection"] == "MEMBER_OF"  # type: ignore
     )
-    assert "User" in member_def["from_vertex_collections"]
-    assert "Group" in member_def["to_vertex_collections"]
+    assert "User" in member_def["from_vertex_collections"]  # type: ignore
+    assert "Group" in member_def["to_vertex_collections"]  # type: ignore
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_include_source_collection_setup(db: StandardDatabase):
+def test_include_source_collection_setup(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     graph_name = "TestGraph"
@@ -592,7 +595,7 @@ def test_include_source_collection_setup(db: StandardDatabase):
     assert db.has_collection(source_edge_col)
 
     # Assert that at least one source edge exists and links correctly
-    edges = list(db.collection(source_edge_col).all())
+    edges = list(db.collection(source_edge_col).all())  # type: ignore
     assert len(edges) == 1
     edge = edges[0]
     assert edge["_to"].startswith(f"{source_col}/")
@@ -600,10 +603,10 @@ def test_include_source_collection_setup(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_graph_edge_definition_replacement(db: StandardDatabase):
+def test_graph_edge_definition_replacement(db: StandardDatabase) -> None:
     graph_name = "ReplaceGraph"
 
-    def insert_graph_with_node_type(node_type: str):
+    def insert_graph_with_node_type(node_type: str) -> None:
         graph = ArangoGraph(db, generate_schema_on_init=False)
         graph_doc = GraphDocument(
             nodes=[
@@ -632,7 +635,9 @@ def test_graph_edge_definition_replacement(db: StandardDatabase):
     insert_graph_with_node_type("TypeA")
     g = db.graph(graph_name)
     edge_defs_1 = [
-        ed for ed in g.edge_definitions() if ed["edge_collection"] == "CONNECTS"
+        ed
+        for ed in g.edge_definitions()  # type: ignore
+        if ed["edge_collection"] == "CONNECTS"  # type: ignore
     ]
     assert len(edge_defs_1) == 1
 
@@ -642,7 +647,9 @@ def test_graph_edge_definition_replacement(db: StandardDatabase):
     # Step 2: Insert again with different type "TypeB" — should trigger replace
     insert_graph_with_node_type("TypeB")
     edge_defs_2 = [
-        ed for ed in g.edge_definitions() if ed["edge_collection"] == "CONNECTS"
+        ed
+        for ed in g.edge_definitions()  # type: ignore
+        if ed["edge_collection"] == "CONNECTS"  # type: ignore
     ]  # noqa: E501
     assert len(edge_defs_2) == 1
     assert "TypeB" in edge_defs_2[0]["from_vertex_collections"]
@@ -652,7 +659,7 @@ def test_graph_edge_definition_replacement(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_generate_schema_with_graph_name(db: StandardDatabase):
+def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
     graph_name = "TestGraphSchema"
 
@@ -709,7 +716,7 @@ def test_generate_schema_with_graph_name(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_add_graph_documents_requires_embedding(db: StandardDatabase):
+def test_add_graph_documents_requires_embedding(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     doc = GraphDocument(
@@ -726,12 +733,12 @@ def test_add_graph_documents_requires_embedding(db: StandardDatabase):
 
 
 class FakeEmbeddings:
-    def embed_documents(self, texts):
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [[0.1, 0.2, 0.3] for _ in texts]
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_add_graph_documents_with_embedding(db: StandardDatabase):
+def test_add_graph_documents_with_embedding(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     doc = GraphDocument(
@@ -745,18 +752,18 @@ def test_add_graph_documents_with_embedding(db: StandardDatabase):
         [doc],
         include_source=True,
         embed_source=True,
-        embeddings=FakeEmbeddings(),
+        embeddings=FakeEmbeddings(),  # type: ignore
         embedding_field="embedding",
         capitalization_strategy="lower",
     )
 
     # Verify the embedding was stored
     source_col = "SOURCE"
-    inserted = db.collection(source_col).all()
-    inserted = list(inserted)
-    assert len(inserted) == 1
-    assert "embedding" in inserted[0]
-    assert inserted[0]["embedding"] == [0.1, 0.2, 0.3]
+    inserted = db.collection(source_col).all()  # type: ignore
+    inserted = list(inserted)  # type: ignore
+    assert len(inserted) == 1  # type: ignore
+    assert "embedding" in inserted[0]  # type: ignore
+    assert inserted[0]["embedding"] == [0.1, 0.2, 0.3]  # type: ignore
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -769,7 +776,7 @@ def test_add_graph_documents_with_embedding(db: StandardDatabase):
 )
 def test_capitalization_strategy_applied(
     db: StandardDatabase, strategy: str, expected_id: str
-):
+) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     doc = GraphDocument(
@@ -780,20 +787,20 @@ def test_capitalization_strategy_applied(
 
     graph.add_graph_documents([doc], capitalization_strategy=strategy)
 
-    results = list(db.collection("ENTITY").all())
-    assert any(doc["text"] == expected_id for doc in results)
+    results = list(db.collection("ENTITY").all())  # type: ignore
+    assert any(doc["text"] == expected_id for doc in results)  # type: ignore
 
 
-def test_capitalization_strategy_none_does_not_raise(db: StandardDatabase):
+def test_capitalization_strategy_none_does_not_raise(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     # Patch internals if needed to avoid real inserts
-    graph._hash = lambda x: x
-    graph._import_data = lambda *args, **kwargs: None
-    graph.refresh_schema = lambda *args, **kwargs: None
-    graph._create_collection = lambda *args, **kwargs: None
-    graph._process_node_as_entity = lambda key, node, nodes, coll: "ENTITY"
-    graph._process_edge_as_entity = lambda *args, **kwargs: None
+    graph._hash = lambda x: x  # type: ignore
+    graph._import_data = lambda *args, **kwargs: None  # type: ignore
+    graph.refresh_schema = lambda *args, **kwargs: None  # type: ignore
+    graph._create_collection = lambda *args, **kwargs: None  # type: ignore
+    graph._process_node_as_entity = lambda key, node, nodes, coll: "ENTITY"  # type: ignore
+    graph._process_edge_as_entity = lambda *args, **kwargs: None  # type: ignore
 
     doc = GraphDocument(
         nodes=[Node(id="Node1", type="Entity")],
@@ -805,7 +812,7 @@ def test_capitalization_strategy_none_does_not_raise(db: StandardDatabase):
     graph.add_graph_documents([doc], capitalization_strategy="none")
 
 
-def test_get_arangodb_client_direct_credentials():
+def test_get_arangodb_client_direct_credentials() -> None:
     db = get_arangodb_client(
         url="http://localhost:8529",
         dbname="_system",
@@ -816,7 +823,7 @@ def test_get_arangodb_client_direct_credentials():
     assert db.name == "_system"
 
 
-def test_get_arangodb_client_from_env(monkeypatch):
+def test_get_arangodb_client_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ARANGODB_URL", "http://localhost:8529")
     monkeypatch.setenv("ARANGODB_DBNAME", "_system")
     monkeypatch.setenv("ARANGODB_USERNAME", "root")
@@ -827,10 +834,10 @@ def test_get_arangodb_client_from_env(monkeypatch):
     assert db.name == "_system"
 
 
-def test_get_arangodb_client_invalid_url():
+def test_get_arangodb_client_invalid_url() -> None:  # type: ignore
     with pytest.raises(Exception):
         # Unreachable host or invalid port
-        ArangoClient(
+        ArangoClient(  # type: ignore
             url="http://localhost:9999",
             dbname="_system",
             username="root",
@@ -839,11 +846,11 @@ def test_get_arangodb_client_invalid_url():
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_batch_insert_triggers_import_data(db: StandardDatabase):
+def test_batch_insert_triggers_import_data(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     # Patch _import_data to monitor calls
-    graph._import_data = MagicMock()
+    graph._import_data = MagicMock()  # type: ignore
 
     batch_size = 3
     total_nodes = 7
@@ -867,9 +874,9 @@ def test_batch_insert_triggers_import_data(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_batch_insert_edges_triggers_import_data(db: StandardDatabase):
+def test_batch_insert_edges_triggers_import_data(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
-    graph._import_data = MagicMock()
+    graph._import_data = MagicMock()  # type: ignore
 
     batch_size = 2
     total_edges = 5
@@ -916,15 +923,15 @@ def test_from_db_credentials_direct() -> None:
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_get_node_key_existing_entry(db: StandardDatabase):
+def test_get_node_key_existing_entry(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
     node = Node(id="A", type="Type")
 
     existing_key = "123456789"
-    node_key_map = {"A": existing_key}
-    nodes = defaultdict(list)
+    node_key_map = {"A": existing_key}  # type: ignore
+    nodes = defaultdict(list)  # type: ignore
 
-    process_node_fn = MagicMock()
+    process_node_fn = MagicMock()  # type: ignore
 
     key = graph._get_node_key(
         node=node,
@@ -939,13 +946,13 @@ def test_get_node_key_existing_entry(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_get_node_key_new_entry(db: StandardDatabase):
+def test_get_node_key_new_entry(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
     node = Node(id="B", type="Type")
 
-    node_key_map = {}
-    nodes = defaultdict(list)
-    process_node_fn = MagicMock()
+    node_key_map = {}  # type: ignore
+    nodes = defaultdict(list)  # type: ignore
+    process_node_fn = MagicMock()  # type: ignore
 
     key = graph._get_node_key(
         node=node,
@@ -962,7 +969,7 @@ def test_get_node_key_new_entry(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_hash_basic_inputs(db: StandardDatabase):
+def test_hash_basic_inputs(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     # String input
@@ -977,7 +984,7 @@ def test_hash_basic_inputs(db: StandardDatabase):
 
     # Object with __str__
     class Custom:
-        def __str__(self):
+        def __str__(self) -> str:
             return "custom"
 
     result_obj = graph._hash(Custom())
@@ -985,9 +992,9 @@ def test_hash_basic_inputs(db: StandardDatabase):
     assert result_obj.isdigit()
 
 
-def test_hash_invalid_input_raises():
+def test_hash_invalid_input_raises() -> None:
     class BadStr:
-        def __str__(self):
+        def __str__(self) -> str:
             raise TypeError("nope")
 
     graph = ArangoGraph.__new__(ArangoGraph)  # avoid needing db
@@ -997,7 +1004,7 @@ def test_hash_invalid_input_raises():
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_sanitize_input_short_string_preserved(db: StandardDatabase):
+def test_sanitize_input_short_string_preserved(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
     input_dict = {"key": "short"}
 
@@ -1007,7 +1014,7 @@ def test_sanitize_input_short_string_preserved(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_sanitize_input_long_string_truncated(db: StandardDatabase):
+def test_sanitize_input_long_string_truncated(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
     long_value = "x" * 100
     input_dict = {"key": long_value}
@@ -1018,16 +1025,16 @@ def test_sanitize_input_long_string_truncated(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_create_edge_definition_called_when_missing(db: StandardDatabase):
+def test_create_edge_definition_called_when_missing(db: StandardDatabase) -> None:
     graph_name = "TestEdgeDefGraph"
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     # Patch internal graph methods
-    graph._get_graph = MagicMock()
-    mock_graph_obj = MagicMock()
+    graph._get_graph = MagicMock()  # type: ignore
+    mock_graph_obj = MagicMock()  # type: ignore
     # simulate missing edge definition
     mock_graph_obj.has_edge_definition.return_value = False
-    graph._get_graph.return_value = mock_graph_obj
+    graph._get_graph.return_value = mock_graph_obj  # type: ignore
 
     # Create input graph document
     doc = GraphDocument(
@@ -1098,14 +1105,14 @@ def test_create_edge_definition_called_when_missing(db: StandardDatabase):
 
 
 class DummyEmbeddings:
-    def embed_documents(self, texts):
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [[0.1] * 5 for _ in texts]  # Return dummy vectors
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_embed_relationships_and_include_source(db):
+def test_embed_relationships_and_include_source(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
-    graph._import_data = MagicMock()
+    graph._import_data = MagicMock()  # type: ignore
 
     doc = GraphDocument(
         nodes=[
@@ -1128,7 +1135,7 @@ def test_embed_relationships_and_include_source(db):
         [doc],
         include_source=True,
         embed_relationships=True,
-        embeddings=embeddings,
+        embeddings=embeddings,  # type: ignore
         capitalization_strategy="lower",
     )
 
@@ -1156,7 +1163,7 @@ def test_embed_relationships_and_include_source(db):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_set_schema_assigns_correct_value(db):
+def test_set_schema_assigns_correct_value(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     custom_schema = {
@@ -1167,11 +1174,11 @@ def test_set_schema_assigns_correct_value(db):
     }
 
     graph.set_schema(custom_schema)
-    assert graph._ArangoGraph__schema == custom_schema
+    assert graph._ArangoGraph__schema == custom_schema  # type: ignore
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_schema_json_returns_correct_json_string(db):
+def test_schema_json_returns_correct_json_string(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     fake_schema = {
@@ -1180,7 +1187,7 @@ def test_schema_json_returns_correct_json_string(db):
             "Links": {"fields": ["source", "target"]},
         }
     }
-    graph._ArangoGraph__schema = fake_schema
+    graph._ArangoGraph__schema = fake_schema  # type: ignore
 
     schema_json = graph.schema_json
 
@@ -1189,19 +1196,19 @@ def test_schema_json_returns_correct_json_string(db):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_get_structured_schema_returns_schema(db):
+def test_get_structured_schema_returns_schema(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     # Simulate assigning schema manually
     fake_schema = {"collections": {"Entity": {"fields": ["id", "name"]}}}
-    graph._ArangoGraph__schema = fake_schema
+    graph._ArangoGraph__schema = fake_schema  # type: ignore
 
     result = graph.get_structured_schema
     assert result == fake_schema
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_generate_schema_invalid_sample_ratio(db):
+def test_generate_schema_invalid_sample_ratio(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     # Test with sample_ratio < 0
@@ -1214,11 +1221,11 @@ def test_generate_schema_invalid_sample_ratio(db):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_add_graph_documents_noop_on_empty_input(db):
+def test_add_graph_documents_noop_on_empty_input(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
     # Patch _import_data to verify it's not called
-    graph._import_data = MagicMock()
+    graph._import_data = MagicMock()  # type: ignore
 
     # Call with empty input
     graph.add_graph_documents([], capitalization_strategy="lower")
