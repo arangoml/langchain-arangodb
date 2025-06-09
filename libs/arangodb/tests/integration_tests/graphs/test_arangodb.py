@@ -1165,7 +1165,7 @@ def test_embed_relationships_and_include_source(db: StandardDatabase) -> None:
     all_relationship_edges = relationship_edge_calls[0]
     pprint.pprint(all_relationship_edges)
 
-    assert any(        
+    assert any(
         "embedding" in e for e in all_relationship_edges
     ), "Expected embedding in relationship"  # noqa: E501
     assert any(
