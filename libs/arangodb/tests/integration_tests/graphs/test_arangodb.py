@@ -1,13 +1,14 @@
 import json
 import os
 import pprint
+import urllib.parse
 from collections import defaultdict
 from unittest.mock import MagicMock
 
 import pytest
 from arango import ArangoClient
 from arango.database import StandardDatabase
-from arango.exceptions import ArangoServerError
+from arango.exceptions import ArangoClientError, ArangoServerError
 from langchain_core.documents import Document
 
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph, get_arangodb_client
@@ -312,6 +313,29 @@ def test_arangodb_rels(db: StandardDatabase) -> None:
 #         client.db("_system", username="root", password="passwd", verify=True)
 
 #     assert "bad connection" in str(exc_info.value)
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_invalid_url() -> None:
+    """Test initializing with an invalid URL raises ArangoClientError."""
+    # Original URL
+    original_url = "http://localhost:8529"
+    parsed_url = urllib.parse.urlparse(original_url)
+    # Increment the port number by 1 and wrap around if necessary
+    original_port = parsed_url.port or 8529
+    new_port = (original_port + 1) % 65535 or 1
+    # Reconstruct the netloc (hostname:port)
+    new_netloc = f"{parsed_url.hostname}:{new_port}"
+    # Rebuild the URL with the new netloc
+    new_url = parsed_url._replace(netloc=new_netloc).geturl()
+
+    client = ArangoClient(hosts=new_url)
+
+    with pytest.raises(ArangoClientError) as exc_info:
+        # Attempt to connect with invalid URL
+        client.db("_system", username="root", password="passwd", verify=True)
+
+    assert "bad connection" in str(exc_info.value)
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -1026,82 +1050,69 @@ def test_sanitize_input_long_string_truncated(db: StandardDatabase) -> None:
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_create_edge_definition_called_when_missing(db: StandardDatabase) -> None:
+    """
+    Tests that `create_edge_definition` is called if an edge type is missing
+    when `update_graph_definition_if_exists` is True.
+    """
     graph_name = "TestEdgeDefGraph"
+
+    # --- Corrected Mocking Strategy ---
+    # 1. Simulate that the graph already exists.
+    db.has_graph = MagicMock(return_value=True)  # type: ignore
+
+    # 2. Create a mock for the graph object that db.graph() will return.
+    mock_graph_obj = MagicMock()
+    # 3. Simulate that this graph is missing the specific edge definition.
+    mock_graph_obj.has_edge_definition.return_value = False
+
+    # 4. Configure the db fixture to return our mock graph object.
+    db.graph = MagicMock(return_value=mock_graph_obj)  # type: ignore
+    # --- End of Mocking Strategy ---
+
+    # Initialize ArangoGraph with the pre-configured mock db
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
-    # Patch internal graph methods
-    graph._get_graph = MagicMock()  # type: ignore
-    mock_graph_obj = MagicMock()  # type: ignore
-    # simulate missing edge definition
-    mock_graph_obj.has_edge_definition.return_value = False
-    graph._get_graph.return_value = mock_graph_obj  # type: ignore
-
-    # Create input graph document
+    # Create an input graph document with a new edge type
     doc = GraphDocument(
-        nodes=[Node(id="n1", type="X"), Node(id="n2", type="Y")],
+        nodes=[Node(id="n1", type="Person"), Node(id="n2", type="Company")],
         relationships=[
             Relationship(
-                source=Node(id="n1", type="X"),
-                target=Node(id="n2", type="Y"),
-                type="CUSTOM_EDGE",
+                source=Node(id="n1", type="Person"),
+                target=Node(id="n2", type="Company"),
+                type="WORKS_FOR",  # A clear, new edge type
             )
         ],
-        source=Document(page_content="edge test"),
+        source=Document(page_content="edge definition test"),
     )
 
-    # Run insertion
+    # Run the insertion logic
     graph.add_graph_documents(
         [doc],
         graph_name=graph_name,
         update_graph_definition_if_exists=True,
-        capitalization_strategy="lower",  # <-- TEMP FIX HERE
-        use_one_entity_collection=False,
+        use_one_entity_collection=False,  # Use separate collections for node/edge types
     )
-    # ✅ Assertion: should call `create_edge_definition`
-    # since has_edge_definition == False
-    assert mock_graph_obj.create_edge_definition.called, (  # type: ignore
-        "Expected create_edge_definition to be called"
-    )  # noqa: E501
-    call_args = mock_graph_obj.create_edge_definition.call_args[1]
-    assert "edge_collection" in call_args
-    assert call_args["edge_collection"].lower() == "custom_edge"
 
+    # --- Assertions ---
+    # Verify that the code checked for the graph and then retrieved it.
+    db.has_graph.assert_called_once_with(graph_name)
+    db.graph.assert_called_once_with(graph_name)
 
-# @pytest.mark.usefixtures("clear_arangodb_database")
-# def test_create_edge_definition_called_when_missing(db: StandardDatabase):
-#     graph_name = "test_graph"
+    # Verify the code checked for the edge definition. The collection name is
+    # derived from the relationship type.
+    mock_graph_obj.has_edge_definition.assert_called_once_with("WORKS_FOR")
 
-#     # Mock db.graph(...) to return a fake graph object
-#     mock_graph = MagicMock()
-#     mock_graph.has_edge_definition.return_value = False
-#     mock_graph.create_edge_definition = MagicMock()
-#     db.graph = MagicMock(return_value=mock_graph)
-#     db.has_graph = MagicMock(return_value=True)
+    # ✅ The main assertion: create_edge_definition should have been called.
+    mock_graph_obj.create_edge_definition.assert_called_once()
 
-#     # Define source and target nodes
-#     source_node = Node(id="A", type="Type1")
-#     target_node = Node(id="B", type="Type2")
+    # Inspect the keyword arguments of the call to ensure they are correct.
+    call_kwargs = mock_graph_obj.create_edge_definition.call_args.kwargs
 
-#     # Create the document with actual Node instances in the Relationship
-#     doc = GraphDocument(
-#         nodes=[source_node, target_node],
-#         relationships=[
-#             Relationship(source=source_node, target=target_node, type="RelType")
-#         ],
-#         source=Document(page_content="source"),
-#     )
-
-#     graph = ArangoGraph(db, generate_schema_on_init=False)
-
-#     graph.add_graph_documents(
-#         [doc],
-#         graph_name=graph_name,
-#         use_one_entity_collection=False,
-#         update_graph_definition_if_exists=True,
-#         capitalization_strategy="lower"
-#     )
-
-#     assert mock_graph.create_edge_definition.called, "Expected create_edge_definition to be called" # noqa: E501
+    assert call_kwargs == {
+        "edge_collection": "WORKS_FOR",
+        "from_vertex_collections": ["Person"],
+        "to_vertex_collections": ["Company"],
+    }
 
 
 class DummyEmbeddings:
@@ -1154,19 +1165,12 @@ def test_embed_relationships_and_include_source(db: StandardDatabase) -> None:
     all_relationship_edges = relationship_edge_calls[0]
     pprint.pprint(all_relationship_edges)
 
-    # assert any("embedding" in e for e in all_relationship_edges), (
-    #     "Expected embedding in relationship"
-    # )  # noqa: E501
-    # assert any("source_id" in e for e in all_relationship_edges), (
-    #     "Expected source_id in relationship"
-    # )  # noqa: E501
-
-    assert any(
-        "embedding" in e for e in all_relationship_edges
-    ), "Expected embedding in relationship"  # noqa: E501
-    assert any(
-        "source_id" in e for e in all_relationship_edges
-    ), "Expected source_id in relationship"  # noqa: E501
+    assert any("embedding" in e for e in all_relationship_edges), (
+        "Expected embedding in relationship"
+    )  # noqa: E501
+    assert any("source_id" in e for e in all_relationship_edges), (
+        "Expected source_id in relationship"
+    )  # noqa: E501
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
