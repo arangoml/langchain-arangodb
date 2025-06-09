@@ -272,6 +272,7 @@ def test_arangodb_rels(db: StandardDatabase) -> None:
     )  # noqa: E501
     assert rels == expected_rels
 
+
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_invalid_credentials() -> None:
     """Test initializing with invalid credentials raises ArangoServerError."""
