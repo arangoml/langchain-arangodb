@@ -18,9 +18,9 @@ class FakeLLM(LLM):
     def check_queries_required(
         cls, queries: Optional[Mapping], values: Mapping[str, Any]
     ) -> Optional[Mapping]:
-        if values.get("sequential_response") and not queries:
+        if values.get("sequential_responses") and not queries:
             raise ValueError(
-                "queries is required when sequential_response is set to True"
+                "queries is required when sequential_responses is set to True"
             )
         return queries
 
@@ -41,7 +41,8 @@ class FakeLLM(LLM):
         **kwargs: Any,
     ) -> str:
         if self.sequential_responses:
-            return self._get_next_response_in_sequence
+            # Call as a method
+            return self._get_next_response_in_sequence()
         if self.queries is not None:
             return self.queries[prompt]
         if stop is None:
@@ -53,7 +54,7 @@ class FakeLLM(LLM):
     def _identifying_params(self) -> Dict[str, Any]:
         return {}
 
-    @property
+    # Corrected: This should be a method, not a property
     def _get_next_response_in_sequence(self) -> str:
         queries = cast(Mapping, self.queries)
         response = queries[list(queries.keys())[self.response_index]]
