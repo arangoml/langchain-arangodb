@@ -1167,7 +1167,6 @@ def test_embed_relationships_and_include_source(db: StandardDatabase) -> None:
     assert any(
         "source_id" in e for e in all_relationship_edges
     ), "Expected source_id in relationship"  # noqa: E501
- 
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
