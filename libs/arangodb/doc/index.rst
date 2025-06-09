@@ -96,6 +96,7 @@ Documentation Contents
 
    quickstart
    vectorstores
+   chat_message_histories
 
 .. toctree::
    :maxdepth: 2
