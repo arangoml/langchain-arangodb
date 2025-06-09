@@ -1360,7 +1360,7 @@ def test_arangovector_keyword_index_management(
     keyword_index = vector_store.retrieve_keyword_index()
     assert keyword_index is not None
     assert keyword_index["name"] == "test_keyword_view"
-    assert keyword_index["type"] == "arangosearch"
+    assert keyword_index["type"] == "search-alias"
 
     # Test keyword index deletion
     vector_store.delete_keyword_index()
