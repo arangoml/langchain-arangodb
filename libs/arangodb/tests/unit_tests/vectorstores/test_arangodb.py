@@ -650,3 +650,535 @@ def test_select_relevance_score_fn_invalid_strategy_raises_error(
         "Consider providing relevance_score_fn to ArangoVector constructor."
     )
     assert str(exc_info.value) == expected_message
+
+
+def test_init_with_hybrid_search_type(arango_vector_factory: Any) -> None:
+    """Test initialization with hybrid search type."""
+    from langchain_arangodb.vectorstores.arangodb_vector import SearchType
+
+    vector_store = arango_vector_factory(search_type=SearchType.HYBRID)
+    assert vector_store.search_type == SearchType.HYBRID
+
+
+def test_similarity_search_hybrid(arango_vector_factory: Any) -> None:
+    """Test similarity search with hybrid search type."""
+    from langchain_arangodb.vectorstores.arangodb_vector import SearchType
+
+    vector_store = arango_vector_factory(search_type=SearchType.HYBRID)
+
+    # Mock the embedding.embed_query method
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    # Mock the similarity_search_by_vector_and_keyword method
+    expected_docs = [MagicMock(), MagicMock()]
+    with patch.object(
+        vector_store,
+        "similarity_search_by_vector_and_keyword",
+        return_value=expected_docs,
+    ) as mock_hybrid_search:
+        docs = vector_store.similarity_search(
+            query="test query",
+            k=2,
+            return_fields={"field1", "field2"},
+            use_approx=True,
+            vector_weight=1.0,
+            keyword_weight=0.5,
+        )
+
+    # Verify embed_query was called with query
+    vector_store.embedding.embed_query.assert_called_once_with("test query")
+
+    # Verify similarity_search_by_vector_and_keyword was called with correct parameters
+    mock_hybrid_search.assert_called_once_with(
+        query="test query",
+        embedding=mock_embedding,
+        k=2,
+        return_fields={"field1", "field2"},
+        use_approx=True,
+        filter_clause="",
+        vector_weight=1.0,
+        keyword_weight=0.5,
+        keyword_search_clause="",
+    )
+
+    # Verify the correct documents were returned
+    assert docs == expected_docs
+
+
+def test_similarity_search_with_score_hybrid(arango_vector_factory: Any) -> None:
+    """Test similarity search with score using hybrid search type."""
+    from langchain_arangodb.vectorstores.arangodb_vector import SearchType
+
+    vector_store = arango_vector_factory(search_type=SearchType.HYBRID)
+
+    # Mock the embedding.embed_query method
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    # Mock the similarity_search_by_vector_and_keyword_with_score method
+    expected_results = [(MagicMock(), 0.8), (MagicMock(), 0.6)]
+    with patch.object(
+        vector_store,
+        "similarity_search_by_vector_and_keyword_with_score",
+        return_value=expected_results,
+    ) as mock_hybrid_search_with_score:
+        results = vector_store.similarity_search_with_score(
+            query="test query",
+            k=2,
+            return_fields={"field1", "field2"},
+            use_approx=True,
+            vector_weight=2.0,
+            keyword_weight=1.5,
+            keyword_search_clause="custom clause",
+        )
+    query = "test query"
+    v_store = vector_store
+    v_store.embedding.embed_query.assert_called_once_with(query)
+
+    # Verify similarity_search_by_vector_and
+    # _keyword_with_score was called with correct parameters
+    mock_hybrid_search_with_score.assert_called_once_with(
+        query="test query",
+        embedding=mock_embedding,
+        k=2,
+        return_fields={"field1", "field2"},
+        use_approx=True,
+        filter_clause="",
+        vector_weight=2.0,
+        keyword_weight=1.5,
+        keyword_search_clause="custom clause",
+    )
+
+    # Verify the correct results were returned
+    assert results == expected_results
+
+
+def test_similarity_search_by_vector_and_keyword(arango_vector_factory: Any) -> None:
+    """Test similarity_search_by_vector_and_keyword method."""
+    vector_store = arango_vector_factory()
+
+    mock_embedding = [0.1] * 64
+    expected_docs = [MagicMock(), MagicMock()]
+
+    with patch.object(
+        vector_store,
+        "similarity_search_by_vector_and_keyword_with_score",
+        return_value=[(expected_docs[0], 0.8), (expected_docs[1], 0.6)],
+    ) as mock_hybrid_search_with_score:
+        docs = vector_store.similarity_search_by_vector_and_keyword(
+            query="test query",
+            embedding=mock_embedding,
+            k=2,
+            return_fields={"field1"},
+            use_approx=False,
+            filter_clause="FILTER doc.type == 'test'",
+            vector_weight=1.5,
+            keyword_weight=0.8,
+            keyword_search_clause="custom search",
+        )
+
+    # Verify the method was called with correct parameters
+    mock_hybrid_search_with_score.assert_called_once_with(
+        query="test query",
+        embedding=mock_embedding,
+        k=2,
+        return_fields={"field1"},
+        use_approx=False,
+        filter_clause="FILTER doc.type == 'test'",
+        vector_weight=1.5,
+        keyword_weight=0.8,
+        keyword_search_clause="custom search",
+    )
+
+    # Verify only documents (not scores) were returned
+    assert docs == expected_docs
+
+
+def test_similarity_search_by_vector_and_keyword_with_score(
+    arango_vector_factory: Any,
+) -> None:
+    """Test similarity_search_by_vector_and_keyword_with_score method."""
+    vector_store = arango_vector_factory()
+
+    mock_embedding = [0.1] * 64
+    mock_cursor = MagicMock()
+    mock_query = "test query"
+    mock_bind_vars = {"test": "value"}
+
+    # Mock _build_hybrid_search_query
+    with patch.object(
+        vector_store,
+        "_build_hybrid_search_query",
+        return_value=(mock_query, mock_bind_vars),
+    ) as mock_build_query:
+        # Mock database execution
+        vector_store.db.aql.execute.return_value = mock_cursor
+
+        # Mock _process_search_query
+        expected_results = [(MagicMock(), 0.9), (MagicMock(), 0.7)]
+        with patch.object(
+            vector_store, "_process_search_query", return_value=expected_results
+        ) as mock_process:
+            results = vector_store.similarity_search_by_vector_and_keyword_with_score(
+                query="test query",
+                embedding=mock_embedding,
+                k=3,
+                return_fields={"field1", "field2"},
+                use_approx=True,
+                filter_clause="FILTER doc.active == true",
+                vector_weight=2.0,
+                keyword_weight=1.0,
+                keyword_search_clause="SEARCH doc.content",
+            )
+
+    # Verify _build_hybrid_search_query was called with correct parameters
+    mock_build_query.assert_called_once_with(
+        query="test query",
+        k=3,
+        embedding=mock_embedding,
+        return_fields={"field1", "field2"},
+        use_approx=True,
+        filter_clause="FILTER doc.active == true",
+        vector_weight=2.0,
+        keyword_weight=1.0,
+        keyword_search_clause="SEARCH doc.content",
+    )
+
+    # Verify database query execution
+    vector_store.db.aql.execute.assert_called_once_with(
+        mock_query, bind_vars=mock_bind_vars, stream=True
+    )
+
+    # Verify _process_search_query was called
+    mock_process.assert_called_once_with(mock_cursor)
+
+    # Verify results
+    assert results == expected_results
+
+
+def test_build_hybrid_search_query(arango_vector_factory: Any) -> None:
+    """Test _build_hybrid_search_query method."""
+    vector_store = arango_vector_factory(
+        collection_name="test_collection",
+        keyword_index_name="test_view",
+        keyword_analyzer="text_en",
+        rrf_constant=60,
+        rrf_search_limit=100,
+        text_field="text",
+        embedding_field="embedding",
+    )
+
+    # Mock retrieve_keyword_index to return None (will create index)
+    with patch.object(vector_store, "retrieve_keyword_index", return_value=None):
+        with patch.object(vector_store, "create_keyword_index") as mock_create_index:
+            # Mock retrieve_vector_index to return None
+            # (will create index for approx search)
+            with patch.object(vector_store, "retrieve_vector_index", return_value=None):
+                with patch.object(
+                    vector_store, "create_vector_index"
+                ) as mock_create_vector_index:
+                    # Mock database version for approx search
+                    vector_store.db.version.return_value = "3.12.5"
+
+                    query, bind_vars = vector_store._build_hybrid_search_query(
+                        query="test query",
+                        k=5,
+                        embedding=[0.1] * 64,
+                        return_fields={"field1", "field2"},
+                        use_approx=True,
+                        filter_clause="FILTER doc.active == true",
+                        vector_weight=1.5,
+                        keyword_weight=2.0,
+                        keyword_search_clause="",
+                    )
+
+    # Verify indexes were created
+    mock_create_index.assert_called_once()
+    mock_create_vector_index.assert_called_once()
+
+    # Verify query string contains expected components
+    assert "FOR doc IN @@collection" in query
+    assert "FOR doc IN @@view" in query
+    assert "SEARCH ANALYZER" in query
+    assert "BM25(doc)" in query
+    assert "COLLECT doc_key = result.doc._key INTO group" in query
+    assert "SUM(group[*].result.score)" in query
+    assert "SORT rrf_score DESC" in query
+
+    # Verify bind variables
+    assert bind_vars["@collection"] == "test_collection"
+    assert bind_vars["@view"] == "test_view"
+    assert bind_vars["embedding"] == [0.1] * 64
+    assert bind_vars["query"] == "test query"
+    assert bind_vars["analyzer"] == "text_en"
+    assert bind_vars["rrf_constant"] == 60
+    assert bind_vars["rrf_search_limit"] == 100
+
+
+def test_build_hybrid_search_query_with_custom_keyword_search(
+    arango_vector_factory: Any,
+) -> None:
+    """Test _build_hybrid_search_query with custom keyword search clause."""
+    vector_store = arango_vector_factory()
+
+    # Mock dependencies
+    with patch.object(
+        vector_store, "retrieve_keyword_index", return_value={"name": "test_view"}
+    ):
+        with patch.object(
+            vector_store, "retrieve_vector_index", return_value={"name": "test_index"}
+        ):
+            vector_store.db.version.return_value = "3.12.5"
+
+            custom_search_clause = "SEARCH doc.title IN TOKENS(@query, @analyzer)"
+
+            query, bind_vars = vector_store._build_hybrid_search_query(
+                query="test query",
+                k=3,
+                embedding=[0.2] * 64,
+                return_fields={"title"},
+                use_approx=False,
+                filter_clause="",
+                vector_weight=1.0,
+                keyword_weight=1.0,
+                keyword_search_clause=custom_search_clause,
+            )
+
+    # Verify custom keyword search clause is used
+    assert custom_search_clause in query
+    # Verify default search clause is not used
+    assert "doc.text IN TOKENS" not in query
+
+
+def test_keyword_index_management(arango_vector_factory: Any) -> None:
+    """Test keyword index creation, retrieval, and deletion."""
+    vector_store = arango_vector_factory(
+        keyword_index_name="test_keyword_view",
+        keyword_analyzer="text_en",
+        collection_name="test_collection",
+        text_field="content",
+    )
+
+    # Test retrieve_keyword_index when index exists
+    mock_view = {"name": "test_keyword_view", "type": "arangosearch"}
+
+    with patch.object(vector_store, "retrieve_keyword_index", return_value=mock_view):
+        result = vector_store.retrieve_keyword_index()
+        assert result == mock_view
+
+    # Test retrieve_keyword_index when index doesn't exist
+    with patch.object(vector_store, "retrieve_keyword_index", return_value=None):
+        result = vector_store.retrieve_keyword_index()
+        assert result is None
+
+    # Test create_keyword_index
+    with patch.object(vector_store, "retrieve_keyword_index", return_value=None):
+        vector_store.create_keyword_index()
+
+    # Verify create_view was called with correct parameters
+    vector_store.db.create_view.assert_called_once()
+    call_args = vector_store.db.create_view.call_args
+    assert call_args[0][0] == "test_keyword_view"
+    assert call_args[0][1] == "arangosearch"
+
+    view_properties = call_args[0][2]
+    assert "links" in view_properties
+    assert "test_collection" in view_properties["links"]
+    assert "analyzers" in view_properties["links"]["test_collection"]
+    assert "text_en" in view_properties["links"]["test_collection"]["analyzers"]
+
+    # Test create_keyword_index when index already exists (idempotent)
+    vector_store.db.create_view.reset_mock()
+    with patch.object(vector_store, "retrieve_keyword_index", return_value=mock_view):
+        vector_store.create_keyword_index()
+
+    # Should not create view if it already exists
+    vector_store.db.create_view.assert_not_called()
+
+    # Test delete_keyword_index
+    with patch.object(vector_store, "retrieve_keyword_index", return_value=mock_view):
+        vector_store.delete_keyword_index()
+
+    vector_store.db.delete_view.assert_called_once_with("test_keyword_view")
+
+    # Test delete_keyword_index when index doesn't exist
+    vector_store.db.delete_view.reset_mock()
+    with patch.object(vector_store, "retrieve_keyword_index", return_value=None):
+        vector_store.delete_keyword_index()
+
+    # Should not call delete_view if view doesn't exist
+    vector_store.db.delete_view.assert_not_called()
+
+
+def test_from_texts_with_hybrid_search_and_invalid_insert_text() -> None:
+    """Test that from_texts raises ValueError when
+    hybrid search is used without insert_text."""
+    mock_embedding = MagicMock()
+    mock_embedding.embed_documents.return_value = [[0.1] * 64, [0.2] * 64]
+    mock_db = MagicMock()
+
+    from langchain_arangodb.vectorstores.arangodb_vector import ArangoVector, SearchType
+
+    with pytest.raises(ValueError) as exc_info:
+        ArangoVector.from_texts(
+            texts=["text1", "text2"],
+            embedding=mock_embedding,
+            database=mock_db,
+            search_type=SearchType.HYBRID,
+            insert_text=False,  # This should cause the error
+        )
+
+    assert "insert_text must be True when search_type is HYBRID" in str(exc_info.value)
+
+
+def test_from_texts_with_hybrid_search_valid() -> None:
+    """Test that from_texts works correctly with hybrid search when insert_text=True."""
+    mock_embedding = MagicMock()
+    mock_embedding.embed_documents.return_value = [[0.1] * 64, [0.2] * 64]
+    mock_db = MagicMock()
+    mock_collection = MagicMock()
+    mock_db.has_collection.return_value = True
+    mock_db.collection.return_value = mock_collection
+    mock_collection.indexes.return_value = []
+
+    from langchain_arangodb.vectorstores.arangodb_vector import ArangoVector, SearchType
+
+    with patch.object(ArangoVector, "add_embeddings", return_value=["id1", "id2"]):
+        vector_store = ArangoVector.from_texts(
+            texts=["text1", "text2"],
+            embedding=mock_embedding,
+            database=mock_db,
+            search_type=SearchType.HYBRID,
+            insert_text=True,  # This should work
+        )
+
+    assert vector_store.search_type == SearchType.HYBRID
+
+
+def test_from_existing_collection_with_hybrid_search_invalid() -> None:
+    """Test that from_existing_collection raises
+    error with hybrid search and insert_text=False."""
+    mock_embedding = MagicMock()
+    mock_db = MagicMock()
+
+    from langchain_arangodb.vectorstores.arangodb_vector import ArangoVector, SearchType
+
+    with pytest.raises(ValueError) as exc_info:
+        ArangoVector.from_existing_collection(
+            collection_name="test_collection",
+            text_properties_to_embed=["title", "content"],
+            embedding=mock_embedding,
+            database=mock_db,
+            search_type=SearchType.HYBRID,
+            insert_text=False,  # This should cause the error
+        )
+
+    assert "insert_text must be True when search_type is HYBRID" in str(exc_info.value)
+
+
+def test_build_hybrid_search_query_euclidean_distance(
+    arango_vector_factory: Any,
+) -> None:
+    """Test _build_hybrid_search_query with Euclidean distance strategy."""
+    from langchain_arangodb.vectorstores.utils import DistanceStrategy
+
+    vector_store = arango_vector_factory(
+        distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE
+    )
+
+    # Mock dependencies
+    with patch.object(
+        vector_store, "retrieve_keyword_index", return_value={"name": "test_view"}
+    ):
+        with patch.object(
+            vector_store, "retrieve_vector_index", return_value={"name": "test_index"}
+        ):
+            query, bind_vars = vector_store._build_hybrid_search_query(
+                query="test",
+                k=2,
+                embedding=[0.1] * 64,
+                return_fields=set(),
+                use_approx=False,
+                filter_clause="",
+                vector_weight=1.0,
+                keyword_weight=1.0,
+                keyword_search_clause="",
+            )
+
+    # Should use L2_DISTANCE for Euclidean distance
+    assert "L2_DISTANCE" in query
+    assert "SORT score ASC" in query  # Euclidean uses ascending sort
+
+
+def test_build_hybrid_search_query_version_check(arango_vector_factory: Any) -> None:
+    """Test that _build_hybrid_search_query checks
+    ArangoDB version for approximate search."""
+    vector_store = arango_vector_factory()
+
+    # Mock dependencies
+    with patch.object(
+        vector_store, "retrieve_keyword_index", return_value={"name": "test_view"}
+    ):
+        with patch.object(vector_store, "retrieve_vector_index", return_value=None):
+            # Mock old version
+            vector_store.db.version.return_value = "3.12.3"
+
+            with pytest.raises(ValueError) as exc_info:
+                vector_store._build_hybrid_search_query(
+                    query="test",
+                    k=2,
+                    embedding=[0.1] * 64,
+                    return_fields=set(),
+                    use_approx=True,  # This should trigger the version check
+                    filter_clause="",
+                    vector_weight=1.0,
+                    keyword_weight=1.0,
+                    keyword_search_clause="",
+                )
+
+            assert (
+                "Approximate Nearest Neighbor search requires ArangoDB >= 3.12.4"
+                in str(exc_info.value)
+            )
+
+
+def test_search_type_override_in_similarity_search(arango_vector_factory: Any) -> None:
+    """Test that search_type can be overridden in similarity_search method."""
+    from langchain_arangodb.vectorstores.arangodb_vector import SearchType
+
+    # Create vector store with default vector search
+    vector_store = arango_vector_factory(search_type=SearchType.VECTOR)
+
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    # Test overriding to hybrid search
+    expected_docs = [MagicMock()]
+    with patch.object(
+        vector_store,
+        "similarity_search_by_vector_and_keyword",
+        return_value=expected_docs,
+    ) as mock_hybrid_search:
+        docs = vector_store.similarity_search(
+            query="test",
+            k=1,
+            search_type=SearchType.HYBRID,  # Override default
+        )
+
+    # Should call hybrid search method despite default being vector
+    mock_hybrid_search.assert_called_once()
+    assert docs == expected_docs
+
+    # Test overriding to vector search
+    with patch.object(
+        vector_store, "similarity_search_by_vector", return_value=expected_docs
+    ) as mock_vector_search:
+        docs = vector_store.similarity_search(
+            query="test",
+            k=1,
+            search_type=SearchType.VECTOR,  # Explicit vector search
+        )
+
+    mock_vector_search.assert_called_once()
+    assert docs == expected_docs
