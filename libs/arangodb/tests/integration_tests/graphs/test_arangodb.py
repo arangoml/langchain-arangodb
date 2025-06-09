@@ -1,14 +1,13 @@
 import json
 import os
 import pprint
-import urllib.parse
 from collections import defaultdict
 from unittest.mock import MagicMock
 
 import pytest
 from arango import ArangoClient
 from arango.database import StandardDatabase
-from arango.exceptions import ArangoClientError, ArangoServerError
+from arango.exceptions import ArangoServerError
 from langchain_core.documents import Document
 
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph, get_arangodb_client
