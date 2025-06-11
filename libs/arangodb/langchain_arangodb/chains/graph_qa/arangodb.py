@@ -105,14 +105,17 @@ class ArangoGraphQAChain(Chain):
 
     @property
     def input_keys(self) -> List[str]:
+        """Get the input keys for the chain."""
         return [self.input_key]
 
     @property
-    def output_keys(self) -> List[str]:
+    def output_keys(self) -> List[str]: 
+        """Get the output keys for the chain."""
         return [self.output_key]
 
     @property
     def _chain_type(self) -> str:
+        """Get the chain type."""
         return "graph_aql_chain"
 
     @classmethod
@@ -129,6 +132,22 @@ class ArangoGraphQAChain(Chain):
         qa_chain = qa_prompt | llm
         aql_generation_chain = aql_generation_prompt | llm
         aql_fix_chain = aql_fix_prompt | llm
+        """
+        Initialize from LLM.
+        :param llm: The language model to use.
+        :type llm: BaseLanguageModel
+        :param qa_prompt: The prompt to use for the QA chain.
+        :type qa_prompt: BasePromptTemplate
+        :param aql_generation_prompt: The prompt to use for the AQL generation chain.
+        :type aql_generation_prompt: BasePromptTemplate
+        :param aql_fix_prompt: The prompt to use for the AQL fix chain.
+        :type aql_fix_prompt: BasePromptTemplate
+        :param kwargs: Additional keyword arguments.
+        :type kwargs: Any
+        :return: The initialized ArangoGraphQAChain.
+        :rtype: ArangoGraphQAChain
+        :raises ValueError: If the LLM is not provided.
+        """
 
         return cls(
             qa_chain=qa_chain,
@@ -149,37 +168,37 @@ class ArangoGraphQAChain(Chain):
 
         Users can modify the following ArangoGraphQAChain Class Variables:
 
-        :var top_k: The maximum number of AQL Query Results to return
+        :param top_k: The maximum number of AQL Query Results to return
         :type top_k: int
 
-        :var aql_examples: A set of AQL Query Examples that are passed to
+        :param aql_examples: A set of AQL Query Examples that are passed to
             the AQL Generation Prompt Template to promote few-shot-learning.
             Defaults to an empty string.
         :type aql_examples: str
 
-        :var return_aql_query: Whether to return the AQL Query in the
+        :param return_aql_query: Whether to return the AQL Query in the
             output dictionary. Defaults to False.
         :type return_aql_query: bool
 
-        :var return_aql_result: Whether to return the AQL Query in the
+        :param return_aql_result: Whether to return the AQL Query in the
             output dictionary. Defaults to False
         :type return_aql_result: bool
 
-        :var max_aql_generation_attempts: The maximum amount of AQL
+        :param max_aql_generation_attempts: The maximum amount of AQL
             Generation attempts to be made prior to raising the last
             AQL Query Execution Error. Defaults to 3.
         :type max_aql_generation_attempts: int
 
-        :var execute_aql_query: If False, the AQL Query is only
+        :param execute_aql_query: If False, the AQL Query is only
             explained & returned, not executed. Defaults to True.
         :type execute_aql_query: bool
 
-        :var output_list_limit: The maximum list length to display
+        :param output_list_limit: The maximum list length to display
             in the output. If the list is longer, it will be truncated.
             Defaults to 32.
         :type output_list_limit: int
 
-        :var output_string_limit: The maximum string length to display
+        :param output_string_limit: The maximum string length to display
             in the output. If the string is longer, it will be truncated.
             Defaults to 256.
         :type output_string_limit: int
@@ -348,11 +367,11 @@ class ArangoGraphQAChain(Chain):
     def _is_read_only_query(self, aql_query: str) -> Tuple[bool, Optional[str]]:
         """Check if the AQL query is read-only.
 
-        Args:
-            aql_query: The AQL query to check.
+        :param aql_query: The AQL query to check.
+        :type aql_query: str
 
-        Returns:
-            bool: True if the query is read-only, False otherwise.
+        :return: True if the query is read-only, False otherwise.
+        :rtype: Tuple[bool, Optional[str]]
         """
         normalized_query = aql_query.upper()
 
