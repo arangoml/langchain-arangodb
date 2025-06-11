@@ -102,12 +102,6 @@ Documentation Contents
 
 .. toctree::
    :maxdepth: 2
-   :caption: Advanced:
-
-   mydirectory/index
-
-.. toctree::
-   :maxdepth: 2
    :caption: API Reference:
 
    api_reference
