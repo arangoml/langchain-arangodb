@@ -96,7 +96,8 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
         Retrieves all messages for the current session from the ArangoDB collection,
         sorted by timestamp in descending order (most recent first).
 
-        :return: List of chat messages for the current session.
+        :return: List of chat messages for the current session,
+            sorted in reverse chronological order (most recent first).
         :rtype: List[BaseMessage]
 
         .. code-block:: python

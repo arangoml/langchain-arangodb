@@ -113,6 +113,7 @@ Conversation Buffer Memory
 
     from langchain.memory import ConversationBufferMemory
     from langchain_openai import ChatOpenAI
+    from langchain_arangodb.chat_message_histories import ArangoChatMessageHistory
 
     # Create chat history
     chat_history = ArangoChatMessageHistory(
