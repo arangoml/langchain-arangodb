@@ -391,6 +391,7 @@ def test_similarity_search(arango_vector_factory: Any) -> None:
         return_fields={"field1", "field2"},
         use_approx=True,
         filter_clause="",
+        metadata_clause="",
     )
 
     # Verify the correct documents were returned
@@ -429,6 +430,7 @@ def test_similarity_search_with_score(arango_vector_factory: Any) -> None:
         return_fields={"field1", "field2"},
         use_approx=True,
         filter_clause="",
+        metadata_clause="",
     )
 
     # Verify the correct results were returned
@@ -698,6 +700,7 @@ def test_similarity_search_hybrid(arango_vector_factory: Any) -> None:
         vector_weight=1.0,
         keyword_weight=0.5,
         keyword_search_clause="",
+        metadata_clause="",
     )
 
     # Verify the correct documents were returned
@@ -746,6 +749,7 @@ def test_similarity_search_with_score_hybrid(arango_vector_factory: Any) -> None
         vector_weight=2.0,
         keyword_weight=1.5,
         keyword_search_clause="custom clause",
+        metadata_clause="",
     )
 
     # Verify the correct results were returned
@@ -787,6 +791,7 @@ def test_similarity_search_by_vector_and_keyword(arango_vector_factory: Any) -> 
         vector_weight=1.5,
         keyword_weight=0.8,
         keyword_search_clause="custom search",
+        metadata_clause="",
     )
 
     # Verify only documents (not scores) were returned
@@ -841,6 +846,7 @@ def test_similarity_search_by_vector_and_keyword_with_score(
         vector_weight=2.0,
         keyword_weight=1.0,
         keyword_search_clause="SEARCH doc.content",
+        metadata_clause="",
     )
 
     # Verify database query execution
@@ -889,6 +895,7 @@ def test_build_hybrid_search_query(arango_vector_factory: Any) -> None:
                         vector_weight=1.5,
                         keyword_weight=2.0,
                         keyword_search_clause="",
+                        metadata_clause="",
                     )
 
     # Verify indexes were created
@@ -900,9 +907,7 @@ def test_build_hybrid_search_query(arango_vector_factory: Any) -> None:
     assert "FOR doc IN @@view" in query
     assert "SEARCH ANALYZER" in query
     assert "BM25(doc)" in query
-    assert "COLLECT doc_key = result.doc._key INTO group" in query
-    assert "SUM(group[*].result.score)" in query
-    assert "SORT rrf_score DESC" in query
+    assert "COLLECT key = result.key AGGREGATE score = SUM(result.score)" in query
 
     # Verify bind variables
     assert bind_vars["@collection"] == "test_collection"
@@ -910,8 +915,6 @@ def test_build_hybrid_search_query(arango_vector_factory: Any) -> None:
     assert bind_vars["embedding"] == [0.1] * 64
     assert bind_vars["query"] == "test query"
     assert bind_vars["analyzer"] == "text_en"
-    assert bind_vars["rrf_constant"] == 60
-    assert bind_vars["rrf_search_limit"] == 100
 
 
 def test_build_hybrid_search_query_with_custom_keyword_search(
@@ -941,6 +944,7 @@ def test_build_hybrid_search_query_with_custom_keyword_search(
                 vector_weight=1.0,
                 keyword_weight=1.0,
                 keyword_search_clause=custom_search_clause,
+                metadata_clause="",
             )
 
     # Verify custom keyword search clause is used
@@ -978,13 +982,11 @@ def test_keyword_index_management(arango_vector_factory: Any) -> None:
     vector_store.db.create_view.assert_called_once()
     call_args = vector_store.db.create_view.call_args
     assert call_args[0][0] == "test_keyword_view"
-    assert call_args[0][1] == "arangosearch"
+    assert call_args[0][1] == "search-alias"
 
     view_properties = call_args[0][2]
-    assert "links" in view_properties
-    assert "test_collection" in view_properties["links"]
-    assert "analyzers" in view_properties["links"]["test_collection"]
-    assert "text_en" in view_properties["links"]["test_collection"]["analyzers"]
+    assert view_properties["indexes"][0]["index"] == "test_keyword_view"
+    assert view_properties["indexes"][0]["collection"] == "test_collection"
 
     # Test create_keyword_index when index already exists (idempotent)
     vector_store.db.create_view.reset_mock()
@@ -1102,6 +1104,7 @@ def test_build_hybrid_search_query_euclidean_distance(
                 vector_weight=1.0,
                 keyword_weight=1.0,
                 keyword_search_clause="",
+                metadata_clause="",
             )
 
     # Should use L2_DISTANCE for Euclidean distance
@@ -1133,6 +1136,7 @@ def test_build_hybrid_search_query_version_check(arango_vector_factory: Any) -> 
                     vector_weight=1.0,
                     keyword_weight=1.0,
                     keyword_search_clause="",
+                    metadata_clause="",
                 )
 
             assert (

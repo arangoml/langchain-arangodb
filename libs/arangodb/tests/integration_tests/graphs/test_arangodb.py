@@ -1,14 +1,18 @@
 import json
 import os
 import pprint
+
 import urllib.parse
+
 from collections import defaultdict
 from unittest.mock import MagicMock
 
 import pytest
 from arango import ArangoClient
 from arango.database import StandardDatabase
+
 from arango.exceptions import ArangoClientError, ArangoServerError
+
 from langchain_core.documents import Document
 
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph, get_arangodb_client
@@ -142,6 +146,7 @@ def test_arangodb_schema_structure(db: StandardDatabase) -> None:
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
+
 def test_arangodb_query_timeout(db: StandardDatabase) -> None:
     long_running_query = "FOR i IN 1..10000000 FILTER i == 0 RETURN i"
 
@@ -292,27 +297,6 @@ def test_arangodb_rels(db: StandardDatabase) -> None:
     assert rels == expected_rels
 
 
-# @pytest.mark.usefixtures("clear_arangodb_database")
-# def test_invalid_url() -> None:
-#     """Test initializing with an invalid URL raises ArangoClientError."""
-#     # Original URL
-#     original_url = "http://localhost:8529"
-#     parsed_url = urllib.parse.urlparse(original_url)
-#     # Increment the port number by 1 and wrap around if necessary
-#     original_port = parsed_url.port or 8529
-#     new_port = (original_port + 1) % 65535 or 1
-#     # Reconstruct the netloc (hostname:port)
-#     new_netloc = f"{parsed_url.hostname}:{new_port}"
-#     # Rebuild the URL with the new netloc
-#     new_url = parsed_url._replace(netloc=new_netloc).geturl()
-
-#     client = ArangoClient(hosts=new_url)
-
-#     with pytest.raises(ArangoClientError) as exc_info:
-#         # Attempt to connect with invalid URL
-#         client.db("_system", username="root", password="passwd", verify=True)
-
-#     assert "bad connection" in str(exc_info.value)
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -1165,8 +1149,9 @@ def test_embed_relationships_and_include_source(db: StandardDatabase) -> None:
     all_relationship_edges = relationship_edge_calls[0]
     pprint.pprint(all_relationship_edges)
 
-    assert any(        
-        "embedding" in e for e in all_relationship_edges
+
+    assert any(
+       "embedding" in e for e in all_relationship_edges
     ), "Expected embedding in relationship"  # noqa: E501
     assert any(
         "source_id" in e for e in all_relationship_edges
