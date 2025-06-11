@@ -7,7 +7,8 @@ LangChain ArangoDB is a Python package that provides ArangoDB integrations for L
 
    <div style="display: flex; align-items: center; gap: 10px;">
       <a href="https://www.langchain.com/">
-         <img src="https://python.langchain.com/assets/langchain-logo.png" alt="LangChain" style="height: 60px;">
+      
+         <img src="https://python.langchain.com/img/brand/wordmark.png" alt="LangChain" style="height: 60px;">
       </a>
       <a href="https://www.arangodb.com/">
          <img src="https://arangodb.com/wp-content/uploads/2016/05/ArangoDB_logo_avocado_@1.png" alt="ArangoDB" style="height: 60px;">

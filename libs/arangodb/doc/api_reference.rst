@@ -10,7 +10,6 @@ Vector Stores
     :members:
     :undoc-members:
     :show-inheritance:
-    :noindex:
 
 Chat Message Histories
 ----------------------
@@ -19,7 +18,6 @@ Chat Message Histories
     :members:
     :undoc-members:
     :show-inheritance:
-    :noindex:
 
 Graph Stores
 ------------
