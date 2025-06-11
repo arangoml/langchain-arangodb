@@ -82,13 +82,6 @@ jobs:
       - build
       - test-pypi-publish
     runs-on: ubuntu-latest
-    services:
-      arangodb:
-        image: arangodb:3.12.4
-        env:
-          ARANGO_ROOT_PASSWORD: test
-        ports:
-          - 8529:8529
     steps:
       - uses: actions/checkout@v4
 
@@ -104,6 +97,11 @@ jobs:
       # - Tests pass, because the dependency is present even though it wasn't specified.
       # - The package is published, and it breaks on the missing dependency when
       #   used in the real world.
+
+      - name: Provision ArangoDB
+        shell: bash
+        run: |
+          docker compose -f ${{ inputs.working-directory }}/tests/integration_tests/docker-compose/arangodb.yml up -d
 
       - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
         uses: "./.github/actions/poetry_setup"
