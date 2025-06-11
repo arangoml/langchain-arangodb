@@ -113,6 +113,7 @@ Conversation Buffer Memory
 
     from langchain.memory import ConversationBufferMemory
     from langchain_openai import ChatOpenAI
+    from langchain_arangodb.chat_message_histories import ArangoChatMessageHistory
 
     # Create chat history
     chat_history = ArangoChatMessageHistory(
@@ -493,14 +494,6 @@ Example: Complete Chat Application
 
     # Clear a session when done
     app.clear_session("user_bob")
-
-API Reference
--------------
-
-.. automodule:: langchain_arangodb.chat_message_histories.arangodb
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 Troubleshooting
 ---------------

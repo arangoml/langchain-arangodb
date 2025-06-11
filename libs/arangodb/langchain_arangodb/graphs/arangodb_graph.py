@@ -334,7 +334,6 @@ class ArangoGraph(GraphStore):
         """
         Execute an AQL query and return the results.
 
-        Parameters:
         :param query: The AQL query to execute.
         :type query: str
         :param params: Additional arguments piped to the function.

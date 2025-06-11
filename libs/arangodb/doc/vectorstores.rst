@@ -11,9 +11,9 @@ The ``ArangoVector`` class is the main vector store implementation that integrat
 - Efficient vector similarity search with cosine and Euclidean distance metrics
 - Approximate and exact nearest neighbor search
 - Maximal marginal relevance (MMR) search for diverse results
+- Hybrid search combining vector and keyword-based retrieval (RRF)
 - Batch operations for adding and managing documents
 - Configurable vector indexing with customizable parameters
-- Integration with ArangoDB's distributed architecture
 
 Quick Start
 -----------
@@ -50,6 +50,37 @@ Quick Start
     for doc in results:
         print(doc.page_content)
 
+Creating from Existing Collections
+----------------------------------
+
+You can create a vector store from an existing ArangoDB collection by embedding specific text properties:
+
+.. code-block:: python
+
+    from langchain_arangodb.vectorstores import ArangoVector
+
+    # Create vector store from existing collection
+    vectorstore = ArangoVector.from_existing_collection(
+        collection_name="existing_docs",
+        text_properties_to_embed=["title", "description", "content"],
+        embedding=embeddings,
+        database=db,
+        embedding_field="text_embedding",
+        text_field="combined_text",
+        batch_size=1000,
+        insert_text=True,  # Store concatenated text for hybrid search
+        skip_existing_embeddings=False,  # Re-embed all documents
+        search_type=SearchType.HYBRID
+    )
+
+**Key Parameters:**
+
+- ``text_properties_to_embed``: List of document properties to concatenate and embed
+- ``batch_size``: Number of documents to process at once (default: 1000)
+- ``insert_text``: Whether to store concatenated text (required for hybrid search)
+- ``skip_existing_embeddings``: Skip documents that already have embeddings
+- ``aql_return_text_query``: Custom AQL query for text extraction (optional)
+
 Configuration
 -------------
 
@@ -62,13 +93,17 @@ Constructor Parameters
    :param embedding_dimension: The dimension of the embedding vectors (must match your embedding model)
    :param database: ArangoDB database instance from python-arango
    :param collection_name: Name of the collection to store documents (default: "documents")
-   :param search_type: Type of search - currently only "vector" is supported
+   :param search_type: Type of search - supports "vector" and "hybrid" search modes
    :param embedding_field: Field name for storing embedding vectors (default: "embedding")
    :param text_field: Field name for storing text content (default: "text")
-   :param index_name: Name of the vector index (default: "vector_index")
+   :param vector_index_name: Name of the vector index (default: "vector_index")
    :param distance_strategy: Distance metric for similarity calculation (default: "COSINE")
    :param num_centroids: Number of centroids for vector index clustering (default: 1)
    :param relevance_score_fn: Custom function to normalize relevance scores (optional)
+   :param keyword_index_name: Name of the keyword search index (default: "keyword_index")
+   :param keyword_analyzer: Text analyzer for keyword search (default: "text_en")
+   :param rrf_constant: Constant for Reciprocal Rank Fusion in hybrid search (default: 60)
+   :param rrf_search_limit: Maximum results for RRF scoring (default: 100)
 
 Distance Strategies
 ~~~~~~~~~~~~~~~~~~
@@ -93,6 +128,37 @@ The vector store supports multiple distance metrics:
         embedding_dimension=1536,
         database=db,
         distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE
+    )
+
+Keyword Analyzers
+~~~~~~~~~~~~~~~~~
+
+For hybrid search, ArangoDB supports multiple text analyzers for different languages:
+
+**Supported Analyzers:**
+
+- ``text_en``: English (default)
+- ``text_de``: German
+- ``text_es``: Spanish
+- ``text_fi``: Finnish
+- ``text_fr``: French
+- ``text_it``: Italian
+- ``text_nl``: Dutch
+- ``text_no``: Norwegian
+- ``text_pt``: Portuguese
+- ``text_ru``: Russian
+- ``text_sv``: Swedish
+- ``text_zh``: Chinese
+
+.. code-block:: python
+
+    # Using German analyzer for hybrid search
+    vectorstore = ArangoVector(
+        embedding=embeddings,
+        embedding_dimension=1536,
+        database=db,
+        search_type=SearchType.HYBRID,
+        keyword_analyzer="text_de"
     )
 
 Search Methods
@@ -364,6 +430,7 @@ Custom Collection Setup
         embedding_field="custom_embedding",
         text_field="custom_text",
         ids=["custom_id_1"],     # Custom document IDs
+        insert_text=True,        # Store text content (required for hybrid search)
     )
 
 Custom Relevance Scoring
@@ -481,19 +548,6 @@ Example: Complete Workflow
     for doc in diverse_results:
         print(f"- {doc.page_content}")
 
-API Reference
--------------
-
-.. automodule:: langchain_arangodb.vectorstores.arangodb_vector
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: langchain_arangodb.vectorstores.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Future Enhancements
 -------------------
 
@@ -533,4 +587,47 @@ Support for multi-modal embeddings and cross-modal search capabilities:
     #     query="text query",
     #     image_query=image_embedding,
     #     modality_weights={"text": 0.7, "image": 0.3}
-    # ) 
+    # )
+
+Vector and Keyword Search
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For direct control over hybrid search with both vector and keyword components:
+
+.. code-block:: python
+
+    # Hybrid search with pre-computed embedding
+    query_embedding = embeddings.embed_query("machine learning")
+    
+    # Search combining vector similarity and keyword matching
+    results = vectorstore.similarity_search_by_vector_and_keyword(
+        query="artificial intelligence",
+        embedding=query_embedding,
+        k=5,
+        vector_weight=1.0,
+        keyword_weight=1.0,
+        keyword_search_clause="SEARCH doc.text IN TOKENS(@query, 'text_en')"
+    )
+    
+    # With scores
+    docs_and_scores = vectorstore.similarity_search_by_vector_and_keyword_with_score(
+        query="deep learning",
+        embedding=query_embedding,
+        k=3,
+        vector_weight=2.0,  # Favor vector similarity
+        keyword_weight=1.0
+    )
+
+**Important Notes:**
+
+- **insert_text requirement**: When using hybrid search (``SearchType.HYBRID``), the ``insert_text`` parameter must be set to ``True`` in ``add_texts``, ``add_embeddings``, and ``from_texts`` methods. This ensures text content is stored for keyword search.
+- **Hybrid search prerequisites**: Both vector and keyword indexes must be created before performing hybrid search
+- **RRF scoring**: Hybrid search uses Reciprocal Rank Fusion to combine vector and keyword search results
+
+.. code-block:: python
+
+    # Correct usage for hybrid search
+    vectorstore.add_texts(
+        texts=["New document"],
+        insert_text=True  # Required for hybrid search
+    ) 

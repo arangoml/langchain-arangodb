@@ -42,7 +42,7 @@ The simplest way to use the chain is with a direct query:
 
 .. code-block:: python
 
-    response = chain.invoke({"query": "Who starred in Pulp Fiction?"})
+    response = chain.invoke("Who starred in Pulp Fiction?")
     print(response["result"])
 
 2. Using Custom Input/Output Keys
@@ -60,7 +60,7 @@ You can customize the input and output keys:
         output_key="answer"
     )
     
-    response = chain.invoke({"question": "Who directed Inception?"})
+    response = chain.invoke("Who directed Inception?")
     print(response["answer"])
 
 3. Limiting Results
@@ -93,7 +93,7 @@ Get query explanation without execution:
         execute_aql_query=False  # Only explain, don't execute
     )
     
-    explanation = chain.invoke({"query": "Find all movies released after 2020"})
+    explanation = chain.invoke("Find all movies released after 2020")
     print(explanation["aql_result"])  # Contains query plan
 
 5. Read-Only Mode
@@ -149,7 +149,7 @@ Get more detailed output including AQL query and results:
         return_aql_result=True
     )
     
-    response = chain.invoke({"query": "Who acted in The Matrix?"})
+    response = chain.invoke("Who acted in The Matrix?")
     print("Query:", response["aql_query"])
     print("Raw Results:", response["aql_result"])
     print("Final Answer:", response["result"])
@@ -215,7 +215,7 @@ Here's a complete workflow showing how to use multiple features together:
     
     for query in queries:
         print(f"\nProcessing query: {query}")
-        response = chain.invoke({"query": query})
+        response = chain.invoke(query)
         
         print("AQL Query:", response["aql_query"])
         print("Raw Results:", response["aql_result"])
@@ -239,7 +239,7 @@ The chain includes built-in error handling:
 .. code-block:: python
 
     try:
-        response = chain.invoke({"query": "Find all movies"})
+        response = chain.invoke("Find all movies")
     except ValueError as e:
         if "Maximum amount of AQL Query Generation attempts" in str(e):
             print("Failed to generate valid AQL after multiple attempts")

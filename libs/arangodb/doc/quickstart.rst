@@ -133,31 +133,46 @@ Create and work with knowledge graphs using ArangoDB:
 .. code-block:: python
 
     from langchain_arangodb.graphs import ArangoGraph
+    from langchain_arangodb.graphs.graph_document import GraphDocument, Node, Relationship
+    from langchain_core.documents import Document
 
-    # Initialize the graph
-    graph = ArangoGraph(
-        database=db,
-        vertex_collections=["Person", "Company", "Technology"],
-        edge_collections=["WorksAt", "Uses", "DeveloperOf"]
+    # Initialize the graph (no need to specify collections, they're created automatically)
+    graph = ArangoGraph(database=db)
+
+    # Create graph documents using proper Node and Relationship objects
+    graph_doc = GraphDocument(
+        nodes=[
+            Node(id="person1", type="Person", properties={"name": "Alice", "role": "Developer"}),
+            Node(id="company1", type="Company", properties={"name": "TechCorp", "industry": "Software"}),
+            Node(id="tech1", type="Technology", properties={"name": "ArangoDB", "category": "Database"})
+        ],
+        relationships=[
+            Relationship(
+                source=Node(id="person1", type="Person"),
+                target=Node(id="company1", type="Company"),
+                type="WorksAt",
+                properties={"since": "2023"}
+            ),
+            Relationship(
+                source=Node(id="company1", type="Company"),
+                target=Node(id="tech1", type="Technology"),
+                type="Uses",
+                properties={"purpose": "Data storage"}
+            )
+        ],
+        source=Document(page_content="Graph data about people and companies")
     )
 
-    # Add nodes and relationships
-    graph.add_graph_documents([
-        {
-            "nodes": [
-                {"id": "person1", "type": "Person", "properties": {"name": "Alice", "role": "Developer"}},
-                {"id": "company1", "type": "Company", "properties": {"name": "TechCorp", "industry": "Software"}},
-                {"id": "tech1", "type": "Technology", "properties": {"name": "ArangoDB", "category": "Database"}}
-            ],
-            "relationships": [
-                {"source": "person1", "target": "company1", "type": "WorksAt", "properties": {"since": "2023"}},
-                {"source": "company1", "target": "tech1", "type": "Uses", "properties": {"purpose": "Data storage"}}
-            ]
-        }
-    ])
+    # Add the graph document to the database
+    graph.add_graph_documents([graph_doc])
 
-    # Query the graph
-    query_result = graph.query("FOR v, e, p IN 1..2 OUTBOUND 'Person/person1' GRAPH 'knowledge_graph' RETURN {vertex: v, edge: e}")
+    # Query the graph using AQL
+    query_result = graph.query("""
+        FOR person IN Person
+            FILTER person.name == 'Alice'
+            FOR company IN 1..1 OUTBOUND person._id WorksAt
+                RETURN {person: person.name, company: company.name}
+    """)
     print(query_result)
 
 **Schema Management**
@@ -165,11 +180,15 @@ Create and work with knowledge graphs using ArangoDB:
 .. code-block:: python
 
     # Get current schema
-    schema = graph.get_schema
+    schema = graph.schema
     print("Graph Schema:", schema)
 
     # Refresh schema after changes
     graph.refresh_schema()
+
+    # Get schema as JSON or YAML
+    schema_json = graph.schema_json
+    schema_yaml = graph.schema_yaml
 
 5. Instantiate an ArangoDB Graph QA Chain
 ------------------------------------------
@@ -188,25 +207,25 @@ Create a question-answering system that leverages your graph data:
     qa_chain = ArangoGraphQAChain.from_llm(
         llm=llm,
         graph=graph,
-        verbose=True
+        allow_dangerous_requests=True
     )
 
     # Ask questions about your graph
-    response = qa_chain.run("Who works at TechCorp and what technologies do they use?")
-    print(response)
+    response = qa_chain.invoke("Who works at TechCorp and what technologies do they use?")
+    print(response["result"])
 
     # Ask about relationships
-    response = qa_chain.run("What is the relationship between Alice and ArangoDB?")
-    print(response)
+    response = qa_chain.invoke("What is the relationship between Alice and ArangoDB?")
+    print(response["result"])
 
 **Advanced: Custom Prompts**
 
 .. code-block:: python
 
-    from langchain_arangodb.chains.graph_qa import CYPHER_GENERATION_PROMPT
+    from langchain_arangodb.chains.graph_qa.prompts import AQL_GENERATION_PROMPT
 
     # Customize the prompt for better AQL generation
-    custom_prompt = CYPHER_GENERATION_PROMPT.partial(
+    custom_prompt = AQL_GENERATION_PROMPT.partial(
         schema=graph.get_schema,
         examples="Example: To find all people working at companies that use ArangoDB:\n"
                 "FOR person IN Person\n"
@@ -219,8 +238,9 @@ Create a question-answering system that leverages your graph data:
     qa_chain_custom = ArangoGraphQAChain.from_llm(
         llm=llm,
         graph=graph,
-        cypher_prompt=custom_prompt,
-        verbose=True
+        aql_generation_prompt=custom_prompt,
+        verbose=True,
+        allow_dangerous_requests=True
     )
 
 **Chat Message History Integration**
@@ -251,12 +271,15 @@ Create a question-answering system that leverages your graph data:
         llm=llm,
         graph=graph,
         memory=memory,
-        verbose=True
+        verbose=True,
+        allow_dangerous_requests=True
     )
 
     # Now your conversations are persisted
-    response1 = qa_chain_with_memory.run("Tell me about the people in our database")
-    response2 = qa_chain_with_memory.run("What companies do they work for?")
+    response1 = qa_chain_with_memory.invoke("Tell me about the people in our database")
+    response2 = qa_chain_with_memory.invoke("What companies do they work for?")
+    print(response1["result"])
+    print(response2["result"])
 
 Complete Example: RAG with Graph and Vector Search
 --------------------------------------------------
@@ -296,14 +319,14 @@ Combine all components for a powerful RAG application:
     )
 
     # Graph for structured knowledge
-    graph = ArangoGraph(
-        database=db,
-        vertex_collections=["Entity", "Concept"],
-        edge_collections=["RelatedTo", "PartOf"]
-    )
+    graph = ArangoGraph(database=db)
 
     # QA chain with graph reasoning
-    qa_chain = ArangoGraphQAChain.from_llm(llm=llm, graph=graph)
+    qa_chain = ArangoGraphQAChain.from_llm(
+        llm=llm, 
+        graph=graph,
+        allow_dangerous_requests=True
+    )
 
     # Chat history for context
     chat_history = ArangoChatMessageHistory(
