@@ -13,7 +13,7 @@ build:
 
 # Build documentation in the "doc/" directory with Sphinx
 sphinx:
-  configuration: libs/arangodb/doc/conf.py
+  configuration: ./libs/arangodb/doc/conf.py
   fail_on_warning: false
 
 # Optionally build your docs in additional formats such as PDF and ePub
@@ -26,4 +26,4 @@ sphinx:
 # See https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html
 python:
    install:
-   - requirements: libs/arangodb/doc/requirements.txt
+   - requirements: ./libs/arangodb/doc/requirements.txt
