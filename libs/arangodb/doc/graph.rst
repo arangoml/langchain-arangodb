@@ -1,17 +1,17 @@
 ArangoGraph
-=====================
+===========
 
 The ``ArangoGraph`` class provides an interface to interact with ArangoDB for graph operations in LangChain.
 
 Installation
------------
+------------
 
 .. code-block:: bash
 
    pip install langchain-arangodb
 
 Basic Usage
-----------
+-----------
 
 .. code-block:: python
 
@@ -30,10 +30,10 @@ Basic Usage
 
 
 Factory Methods
--------------
+---------------
 
 get_arangodb_client
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Creates a connection to ArangoDB.
 
@@ -71,10 +71,10 @@ Alternative constructor that creates an ArangoGraph instance directly from crede
    )
 
 Core Methods
------------
+------------
 
 add_graph_documents
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 Adds graph documents to the database.
 
@@ -171,10 +171,10 @@ Gets the query execution plan.
    )
 
 Schema Management
----------------
+-----------------
 
 refresh_schema
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Updates the internal schema representation.
 
@@ -187,7 +187,7 @@ Updates the internal schema representation.
    )
 
 generate_schema
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Generates a schema representation of the database.
 
@@ -201,7 +201,7 @@ Generates a schema representation of the database.
    )
 
 set_schema
-~~~~~~~~~
+~~~~~~~~~~
 
 Sets a custom schema.
 
@@ -217,7 +217,7 @@ Sets a custom schema.
    graph.set_schema(custom_schema)
 
 Schema Properties
----------------
+-----------------
 
 schema
 ~~~~~~
@@ -229,7 +229,7 @@ Gets the current schema as a dictionary.
    current_schema = graph.schema
 
 schema_json
-~~~~~~~~~~
+~~~~~~~~~~~~
 
 Gets the schema as a JSON string.
 
@@ -238,7 +238,7 @@ Gets the schema as a JSON string.
    schema_json = graph.schema_json
 
 schema_yaml
-~~~~~~~~~~
+~~~~~~~~~~~
 
 Gets the schema as a YAML string.
 
@@ -247,7 +247,7 @@ Gets the schema as a YAML string.
    schema_yaml = graph.schema_yaml
 
 get_structured_schema
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 Gets the schema in a structured format.
 
@@ -256,7 +256,7 @@ Gets the schema in a structured format.
    structured_schema = graph.get_structured_schema
 
 Internal Utility Methods
-----------------------
+-----------------------
 
 These methods are used internally but may be useful for advanced use cases:
 
@@ -271,7 +271,7 @@ Sanitizes collection names to be valid in ArangoDB.
    # Returns: "My_Collection_"
 
 _sanitize_input
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Sanitizes input data by truncating long strings and lists.
 
@@ -293,7 +293,7 @@ Generates a hash string for a value.
    hash_str = graph._hash("some value")
 
 _process_source
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Processes a source document for storage.
 
@@ -315,7 +315,7 @@ Processes a source document for storage.
    )
 
 _import_data
-~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Bulk imports data into collections.
 
@@ -332,7 +332,7 @@ Bulk imports data into collections.
 
 
 Example Workflow
---------------
+----------------    
 
 Here's a complete example demonstrating a typical workflow using ArangoGraph to create a knowledge graph from documents:
 
@@ -496,7 +496,7 @@ Key Features Used:
 
 
 Best Practices
--------------
+--------------
 
 1. Always use appropriate capitalization strategy for consistency
 2. Use batch operations for large data imports
@@ -505,7 +505,7 @@ Best Practices
 5. Use schema management for better data organization
 
 Error Handling
--------------
+--------------
 
 .. code-block:: python
 
@@ -517,7 +517,7 @@ Error Handling
        print(f"Database error: {e}")
 
 
--------------
+--------------
 
 
 

@@ -4,7 +4,7 @@ ArangoGraphQAChain
 This guide demonstrates how to use the ArangoGraphQAChain for question-answering against an ArangoDB graph database.
 
 Basic Setup
-----------
+-----------
 
 First, let's set up the necessary imports and create a basic instance:
 
@@ -33,10 +33,10 @@ First, let's set up the necessary imports and create a basic instance:
     )
 
 Individual Method Usage
----------------------
+-----------------------
 
 1. Basic Query Execution
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 The simplest way to use the chain is with a direct query:
 
@@ -46,7 +46,7 @@ The simplest way to use the chain is with a direct query:
     print(response["result"])
 
 2. Using Custom Input/Output Keys
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You can customize the input and output keys:
 
@@ -64,7 +64,7 @@ You can customize the input and output keys:
     print(response["answer"])
 
 3. Limiting Results
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 Control the number of results returned:
 
@@ -80,7 +80,7 @@ Control the number of results returned:
     )
 
 4. Query Explanation Mode
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Get query explanation without execution:
 
@@ -97,7 +97,7 @@ Get query explanation without execution:
     print(explanation["aql_result"])  # Contains query plan
 
 5. Read-Only Mode
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Enforce read-only operations:
 
@@ -111,7 +111,7 @@ Enforce read-only operations:
     )
 
 6. Custom AQL Examples
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 Provide example AQL queries for better generation:
 
@@ -135,7 +135,7 @@ Provide example AQL queries for better generation:
     )
 
 7. Detailed Output
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Get more detailed output including AQL query and results:
 
@@ -155,7 +155,7 @@ Get more detailed output including AQL query and results:
     print("Final Answer:", response["result"])
 
 Complete Workflow Example
-----------------------
+-------------------------
 
 Here's a complete workflow showing how to use multiple features together:
 
@@ -223,7 +223,7 @@ Here's a complete workflow showing how to use multiple features together:
         print("-" * 50)
 
 Security Considerations
---------------------
+-----------------------
 
 1. Always use appropriate database credentials with minimal required permissions
 2. Be cautious with ``allow_dangerous_requests=True``
@@ -232,7 +232,7 @@ Security Considerations
 5. Regularly review and update AQL examples to prevent injection risks
 
 Error Handling
-------------
+--------------      
 
 The chain includes built-in error handling:
 
