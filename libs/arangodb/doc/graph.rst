@@ -57,7 +57,7 @@ Creates a connection to ArangoDB.
    db = get_arangodb_client()
 
 from_db_credentials
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 Alternative constructor that creates an ArangoGraph instance directly from credentials.
 
@@ -111,6 +111,7 @@ Adds graph documents to the database.
        update_graph_definition_if_exists=True,
        capitalization_strategy="lower"
    )
+
 Example: Using LLMGraphTransformer 
 
 .. code-block:: python
@@ -256,12 +257,12 @@ Gets the schema in a structured format.
    structured_schema = graph.get_structured_schema
 
 Internal Utility Methods
------------------------
+------------------------
 
 These methods are used internally but may be useful for advanced use cases:
 
 _sanitize_collection_name
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Sanitizes collection names to be valid in ArangoDB.
 
@@ -517,7 +518,6 @@ Error Handling
        print(f"Database error: {e}")
 
 
---------------
 
 
 
