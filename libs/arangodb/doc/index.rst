@@ -101,12 +101,6 @@ Documentation Contents
 
 .. toctree::
    :maxdepth: 2
-   :caption: Advanced:
-
-   advanced/index
-
-.. toctree::
-   :maxdepth: 2
    :caption: API Reference:
 
    api_reference
