@@ -97,15 +97,12 @@ Documentation Contents
    quickstart
    vectorstores
    chat_message_histories
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Advanced:
-
-   mydirectory/index
+   graph
+   arangoqachain
 
 .. toctree::
    :maxdepth: 2
    :caption: API Reference:
 
    api_reference
+
