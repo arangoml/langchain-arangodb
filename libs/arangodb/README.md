@@ -1,9 +1,17 @@
 # 🦜️🔗🥑 LangChain ArangoDB
 
-This package contains the LangChain integration with ArangoDB.
+[![CI](https://github.com/arangoml/langchain-arangodb/actions/workflows/check_diffs.yml/badge.svg?branch=main)](https://github.com/arangoml/langchain-arangodb/actions/workflows/check_diffs.yml)
+[![Docs](https://readthedocs.org/projects/langchain-arangodb/badge/?version=latest)](https://langchain-arangodb.readthedocs.io/en/latest/?badge=latest)
 
-- [langchain-arangodb](https://pypi.org/project/langchain-arangodb/)
-- [ReadTheDocs](https://langchain-arangodb.readthedocs.io/en/latest/)
+[![PyPI version badge](https://img.shields.io/pypi/v/langchain-arangodb?color=3775A9&style=for-the-badge&logo=pypi&logoColor=FFD43B)](https://pypi.org/project/langchain-arangodb/)
+[![Python versions badge](https://img.shields.io/pypi/pyversions/langchain-arangodb?color=3776AB&style=for-the-badge&logo=python&logoColor=FFD43B)](https://pypi.org/project/langchain-arangodb/)
+
+[![License](https://img.shields.io/github/license/arangoml/langchain-arangodb?color=9E2165&style=for-the-badge)](https://github.com/arangoml/langchain-arangodb/blob/main/LICENSE)
+[![Code style: black](https://img.shields.io/static/v1?style=for-the-badge&label=code%20style&message=black&color=black)](https://github.com/psf/black)
+[![Downloads](https://img.shields.io/pepy/dt/langchain-arangodb?style=for-the-badge&color=282661
+)](https://pepy.tech/project/langchain-arangodb)
+
+This package contains the ArangoDB integration for LangChain.
 
 ## 📦 Installation
 
