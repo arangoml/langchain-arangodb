@@ -494,14 +494,6 @@ Example: Complete Chat Application
     # Clear a session when done
     app.clear_session("user_bob")
 
-API Reference
--------------
-
-.. automodule:: langchain_arangodb.chat_message_histories.arangodb
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Troubleshooting
 ---------------
 

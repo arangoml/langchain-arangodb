@@ -72,11 +72,11 @@ class ArangoVector(VectorStore):
     :param collection_name: The name of the ArangoDB collection to store
         documents. Defaults to "documents".
     :type collection_name: str
-    :param search_type: The type of search to perform. Can be either SearchType.VECTOR for pure
-        vector similarity search or SearchType.HYBRID for combining vector and
+    :param search_type: The type of search to perform. Can be either SearchType.VECTOR
+        for pure vector similarity search or SearchType.HYBRID for combining vector and
         keyword search. Defaults to SearchType.VECTOR.
     :type search_type: SearchType
-    :param embedding_field: The field name in the document to store the embedding vector.
+    :param embedding_field: The field name in the document to store the embedding vector
         Defaults to "embedding".
     :type embedding_field: str
     :param text_field: The field name in the document to store the text content.
@@ -324,7 +324,7 @@ class ArangoVector(VectorStore):
             # Add texts with metadata
             texts = ["Machine learning tutorial", "Python programming guide"]
             metadatas = [
-                {"category": "AI", "difficulty": "beginner"}, 
+                {"category": "AI", "difficulty": "beginner"},
                 {"category": "Programming", "difficulty": "intermediate"}
             ]
             ids = vector_store.add_texts(texts, metadatas=metadatas)
@@ -382,14 +382,15 @@ class ArangoVector(VectorStore):
         :param search_type: Override the default search type for this query.
             Can be either SearchType.VECTOR or SearchType.HYBRID.
         :type search_type: Optional[SearchType]
-        :param vector_weight: Weight to apply to vector similarity scores in hybrid search.
-            Only used when search_type is SearchType.HYBRID. Defaults to 1.0.
+        :param vector_weight: Weight to apply to vector similarity
+            scores in hybrid search. Only used when search_type is SearchType.HYBRID.
+            Defaults to 1.0.
         :type vector_weight: float
-        :param keyword_weight: Weight to apply to keyword search scores in hybrid search.
-            Only used when search_type is SearchType.HYBRID. Defaults to 1.0.
+        :param keyword_weight: Weight to apply to keyword search scores in hybrid
+            search. Only used when search_type is SearchType.HYBRID. Defaults to 1.0.
         :type keyword_weight: float
-        :param keyword_search_clause: Optional AQL filter clause to apply Full Text Search.
-            If empty, a default search clause will be used.
+        :param keyword_search_clause: Optional AQL filter clause to apply
+          Full Text Search. If empty, a default search clause will be used.
         :type keyword_search_clause: str
         :param metadata_clause: Optional AQL clause to return additional metadata once
             the top k results are retrieved. If specified, the metadata will be
@@ -488,14 +489,16 @@ class ArangoVector(VectorStore):
         :param search_type: Override the default search type for this query.
             Can be either SearchType.VECTOR or SearchType.HYBRID.
         :type search_type: Optional[SearchType]
-        :param vector_weight: Weight to apply to vector similarity scores in hybrid search.
-            Only used when search_type is SearchType.HYBRID. Defaults to 1.0.
+        :param vector_weight: Weight to apply to vector similarity scores in
+            hybrid search. Only used when search_type is SearchType.HYBRID.
+            Defaults to 1.0.
         :type vector_weight: float
-        :param keyword_weight: Weight to apply to keyword search scores in hybrid search.
-            Only used when search_type is SearchType.HYBRID. Defaults to 1.0.
+        :param keyword_weight: Weight to apply to keyword search scores
+            in hybrid search. Only used when search_type is SearchType.HYBRID.
+            Defaults to 1.0.
         :type keyword_weight: float
-        :param keyword_search_clause: Optional AQL filter clause to apply Full Text Search.
-            If empty, a default search clause will be used.
+        :param keyword_search_clause: Optional AQL filter clause to apply
+            Full Text Search. If empty, a default search clause will be used.
         :type keyword_search_clause: str
         :param metadata_clause: Optional AQL clause to return additional metadata once
             the top k results are retrieved.
@@ -631,7 +634,8 @@ class ArangoVector(VectorStore):
             the top k results are retrieved. If specified, the metadata will be
             added to the Document.metadata field.
         :type metadata_clause: str
-        :return: List of tuples containing (Document, score) pairs most similar to the query vector.
+        :return: List of tuples containing (Document, score)
+            pairs most similar to the query vector.
         :rtype: List[tuple[Document, float]]
         """
         aql_query, bind_vars = self._build_vector_search_query(
@@ -679,20 +683,23 @@ class ArangoVector(VectorStore):
         :type use_approx: bool
         :param filter_clause: Filter clause to apply to the query.
         :type filter_clause: str
-        :param vector_weight: Weight to apply to vector similarity scores in hybrid search.
-            Only used when search_type is SearchType.HYBRID. Defaults to 1.0.
+        :param vector_weight: Weight to apply to vector similarity scores
+            in hybrid search. Only used when search_type is SearchType.HYBRID.
+            Defaults to 1.0.
         :type vector_weight: float
-        :param keyword_weight: Weight to apply to keyword search scores in hybrid search.
-            Only used when search_type is SearchType.HYBRID. Defaults to 1.0.
+        :param keyword_weight: Weight to apply to keyword search scores in
+            hybrid search. Only used when search_type is SearchType.HYBRID.
+            Defaults to 1.0.
         :type keyword_weight: float
-        :param keyword_search_clause: Optional AQL filter clause to apply Full Text Search.
-            If empty, a default search clause will be used.
+        :param keyword_search_clause: Optional AQL filter clause to apply
+            Full Text Search. If empty, a default search clause will be used.
         :type keyword_search_clause: str
         :param metadata_clause: Optional AQL clause to return additional metadata once
             the top k results are retrieved. If specified, the metadata will be
             added to the Document.metadata field.
         :type metadata_clause: str
-        :return: List of tuples containing (Document, score) pairs most similar to the query.
+        :return: List of tuples containing (Document, score)
+            pairs most similar to thequery.
         :rtype: List[tuple[Document, float]]
         """
 
@@ -722,7 +729,7 @@ class ArangoVector(VectorStore):
         :type ids: Optional[List[str]]
         :param kwargs: Other keyword arguments that can be used to delete vectors.
         :type kwargs: Any
-        :return: True if deletion is successful, None if no ids are provided, 
+        :return: True if deletion is successful, None if no ids are provided,
             or raises an exception if an error occurs.
         :rtype: Optional[bool]
         """
@@ -908,8 +915,9 @@ class ArangoVector(VectorStore):
         :param collection_name: The name of the ArangoDB collection to use.
             Defaults to "documents".
         :type collection_name: str
-        :param search_type: The type of search to perform. Can be either SearchType.VECTOR
-            or SearchType.HYBRID. Defaults to SearchType.VECTOR.
+        :param search_type: The type of search to perform.
+            Can be either SearchType.VECTOR or SearchType.HYBRID.
+            Defaults to SearchType.VECTOR.
         :type search_type: SearchType
         :param embedding_field: The field name to store embeddings. Defaults to
             "embedding".
@@ -918,8 +926,8 @@ class ArangoVector(VectorStore):
         :type text_field: str
         :param index_name: The name of the vector index. Defaults to "vector_index".
         :type index_name: str
-        :param distance_strategy: The distance metric to use. Can be 
-            DistanceStrategy.COSINE or DistanceStrategy.EUCLIDEAN_DISTANCE. 
+        :param distance_strategy: The distance metric to use. Can be
+            DistanceStrategy.COSINE or DistanceStrategy.EUCLIDEAN_DISTANCE.
             Defaults to DistanceStrategy.COSINE.
         :type distance_strategy: DistanceStrategy
         :param num_centroids: Number of centroids for vector index. Defaults to 1.
@@ -935,7 +943,8 @@ class ArangoVector(VectorStore):
         :param keyword_index_name: Name of the keyword search index. Defaults to
             "keyword_index".
         :type keyword_index_name: str
-        :param keyword_analyzer: Text analyzer for keyword search. Defaults to "text_en".
+        :param keyword_analyzer: Text analyzer for keyword search.
+            Defaults to "text_en".
         :type keyword_analyzer: str
         :param rrf_constant: Constant for RRF scoring in hybrid search. Defaults to 60.
         :type rrf_constant: int
@@ -1046,17 +1055,20 @@ class ArangoVector(VectorStore):
         :param collection_name: Name of the existing ArangoDB collection.
         :type collection_name: str
         :param text_properties_to_embed: List of document properties containing text to
-            embed. These properties will be concatenated to create the text for embedding.
+            embed. These properties will be concatenated to create
+            the text for embedding.
         :type text_properties_to_embed: List[str]
         :param embedding: The embedding function to use for converting text to vectors.
         :type embedding: Embeddings
         :param database: The ArangoDB database instance to use.
         :type database: StandardDatabase
-        :param embedding_field: The field name to store embeddings. Defaults to "embedding".
+        :param embedding_field: The field name to store embeddings.
+            Defaults to "embedding".
         :type embedding_field: str
         :param text_field: The field name to store text content. Defaults to "text".
         :type text_field: str
-        :param batch_size: Number of documents to process in each batch. Defaults to 1000.
+        :param batch_size: Number of documents to process in each batch.
+            Defaults to 1000.
         :type batch_size: int
         :param aql_return_text_query: Custom AQL query to extract text from properties.
             Defaults to "RETURN doc[p]".
@@ -1067,12 +1079,15 @@ class ArangoVector(VectorStore):
         :param skip_existing_embeddings: Whether to skip documents that already have
             embeddings. Defaults to False.
         :type skip_existing_embeddings: bool
-        :param search_type: The type of search to perform. Can be either SearchType.VECTOR or
-            SearchType.HYBRID. Defaults to SearchType.VECTOR.
+        :param search_type: The type of search to perform.
+            Can be either SearchType.VECTOR or SearchType.HYBRID.
+            Defaults to SearchType.VECTOR.
         :type search_type: SearchType
-        :param keyword_index_name: Name of the keyword search index. Defaults to "keyword_index".
+        :param keyword_index_name: Name of the keyword search index.
+            Defaults to "keyword_index".
         :type keyword_index_name: str
-        :param keyword_analyzer: Text analyzer for keyword search. Defaults to "text_en".
+        :param keyword_analyzer: Text analyzer for keyword search.
+            Defaults to "text_en".
         :type keyword_analyzer: str
         :param rrf_constant: Constant for RRF scoring in hybrid search. Defaults to 60.
         :type rrf_constant: int
@@ -1080,7 +1095,8 @@ class ArangoVector(VectorStore):
         :type rrf_search_limit: int
         :param kwargs: Additional keyword arguments passed to the constructor.
         :type kwargs: Any
-        :return: A new ArangoVector instance with embeddings created from the collection.
+        :return: A new ArangoVector instance with embeddings created from the
+            collection.
         :rtype: ArangoVector
         """
         if not text_properties_to_embed:
@@ -1227,7 +1243,7 @@ class ArangoVector(VectorStore):
                 LIMIT {k}
                 {filter_clause if use_approx else ""}
                 LET data = KEEP(doc, {return_fields_list})
-                LET metadata = {f'({metadata_clause})' if metadata_clause else '{}'}
+                LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
                 RETURN {{data, score, metadata}}
         """
 
@@ -1321,7 +1337,7 @@ class ArangoVector(VectorStore):
                         LIMIT 1
                         RETURN KEEP(doc, {return_fields_list})
                 )
-                LET metadata = {f'({metadata_clause})' if metadata_clause else '{}'}
+                LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
                 RETURN {{ data, score, metadata }}
         """
 
