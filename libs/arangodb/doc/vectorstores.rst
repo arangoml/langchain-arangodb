@@ -548,19 +548,6 @@ Example: Complete Workflow
     for doc in diverse_results:
         print(f"- {doc.page_content}")
 
-API Reference
--------------
-
-.. automodule:: langchain_arangodb.vectorstores.arangodb_vector
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: langchain_arangodb.vectorstores.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Future Enhancements
 -------------------
 
