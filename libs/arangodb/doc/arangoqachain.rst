@@ -1,191 +1,252 @@
 ArangoGraphQAChain
-==================
+========================
 
-.. currentmodule:: langchain_arangodb.chains.graph_qa.arango_graph_qa
+This guide demonstrates how to use the ArangoGraphQAChain for question-answering against an ArangoDB graph database.
 
-.. autoclass:: ArangoGraphQAChain
-    :members:
-    :undoc-members:
-    :show-inheritance:
+Basic Setup
+----------
 
-Overview
---------
-
-The ``ArangoGraphQAChain`` is a LangChain-compatible class that enables natural language
-question answering over a graph database by generating and executing AQL (ArangoDB Query Language)
-statements. It combines prompt-based few-shot generation, error recovery, and semantic interpretation
-of AQL results.
-
-.. important::
-
-   **Security Warning**: This chain can generate potentially dangerous queries (e.g., deletions or updates).
-   It is highly recommended to use database credentials with limited read-only permissions unless explicitly
-   allowing mutation operations by setting ``allow_dangerous_requests=True`` and carefully scoping access.
-
-Initialization
---------------
-
-You can create an instance in two ways:
-
-1. Manually by passing preconfigured prompt chains and a graph store.
-2. Using the classmethod :meth:`from_llm`.
+First, let's set up the necessary imports and create a basic instance:
 
 .. code-block:: python
 
-    from langchain_arangodb.chains.graph_qa import ArangoGraphQAChain
-    from langchain_openai import ChatOpenAI
-    from langchain_arangodb.graphs import ArangoGraph
+    from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
+    from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
+    from langchain.chat_models import ChatOpenAI
+    from arango import ArangoClient
 
-    llm = ChatOpenAI(model="gpt-4", temperature=0)
-    graph = ArangoGraph.from_connection_args(...)
+    # Initialize ArangoDB connection
+    client = ArangoClient()
+    db = client.db("your_database", username="user", password="pass")
+    
+    # Create graph instance
+    graph = ArangoGraph(db)
+    
+    # Initialize LLM
+    llm = ChatOpenAI(temperature=0)
+    
+    # Create the chain
+    chain = ArangoGraphQAChain.from_llm(
+        llm=llm,
+        graph=graph,
+        allow_dangerous_requests=True  # Be cautious with this setting
+    )
+
+Individual Method Usage
+---------------------
+
+1. Basic Query Execution
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The simplest way to use the chain is with a direct query:
+
+.. code-block:: python
+
+    response = chain.invoke({"query": "Who starred in Pulp Fiction?"})
+    print(response["result"])
+
+2. Using Custom Input/Output Keys
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can customize the input and output keys:
+
+.. code-block:: python
 
     chain = ArangoGraphQAChain.from_llm(
         llm=llm,
         graph=graph,
         allow_dangerous_requests=True,
+        input_key="question",
+        output_key="answer"
     )
+    
+    response = chain.invoke({"question": "Who directed Inception?"})
+    print(response["answer"])
 
-Attributes
-----------
+3. Limiting Results
+~~~~~~~~~~~~~~~~
 
-.. attribute:: input_key
-   :type: str
-
-   Default input key for question: ``"query"``.
-
-.. attribute:: output_key
-   :type: str
-
-   Default output key for answer: ``"result"``.
-
-.. attribute:: top_k
-   :type: int
-
-   Number of results to return from the AQL query. Defaults to ``10``.
-
-.. attribute:: return_aql_query
-   :type: bool
-
-   Whether to include the generated AQL query in the output. Defaults to ``False``.
-
-.. attribute:: return_aql_result
-   :type: bool
-
-   Whether to include the raw AQL query results in the output. Defaults to ``False``.
-
-.. attribute:: max_aql_generation_attempts
-   :type: int
-
-   Maximum retries for generating a valid AQL query. Defaults to ``3``.
-
-.. attribute:: execute_aql_query
-   :type: bool
-
-   If ``False``, the AQL query is only explained (not executed). Defaults to ``True``.
-
-.. attribute:: output_list_limit
-   :type: int
-
-   Limit on the number of list items to include in the response context. Defaults to ``32``.
-
-.. attribute:: output_string_limit
-   :type: int
-
-   Limit on string length to include in the response context. Defaults to ``256``.
-
-.. attribute:: force_read_only_query
-   :type: bool
-
-   If ``True``, raises an error if the generated AQL query includes write operations.
-
-.. attribute:: allow_dangerous_requests
-   :type: bool
-
-   Required to be set ``True`` to acknowledge that write operations may be generated.
-
-Methods
--------
-
-.. method:: from_llm(llm, qa_prompt=AQL_QA_PROMPT, aql_generation_prompt=AQL_GENERATION_PROMPT, aql_fix_prompt=AQL_FIX_PROMPT, **kwargs)
-
-   Create a new QA chain from a language model and default prompts.
-
-   :param llm: A language model (e.g., ChatOpenAI).
-   :type llm: BaseLanguageModel
-   :param qa_prompt: Prompt template for QA step.
-   :param aql_generation_prompt: Prompt template for AQL generation.
-   :param aql_fix_prompt: Prompt template for AQL error correction.
-   :return: An instance of ArangoGraphQAChain.
-
-.. method:: _call(inputs: Dict[str, Any], run_manager: Optional[CallbackManagerForChainRun] = None) -> Dict[str, Any]
-
-   Executes the QA chain: generates AQL, optionally retries on error, and returns an answer.
-
-   :param inputs: Dictionary with key matching ``input_key`` (default: ``"query"``).
-   :param run_manager: Optional callback manager.
-   :return: Dictionary with key ``output_key`` (default: ``"result"``), and optionally ``aql_query`` and ``aql_result``.
-
-.. method:: _is_read_only_query(aql_query: str) -> Tuple[bool, Optional[str]]
-
-   Checks whether a generated AQL query contains any write operations.
-
-   :param aql_query: The query string.
-   :return: Tuple (True/False, operation name if found).
-
-Usage Example
--------------
+Control the number of results returned:
 
 .. code-block:: python
 
-    from langchain_openai import ChatOpenAI
-    from langchain_arangodb.graphs import ArangoGraph
-    from langchain_arangodb.chains.graph_qa import ArangoGraphQAChain
-
-    llm = ChatOpenAI(model="gpt-4")
-    graph = ArangoGraph.from_connection_args(
-        username="readonly",
-        password="password",
-        db_name="test_db",
-        host="localhost",
-        port=8529,
-        graph_name="my_graph"
+    chain = ArangoGraphQAChain.from_llm(
+        llm=llm,
+        graph=graph,
+        allow_dangerous_requests=True,
+        top_k=5,  # Return only top 5 results
+        output_list_limit=16,  # Limit list length in response
+        output_string_limit=128  # Limit string length in response
     )
 
-    qa_chain = ArangoGraphQAChain.from_llm(
+4. Query Explanation Mode
+~~~~~~~~~~~~~~~~~~~~~~
+
+Get query explanation without execution:
+
+.. code-block:: python
+
+    chain = ArangoGraphQAChain.from_llm(
+        llm=llm,
+        graph=graph,
+        allow_dangerous_requests=True,
+        execute_aql_query=False  # Only explain, don't execute
+    )
+    
+    explanation = chain.invoke({"query": "Find all movies released after 2020"})
+    print(explanation["aql_result"])  # Contains query plan
+
+5. Read-Only Mode
+~~~~~~~~~~~~~~
+
+Enforce read-only operations:
+
+.. code-block:: python
+
+    chain = ArangoGraphQAChain.from_llm(
+        llm=llm,
+        graph=graph,
+        allow_dangerous_requests=True,
+        force_read_only_query=True  # Prevents write operations
+    )
+
+6. Custom AQL Examples
+~~~~~~~~~~~~~~~~~~~
+
+Provide example AQL queries for better generation:
+
+.. code-block:: python
+
+    example_queries = """
+    FOR m IN Movies
+        FILTER m.year > 2020
+        RETURN m.title
+    
+    FOR a IN Actors
+        FILTER a.awards > 0
+        RETURN a.name
+    """
+    
+    chain = ArangoGraphQAChain.from_llm(
+        llm=llm,
+        graph=graph,
+        allow_dangerous_requests=True,
+        aql_examples=example_queries
+    )
+
+7. Detailed Output
+~~~~~~~~~~~~~~~
+
+Get more detailed output including AQL query and results:
+
+.. code-block:: python
+
+    chain = ArangoGraphQAChain.from_llm(
         llm=llm,
         graph=graph,
         allow_dangerous_requests=True,
         return_aql_query=True,
         return_aql_result=True
     )
+    
+    response = chain.invoke({"query": "Who acted in The Matrix?"})
+    print("Query:", response["aql_query"])
+    print("Raw Results:", response["aql_result"])
+    print("Final Answer:", response["result"])
 
-    query = "Who are the friends of Alice who live in San Francisco?"
+Complete Workflow Example
+----------------------
 
-    response = qa_chain.invoke({"query": query})
+Here's a complete workflow showing how to use multiple features together:
 
-    print(response["result"])       # Natural language answer
-    print(response["aql_query"])    # AQL query generated
-    print(response["aql_result"])   # Raw AQL output
+.. code-block:: python
+
+    from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
+    from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
+    from langchain.chat_models import ChatOpenAI
+    from arango import ArangoClient
+
+    # 1. Setup Database Connection
+    client = ArangoClient()
+    db = client.db("movies_db", username="user", password="pass")
+    
+    # 2. Initialize Graph
+    graph = ArangoGraph(db)
+    
+    # 3. Create Collections and Sample Data
+    if not db.has_collection("Movies"):
+        movies = db.create_collection("Movies")
+        movies.insert({"_key": "matrix", "title": "The Matrix", "year": 1999})
+    
+    if not db.has_collection("Actors"):
+        actors = db.create_collection("Actors")
+        actors.insert({"_key": "keanu", "name": "Keanu Reeves"})
+    
+    if not db.has_collection("ActedIn"):
+        acted_in = db.create_collection("ActedIn", edge=True)
+        acted_in.insert({
+            "_from": "Actors/keanu",
+            "_to": "Movies/matrix"
+        })
+    
+    # 4. Refresh Schema
+    graph.refresh_schema()
+    
+    # 5. Initialize Chain with Advanced Features
+    llm = ChatOpenAI(temperature=0)
+    chain = ArangoGraphQAChain.from_llm(
+        llm=llm,
+        graph=graph,
+        allow_dangerous_requests=True,
+        top_k=5,
+        force_read_only_query=True,
+        return_aql_query=True,
+        return_aql_result=True,
+        output_list_limit=20,
+        output_string_limit=200
+    )
+    
+    # 6. Run Multiple Queries
+    queries = [
+        "Who acted in The Matrix?",
+        "What movies were released in 1999?",
+        "List all actors in the database"
+    ]
+    
+    for query in queries:
+        print(f"\nProcessing query: {query}")
+        response = chain.invoke({"query": query})
+        
+        print("AQL Query:", response["aql_query"])
+        print("Raw Results:", response["aql_result"])
+        print("Final Answer:", response["result"])
+        print("-" * 50)
 
 Security Considerations
------------------------
+--------------------
 
-- Always set `allow_dangerous_requests=True` explicitly if write permissions exist.
-- Prefer read-only database roles when using this chain.
-- Never expose this chain to arbitrary external inputs without sanitization.
+1. Always use appropriate database credentials with minimal required permissions
+2. Be cautious with ``allow_dangerous_requests=True``
+3. Use ``force_read_only_query=True`` when only read operations are needed
+4. Monitor and log query execution in production environments
+5. Regularly review and update AQL examples to prevent injection risks
 
-API Reference
--------------
+Error Handling
+------------
 
-.. automodule:: langchain_arangodb.chains.graph_qa.arangodb
-   :members: ArangoGraphQAChain
-   :undoc-members:
-   :show-inheritance:
+The chain includes built-in error handling:
 
-References
-----------
+.. code-block:: python
 
-- `LangChain Graph QA Guide <https://python.langchain.com/docs/integrations/vectorstores/arangodb>`_
-- `ArangoDB AQL Documentation <https://www.arangodb.com/docs/stable/aql/>`_
+    try:
+        response = chain.invoke({"query": "Find all movies"})
+    except ValueError as e:
+        if "Maximum amount of AQL Query Generation attempts" in str(e):
+            print("Failed to generate valid AQL after multiple attempts")
+        elif "Write operations are not allowed" in str(e):
+            print("Attempted write operation in read-only mode")
+        else:
+            print(f"Other error: {e}")
 
-
+The chain will automatically attempt to fix invalid AQL queries up to 
+``max_aql_generation_attempts`` times (default: 3) before raising an error.

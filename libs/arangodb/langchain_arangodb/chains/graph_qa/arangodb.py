@@ -123,17 +123,13 @@ class ArangoGraphQAChain(Chain):
         cls,
         llm: BaseLanguageModel,
         *,
-        qa_prompt: BasePromptTemplate = AQL_QA_PROMPT,
-        aql_generation_prompt: BasePromptTemplate = AQL_GENERATION_PROMPT,
-        aql_fix_prompt: BasePromptTemplate = AQL_FIX_PROMPT,
+        qa_prompt: Optional[BasePromptTemplate] = None,
+        aql_generation_prompt: Optional[BasePromptTemplate] = None,
+        aql_fix_prompt: Optional[BasePromptTemplate] = None,
         **kwargs: Any,
     ) -> ArangoGraphQAChain:
-        """Initialize from LLM."""
-        qa_chain = qa_prompt | llm
-        aql_generation_chain = aql_generation_prompt | llm
-        aql_fix_chain = aql_fix_prompt | llm
-        """
-        Initialize from LLM.
+        """Initialize from LLM.
+
         :param llm: The language model to use.
         :type llm: BaseLanguageModel
         :param qa_prompt: The prompt to use for the QA chain.
@@ -148,6 +144,16 @@ class ArangoGraphQAChain(Chain):
         :rtype: ArangoGraphQAChain
         :raises ValueError: If the LLM is not provided.
         """
+        if qa_prompt is None:
+            qa_prompt = AQL_QA_PROMPT
+        if aql_generation_prompt is None:
+            aql_generation_prompt = AQL_GENERATION_PROMPT
+        if aql_fix_prompt is None:
+            aql_fix_prompt = AQL_FIX_PROMPT
+
+        qa_chain = qa_prompt | llm
+        aql_generation_chain = aql_generation_prompt | llm
+        aql_fix_chain = aql_fix_prompt | llm
 
         return cls(
             qa_chain=qa_chain,

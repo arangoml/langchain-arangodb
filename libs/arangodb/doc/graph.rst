@@ -1,242 +1,524 @@
-.. _arangograph_graph_store:
-
-===========
 ArangoGraph
-===========
+=====================
 
-The ``ArangoGraph`` class is a comprehensive wrapper for ArangoDB, designed to facilitate graph operations within the LangChain ecosystem. It implements the ``GraphStore`` interface, providing robust functionalities for schema generation, AQL querying, and constructing complex graphs from ``GraphDocument`` objects.
+The ``ArangoGraph`` class provides an interface to interact with ArangoDB for graph operations in LangChain.
 
-.. warning::
-    **Security Note**: This class interacts directly with your database. Ensure that the database connection credentials are narrowly-scoped with the minimum necessary permissions. Failure to do so can result in data corruption, data loss, or exposure of sensitive information if the calling code attempts unintended mutations or reads. See `LangChain Security Docs <https://python.langchain.com/docs/security>`_ for more information.
+Installation
+-----------
 
-Overview
---------
+.. code-block:: bash
 
-``ArangoGraph`` simplifies the integration of ArangoDB as a knowledge graph backend for LLM applications.
-
-Core Features:
-~~~~~~~~~~~~~~
-
-* **Automatic Schema Generation**: Introspects the database to generate a detailed schema, which is crucial for providing context to LLMs. The schema can be customized based on a specific graph or sampled from collections.
-* **Graph Construction**: Ingests lists of ``GraphDocument`` objects, efficiently creating nodes and relationships in ArangoDB.
-* **Flexible Data Modeling**: Supports two primary strategies for storing graph data:
-    1.  **Unified Entity Collections**: All nodes and relationships are stored in single, designated collections (e.g., "ENTITY", "LINKS_TO").
-    2.  **Type-Based Collections**: Nodes and relationships are stored in separate collections based on their assigned `type` (e.g., "Person", "Company", "WORKS_FOR").
-* **Embedding Integration**: Seamlessly generates and stores vector embeddings for nodes, relationships, and source documents using any LangChain-compatible embedding provider.
-* **AQL Querying**: Provides direct methods to execute and explain AQL queries, with built-in sanitization to manage large data fields for LLM processing.
-* **Convenience Initializers**: Allows for easy instantiation from environment variables or direct credentials.
-
-Initialization
---------------
-
-The primary way to initialize ``ArangoGraph`` is by providing a `python-arango` database instance.
-
-.. code-block:: python
-
-    from arango import ArangoClient
-    from langchain_arangodb import ArangoGraph
-
-    # 1. Connect to ArangoDB
-    client = ArangoClient(hosts="http://localhost:8529")
-    db = client.db("your_db_name", username="root", password="your_password")
-
-    # 2. Initialize ArangoGraph
-    # Schema will be generated automatically on initialization
-    graph = ArangoGraph(db=db)
-
-    # You can now access the schema
-    print(graph.schema_yaml)
-
-
-Convenience Constructor
-~~~~~~~~~~~~~~~~~~~~~~~
-
-For ease of use, you can initialize directly from credentials or environment variables using the ``from_db_credentials`` class method.
-
-**Environment Variables:**
-
-* ``ARANGODB_URL`` (default: "http://localhost:8529")
-* ``ARANGODB_DBNAME`` (default: "_system")
-* ``ARANGODB_USERNAME`` (default: "root")
-* ``ARANGODB_PASSWORD`` (default: "")
-
-.. code-block:: python
-
-    # This will automatically use credentials from environment variables
-    graph_from_env = ArangoGraph.from_db_credentials()
-
-    # Or pass them directly
-    graph_from_args = ArangoGraph.from_db_credentials(
-        url="http://localhost:8529",
-        dbname="my_app_db",
-        username="my_user",
-        password="my_password"
-    )
-
-Configuration
--------------
-
-The behavior of ``ArangoGraph`` can be configured during initialization:
-
-.. py:class:: ArangoGraph(db, generate_schema_on_init=True, schema_sample_ratio=0, schema_graph_name=None, schema_include_examples=True, schema_list_limit=32, schema_string_limit=256)
-
-   :param db: An instance of `arango.database.StandardDatabase`.
-   :type db: arango.database.StandardDatabase
-   :param generate_schema_on_init: If ``True``, automatically generates the graph schema upon initialization.
-   :type generate_schema_on_init: bool
-   :param schema_sample_ratio: The ratio (0 to 1) of documents to sample from each collection for schema generation. A value of `0` samples one document.
-   :type schema_sample_ratio: float
-   :param schema_graph_name: If specified, the schema generation will be limited to the collections within this named graph.
-   :type schema_graph_name: str, optional
-   :param schema_include_examples: If ``True``, includes example values from sampled documents in the schema.
-   :type schema_include_examples: bool
-   :param schema_list_limit: The maximum length for lists to be included as examples in the schema.
-   :type schema_list_limit: int
-   :param schema_string_limit: The maximum length for strings to be included as examples in the schema.
-   :type schema_string_limit: int
-
-Schema Management
------------------
-
-The graph schema provides a structured view of your data, which is essential for LLMs to generate accurate AQL queries.
-
-### Accessing the Schema
-
-Once initialized or refreshed, the schema is cached and can be accessed in various formats.
-
-.. code-block:: python
-
-    # Get schema as a Python dictionary
-    structured_schema = graph.schema
-
-    # Get schema as a JSON string
-    json_schema = graph.schema_json
-
-    # Get schema as a YAML string (often best for LLM prompts)
-    yaml_schema = graph.schema_yaml
-    print(yaml_schema)
-
-
-### Refreshing the Schema
-
-If your graph's structure changes, you can refresh the schema at any time.
-
-.. code-block:: python
-
-    # Refresh schema using default settings
-    graph.refresh_schema()
-
-    # Refresh schema for a specific graph with more samples
-    graph.refresh_schema(graph_name="my_specific_graph", sample_ratio=0.1)
-
-
-Adding Graph Documents
-----------------------
-
-The ``add_graph_documents`` method is the primary way to populate your graph. It takes a list of ``GraphDocument`` objects and intelligently creates nodes and relationships.
+   pip install langchain-arangodb
 
 Basic Usage
-~~~~~~~~~~~
+----------
 
 .. code-block:: python
 
-    from langchain_core.documents import Document
-    from langchain_arangodb.graphs.graph_document import Node, Relationship, GraphDocument
-    from langchain_openai import OpenAIEmbeddings
+   from langchain_arangodb.graphs.arangodb_graph import ArangoGraph, get_arangodb_client
 
-    # 1. Define nodes and relationships
-    node1 = Node(id="Alice", type="Person", properties={"age": 30})
-    node2 = Node(id="Bob", type="Person", properties={"age": 32})
-    relationship = Relationship(source=node1, target=node2, type="KNOWS", properties={"since": 2021})
+   # Connect to ArangoDB
+   db = get_arangodb_client(
+       url="http://localhost:8529",
+       dbname="_system",
+       username="root",
+       password="password"
+   )
 
-    # 2. Define the source document
-    source_doc = Document(page_content="Alice and Bob have been friends since 2021.")
-
-    # 3. Create a GraphDocument
-    graph_doc = GraphDocument(nodes=[node1, node2], relationships=[relationship], source=source_doc)
-
-    # 4. Add to the graph
-    graph.add_graph_documents([graph_doc])
+   # Initialize ArangoGraph
+   graph = ArangoGraph(db)
 
 
-Advanced Configuration
-~~~~~~~~~~~~~~~~~~~~~~
-
-The method offers extensive options for controlling how data is stored.
-
-.. py:method:: add_graph_documents(graph_documents, include_source=False, graph_name=None, use_one_entity_collection=True, embeddings=None, embed_nodes=False, ...)
-
-   :param graph_documents: A list of ``GraphDocument`` objects to add.
-   :type graph_documents: List[GraphDocument]
-   :param include_source: If ``True``, stores the source document and links it to the extracted nodes.
-   :type include_source: bool
-   :param graph_name: The name of an ArangoDB graph to create or update with the new edge definitions.
-   :type graph_name: str, optional
-   :param update_graph_definition_if_exists: If ``True``, adds new edge definitions to an existing graph. Recommended when `use_one_entity_collection` is ``False``.
-   :type update_graph_definition_if_exists: bool
-   :param use_one_entity_collection: If ``True``, all nodes are stored in a single "ENTITY" collection. If ``False``, nodes are stored in collections named after their `type`.
-   :type use_one_entity_collection: bool
-   :param embeddings: An embedding model to generate vectors for nodes, relationships, or sources.
-   :type embeddings: Embeddings, optional
-   :param embed_nodes: If ``True``, generates and stores embeddings for nodes.
-   :type embed_nodes: bool
-   :param capitalization_strategy: Applies capitalization ("lower", "upper", "none") to node IDs to aid in entity resolution.
-   :type capitalization_strategy: str
-   :param ...: Other parameters include `batch_size`, `insert_async`, and custom collection names.
-
-Example: Using Type-Based Collections and Embeddings
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    graph.add_graph_documents(
-        [graph_doc],
-        graph_name="people_graph",
-        use_one_entity_collection=False,  # Creates 'Person' node collection and 'KNOWS' edge collection
-        update_graph_definition_if_exists=True,
-        include_source=True,
-        embeddings=OpenAIEmbeddings(),
-        embed_nodes=True  # Embeds 'Alice' and 'Bob' nodes
-    )
-
-
-Querying the Graph
-------------------
-
-You can execute AQL queries directly through the ``query`` method or get their execution plan using ``explain``.
-
-.. code-block:: python
-
-    # Execute a query
-    aql_query = "FOR p IN Person FILTER p.age > 30 RETURN p"
-    results = graph.query(aql_query)
-    print(results)
-
-    # Get the query plan without executing it
-    plan = graph.explain(aql_query)
-    print(plan)
-
-
-The ``query`` method automatically sanitizes results by truncating long strings and lists, making the output suitable for LLM processing.
-
-.. code-block:: python
-
-    # Example of sanitization
-    long_text_query = "FOR doc IN my_docs LIMIT 1 RETURN doc"
-    results = graph.query(
-        long_text_query,
-        params={"top_k": 1, "string_limit": 64} # Custom limits
-    )
-    # The 'text' field in the result will be truncated if it exceeds 64 chars.
-
-
-API Reference
+Factory Methods
 -------------
 
-.. automodule:: langchain_arangodb.graphs.arangodb_graph
-   :members:
-   :undoc-members:
-   :show-inheritance:
+get_arangodb_client
+~~~~~~~~~~~~~~~~~~
+
+Creates a connection to ArangoDB.
+
+.. code-block:: python
+
+   from langchain_arangodb.graphs.arangodb_graph import get_arangodb_client
+
+   # Using direct credentials
+   db = get_arangodb_client(
+       url="http://localhost:8529",
+       dbname="_system", 
+       username="root",
+       password="password"
+   )
+
+   # Using environment variables
+   # ARANGODB_URL
+   # ARANGODB_DBNAME
+   # ARANGODB_USERNAME
+   # ARANGODB_PASSWORD
+   db = get_arangodb_client()
+
+from_db_credentials
+~~~~~~~~~~~~~~~~~~
+
+Alternative constructor that creates an ArangoGraph instance directly from credentials.
+
+.. code-block:: python
+
+   graph = ArangoGraph.from_db_credentials(
+       url="http://localhost:8529",
+       dbname="_system",
+       username="root", 
+       password="password"
+   )
+
+Core Methods
+-----------
+
+add_graph_documents
+~~~~~~~~~~~~~~~~~~
+
+Adds graph documents to the database.
+
+.. code-block:: python
+
+   from langchain_core.documents import Document
+   from langchain_arangodb.graphs.graph_document import GraphDocument, Node, Relationship
+
+   # Create nodes and relationships
+   nodes = [
+       Node(id="1", type="Person", properties={"name": "Alice"}),
+       Node(id="2", type="Company", properties={"name": "Acme"})
+   ]
+   
+   relationship = Relationship(
+       source=nodes[0],
+       target=nodes[1], 
+       type="WORKS_AT",
+       properties={"since": 2020}
+   )
+
+   # Create graph document
+   doc = GraphDocument(
+       nodes=nodes,
+       relationships=[relationship],
+       source=Document(page_content="Employee record")
+   )
+
+   # Add to database
+   graph.add_graph_documents(
+       graph_documents=[doc],
+       include_source=True,
+       graph_name="EmployeeGraph",
+       update_graph_definition_if_exists=True,
+       capitalization_strategy="lower"
+   )
+Example: Using LLMGraphTransformer 
+
+.. code-block:: python
+
+   from langchain.experimental import LLMGraphTransformer
+   from langchain_core.chat_models import ChatOpenAI
+   from langchain_openai import OpenAIEmbeddings
+
+   # Text to transform into a graph
+   text = "Bob knows Alice, John knows Bob."
+
+   # Initialize transformer with ChatOpenAI
+   transformer = LLMGraphTransformer(
+       llm=ChatOpenAI(temperature=0)
+   )
+
+   # Create graph document from text
+   graph_doc = transformer.create_graph_doc(text)
+
+   # Add to ArangoDB with embeddings
+   graph.add_graph_documents(
+       [graph_doc],
+       graph_name="people_graph",
+       use_one_entity_collection=False,  # Creates 'Person' node collection and 'KNOWS' edge collection
+       update_graph_definition_if_exists=True,
+       include_source=True,
+       embeddings=OpenAIEmbeddings(),
+       embed_nodes=True  # Embeds 'Alice' and 'Bob' nodes
+   )
+
+query
+~~~~~
+
+Executes AQL queries against the database.
+
+.. code-block:: python
+
+   # Simple query
+   result = graph.query("FOR doc IN users RETURN doc")
+
+   # Query with parameters
+   result = graph.query(
+       "FOR u IN users FILTER u.age > @min_age RETURN u",
+       params={"min_age": 21}
+   )
+
+
+
+explain
+~~~~~~~
+
+Gets the query execution plan.
+
+.. code-block:: python
+
+   plan = graph.explain(
+       "FOR doc IN users RETURN doc"
+   )
+
+Schema Management
+---------------
+
+refresh_schema
+~~~~~~~~~~~~~
+
+Updates the internal schema representation.
+
+.. code-block:: python
+
+   graph.refresh_schema(
+       sample_ratio=0.1,  # Sample 10% of documents
+       graph_name="MyGraph",
+       include_examples=True
+   )
+
+generate_schema
+~~~~~~~~~~~~~~
+
+Generates a schema representation of the database.
+
+.. code-block:: python
+
+   schema = graph.generate_schema(
+       sample_ratio=0.1,
+       graph_name="MyGraph",
+       include_examples=True,
+       list_limit=32
+   )
+
+set_schema
+~~~~~~~~~
+
+Sets a custom schema.
+
+.. code-block:: python
+
+   custom_schema = {
+       "collections": {
+           "users": {"fields": ["name", "age"]},
+           "products": {"fields": ["name", "price"]}
+       }
+   }
+   
+   graph.set_schema(custom_schema)
+
+Schema Properties
+---------------
+
+schema
+~~~~~~
+
+Gets the current schema as a dictionary.
+
+.. code-block:: python
+
+   current_schema = graph.schema
+
+schema_json
+~~~~~~~~~~
+
+Gets the schema as a JSON string.
+
+.. code-block:: python
+
+   schema_json = graph.schema_json
+
+schema_yaml
+~~~~~~~~~~
+
+Gets the schema as a YAML string.
+
+.. code-block:: python
+
+   schema_yaml = graph.schema_yaml
+
+get_structured_schema
+~~~~~~~~~~~~~~~~~~~
+
+Gets the schema in a structured format.
+
+.. code-block:: python
+
+   structured_schema = graph.get_structured_schema
+
+Internal Utility Methods
+----------------------
+
+These methods are used internally but may be useful for advanced use cases:
+
+_sanitize_collection_name
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Sanitizes collection names to be valid in ArangoDB.
+
+.. code-block:: python
+
+   safe_name = graph._sanitize_collection_name("My Collection!")
+   # Returns: "My_Collection_"
+
+_sanitize_input
+~~~~~~~~~~~~~~
+
+Sanitizes input data by truncating long strings and lists.
+
+.. code-block:: python
+
+   sanitized = graph._sanitize_input(
+       {"list": [1,2,3,4,5,6]}, 
+       list_limit=5,
+       string_limit=100
+   )
+
+_hash
+~~~~~
+
+Generates a hash string for a value.
+
+.. code-block:: python
+
+   hash_str = graph._hash("some value")
+
+_process_source
+~~~~~~~~~~~~~~
+
+Processes a source document for storage.
+
+.. code-block:: python
+
+   from langchain_core.documents import Document
+   
+   source = Document(
+       page_content="test content",
+       metadata={"author": "Alice"}
+   )
+   
+   source_id = graph._process_source(
+       source=source,
+       source_collection_name="sources",
+       source_embedding=[0.1, 0.2, 0.3],
+       embedding_field="embedding",
+       insertion_db=db
+   )
+
+_import_data
+~~~~~~~~~~~
+
+Bulk imports data into collections.
+
+.. code-block:: python
+
+   data = {
+       "users": [
+           {"_key": "1", "name": "Alice"},
+           {"_key": "2", "name": "Bob"}
+       ]
+   }
+   
+   graph._import_data(db, data, is_edge=False)
+
+
+Example Workflow
+--------------
+
+Here's a complete example demonstrating a typical workflow using ArangoGraph to create a knowledge graph from documents:
+
+.. code-block:: python
+
+   from langchain_core.documents import Document
+   from langchain_core.embeddings import Embeddings
+   from langchain_arangodb.graphs.arangodb_graph import ArangoGraph, get_arangodb_client
+   from langchain_arangodb.graphs.graph_document import GraphDocument, Node, Relationship
+
+   # 1. Setup embeddings (example using OpenAI - you can use any embeddings model)
+   from langchain_openai import OpenAIEmbeddings
+   embeddings = OpenAIEmbeddings()
+   # 2. Connect to ArangoDB and initialize graph
+   db = get_arangodb_client(
+       url="http://localhost:8529",
+       dbname="knowledge_base",
+       username="root",
+       password="password"
+   )
+   graph = ArangoGraph(db)
+
+   # 3. Create sample documents with relationships
+   documents = [
+       Document(
+           page_content="Alice is a software engineer at Acme Corp.",
+           metadata={"source": "employee_records", "date": "2024-01-01"}
+       ),
+       Document(
+           page_content="Bob is a project manager working with Alice on Project X.",
+           metadata={"source": "project_docs", "date": "2024-01-02"}
+       )
+   ]
+
+   # 4. Create nodes and relationships for each document
+   graph_documents = []
+   for doc in documents:
+       # Extract entities and relationships (simplified example)
+       if "Alice" in doc.page_content:
+           alice_node = Node(id="alice", type="Person", properties={"name": "Alice", "role": "Software Engineer"})
+           company_node = Node(id="acme", type="Company", properties={"name": "Acme Corp"})
+           works_at_rel = Relationship(
+               source=alice_node,
+               target=company_node,
+               type="WORKS_AT"
+           )
+           graph_doc = GraphDocument(
+               nodes=[alice_node, company_node],
+               relationships=[works_at_rel],
+               source=doc
+           )
+           graph_documents.append(graph_doc)
+       
+       if "Bob" in doc.page_content:
+           bob_node = Node(id="bob", type="Person", properties={"name": "Bob", "role": "Project Manager"})
+           project_node = Node(id="project_x", type="Project", properties={"name": "Project X"})
+           manages_rel = Relationship(
+               source=bob_node,
+               target=project_node,
+               type="MANAGES"
+           )
+           works_with_rel = Relationship(
+               source=bob_node,
+               target=alice_node,
+               type="WORKS_WITH"
+           )
+           graph_doc = GraphDocument(
+               nodes=[bob_node, project_node],
+               relationships=[manages_rel, works_with_rel],
+               source=doc
+           )
+           graph_documents.append(graph_doc)
+
+   # 5. Add documents to the graph with embeddings
+   graph.add_graph_documents(
+       graph_documents=graph_documents,
+       include_source=True,  # Store original documents
+       graph_name="CompanyGraph",
+       update_graph_definition_if_exists=True,
+       embed_source=True,  # Generate embeddings for documents
+       embed_nodes=True,  # Generate embeddings for nodes
+       embed_relationships=True,  # Generate embeddings for relationships
+       embeddings=embeddings,
+       batch_size=100,
+       capitalization_strategy="lower"
+   )
+
+   # 6. Query the graph
+   # Find all people who work at Acme Corp
+   employees = graph.query("""
+       FOR v, e IN 1..1 OUTBOUND 
+           (FOR c IN ENTITY FILTER c.type == 'Company' AND c.name == 'Acme Corp' RETURN c)._id
+           ENTITY_EDGE
+       RETURN {
+           name: v.name,
+           role: v.role,
+           company: 'Acme Corp'
+       }
+   """)
+
+   # Find all projects and their managers
+   projects = graph.query("""
+       FOR v, e IN 1..1 INBOUND 
+           (FOR p IN ENTITY FILTER p.type == 'Project' RETURN p)._id
+           ENTITY_EDGE
+       FILTER e.type == 'MANAGES'
+       RETURN {
+           project: v.name,
+           manager: e._from
+       }
+   """)
+
+   # 7. Generate and inspect schema
+   schema = graph.generate_schema(
+       sample_ratio=1.0,  # Use all documents for schema
+       graph_name="CompanyGraph",
+       include_examples=True
+   )
+
+   print("Schema:", schema)
+
+   # 8. Error handling for queries
+   try:
+       # Complex query with potential for errors
+       result = graph.query("""
+           FOR v, e, p IN 1..3 OUTBOUND 
+               (FOR p IN ENTITY FILTER p.name == 'Alice' RETURN p)._id
+               ENTITY_EDGE
+           RETURN p
+       """)
+   except ArangoServerError as e:
+       print(f"Query error: {e}")
+
+This workflow demonstrates:
+
+1. Setting up the environment with embeddings
+2. Connecting to ArangoDB
+3. Creating documents with structured relationships
+4. Adding documents to the graph with embeddings
+5. Querying the graph using AQL
+6. Schema management
+7. Error handling
+
+The example creates a simple company knowledge graph with:
+
+- People (employees)
+- Companies
+- Projects
+- Various relationships (WORKS_AT, MANAGES, WORKS_WITH)
+- Document sources with embeddings
+
+Key Features Used:
+
+- Document embedding
+- Node and relationship embedding
+- Source document storage
+- Graph schema management
+- AQL queries
+- Error handling
+- Batch processing
+
+
+Best Practices
+-------------
+
+1. Always use appropriate capitalization strategy for consistency
+2. Use batch operations for large data imports
+3. Consider using embeddings for semantic search capabilities
+4. Implement proper error handling for database operations
+5. Use schema management for better data organization
+
+Error Handling
+-------------
+
+.. code-block:: python
+
+   from arango.exceptions import ArangoServerError
+
+   try:
+       result = graph.query("FOR doc IN nonexistent RETURN doc")
+   except ArangoServerError as e:
+       print(f"Database error: {e}")
+
+
+-------------
+
 
 
 
