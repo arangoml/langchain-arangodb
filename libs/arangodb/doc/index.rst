@@ -102,7 +102,7 @@ Documentation Contents
    :maxdepth: 2
    :caption: Advanced:
 
-   mydirectory/index
+   advanced/index
 
 .. toctree::
    :maxdepth: 2
