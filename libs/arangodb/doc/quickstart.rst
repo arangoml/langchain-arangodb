@@ -211,11 +211,11 @@ Create a question-answering system that leverages your graph data:
     )
 
     # Ask questions about your graph
-    response = qa_chain.invoke({"query": "Who works at TechCorp and what technologies do they use?"})
+    response = qa_chain.invoke("Who works at TechCorp and what technologies do they use?")
     print(response["result"])
 
     # Ask about relationships
-    response = qa_chain.invoke({"query": "What is the relationship between Alice and ArangoDB?"})
+    response = qa_chain.invoke("What is the relationship between Alice and ArangoDB?")
     print(response["result"])
 
 **Advanced: Custom Prompts**
@@ -276,8 +276,8 @@ Create a question-answering system that leverages your graph data:
     )
 
     # Now your conversations are persisted
-    response1 = qa_chain_with_memory.invoke({"query": "Tell me about the people in our database"})
-    response2 = qa_chain_with_memory.invoke({"query": "What companies do they work for?"})
+    response1 = qa_chain_with_memory.invoke("Tell me about the people in our database")
+    response2 = qa_chain_with_memory.invoke("What companies do they work for?")
     print(response1["result"])
     print(response2["result"])
 
