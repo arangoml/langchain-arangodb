@@ -61,74 +61,57 @@ class ArangoVector(VectorStore):
     It supports both vector similarity search and hybrid search (vector + keyword)
     capabilities.
 
-    Args:
-        embedding: The embedding function to use for converting text to vectors.
-            Must implement the `langchain.embeddings.base.Embeddings` interface.
-        embedding_dimension: The dimensionality of the embedding vectors.
-            Must match the output dimension of the embedding function.
-        database: The ArangoDB database instance to use for storage and retrieval.
-        collection_name: The name of the ArangoDB collection to store
-            documents. Defaults to "documents".
-        search_type: The type of search to perform. Can be either "vector" for pure
-            vector similarity search or "hybrid" for combining vector and
-            keyword search. Defaults to "vector".
-        embedding_field: The field name in the document to store the embedding vector.
-            Defaults to "embedding".
-        text_field: The field name in the document to store the text content.
-            Defaults to "text".
-        vector_index_name: The name of the vector index to create in ArangoDB.
-            This index enables efficient vector similarity search.
-            Defaults to "vector_index".
-        distance_strategy: The distance metric to use for vector similarity.
-            Can be either "COSINE" or "EUCLIDEAN_DISTANCE".
-            Defaults to "COSINE".
-        num_centroids: The number of centroids to use for the vector index.
-            Higher values can improve search accuracy but increase memory usage.
-            Defaults to 1.
-        relevance_score_fn: Optional function to normalize the relevance score.
-            If not provided, uses the default normalization for the distance strategy.
-        keyword_index_name: The name of the ArangoDB View created to enable
-            Full-Text-Search capabilities. Only used if search_type is set
-            to "hybrid". Defaults to "keyword_index".
-        keyword_analyzer: The text analyzer to use for keyword search.
-            Must be one of the supported analyzers in ArangoDB.
-            Defaults to "text_en".
-        rrf_constant: The constant used in Reciprocal Rank Fusion (RRF) for hybrid
-            search. Higher values give more weight to lower-ranked results.
-            Defaults to 60.
-        rrf_search_limit: The maximum number of results to consider in RRF scoring.
-            Defaults to 100.
-
-    Example:
-        .. code-block:: python
-
-            from arango import ArangoClient
-            from langchain_community.embeddings.openai import OpenAIEmbeddings
-            from langchain_community.vectorstores.arangodb_vector import ArangoVector
-
-            # Initialize ArangoDB connection
-            db = ArangoClient("http://localhost:8529").db(
-                "test",
-                username="root",
-                password="openSesame"
-            )
-
-            # Create embedding function
-            embedding = OpenAIEmbeddings(
-                model="text-embedding-3-small",
-                dimensions=dimension
-            )
-
-            # Create vector store
-            vector_store = ArangoVector.from_texts(
-                texts=["hello world", "hello langchain", "hello arangodb"],
-                embedding=embedding,
-                database=db,
-                collection_name="Documents"
-            )
-
-            # Perform similarity search
-            print(vector_store.similarity_search("arangodb", k=1))
+    :param embedding: The embedding function to use for converting text to vectors.
+        Must implement the `langchain.embeddings.base.Embeddings` interface.
+    :type embedding: langchain.embeddings.base.Embeddings
+    :param embedding_dimension: The dimensionality of the embedding vectors.
+        Must match the output dimension of the embedding function.
+    :type embedding_dimension: int
+    :param database: The ArangoDB database instance to use for storage and retrieval.
+    :type database: arango.database.StandardDatabase
+    :param collection_name: The name of the ArangoDB collection to store
+        documents. Defaults to "documents".
+    :type collection_name: str
+    :param search_type: The type of search to perform. Can be either SearchType.VECTOR
+        for pure vector similarity search or SearchType.HYBRID for combining vector and
+        keyword search. Defaults to SearchType.VECTOR.
+    :type search_type: SearchType
+    :param embedding_field: The field name in the document to store the embedding vector
+        Defaults to "embedding".
+    :type embedding_field: str
+    :param text_field: The field name in the document to store the text content.
+        Defaults to "text".
+    :type text_field: str
+    :param vector_index_name: The name of the vector index to create in ArangoDB.
+        This index enables efficient vector similarity search.
+        Defaults to "vector_index".
+    :type vector_index_name: str
+    :param distance_strategy: The distance metric to use for vector similarity.
+        Can be either DistanceStrategy.COSINE or DistanceStrategy.EUCLIDEAN_DISTANCE.
+        Defaults to DistanceStrategy.COSINE.
+    :type distance_strategy: DistanceStrategy
+    :param num_centroids: The number of centroids to use for the vector index.
+        Higher values can improve search accuracy but increase memory usage.
+        Defaults to 1.
+    :type num_centroids: int
+    :param relevance_score_fn: Optional function to normalize the relevance score.
+        If not provided, uses the default normalization for the distance strategy.
+    :type relevance_score_fn: Optional[Callable[[float], float]]
+    :param keyword_index_name: The name of the ArangoDB View created to enable
+        Full-Text-Search capabilities. Only used if search_type is set
+        to SearchType.HYBRID. Defaults to "keyword_index".
+    :type keyword_index_name: str
+    :param keyword_analyzer: The text analyzer to use for keyword search.
+        Must be one of the supported analyzers in ArangoDB.
+        Defaults to "text_en".
+    :type keyword_analyzer: str
+    :param rrf_constant: The constant used in Reciprocal Rank Fusion (RRF) for hybrid
+        search. Higher values give more weight to lower-ranked results.
+        Defaults to 60.
+    :type rrf_constant: int
+    :param rrf_search_limit: The maximum number of results to consider in RRF scoring.
+        Defaults to 100.
+    :type rrf_search_limit: int
     """
 
     def __init__(
@@ -317,17 +300,39 @@ class ArangoVector(VectorStore):
         This method embeds the provided texts using the embedding function and stores
         them in ArangoDB along with their embeddings and metadata.
 
-        Args:
-            texts: An iterable of text strings to add to the vector store.
-            metadatas: Optional list of metadata dictionaries to associate with each
-                text. Each dictionary can contain arbitrary key-value pairs that
-                will be stored alongside the text and embedding.
-            ids: Optional list of unique identifiers for each text. If not provided,
-                IDs will be generated using a hash of the text content.
-            **kwargs: Additional keyword arguments passed to add_embeddings.
+        :param texts: An iterable of text strings to add to the vector store.
+        :type texts: Iterable[str]
+        :param metadatas: Optional list of metadata dictionaries to associate with each
+            text. Each dictionary can contain arbitrary key-value pairs that
+            will be stored alongside the text and embedding.
+        :type metadatas: Optional[List[dict]]
+        :param ids: Optional list of unique identifiers for each text. If not provided,
+            IDs will be generated using a hash of the text content.
+        :type ids: Optional[List[str]]
+        :param kwargs: Additional keyword arguments passed to add_embeddings.
+        :type kwargs: Any
+        :return: List of document IDs that were added to the vector store.
+        :rtype: List[str]
 
-        Returns:
-            List of document IDs that were added to the vector store.
+        .. code-block:: python
+
+            # Add simple texts
+            texts = ["hello world", "hello arango", "test document"]
+            ids = vector_store.add_texts(texts)
+            print(f"Added {len(ids)} documents")
+
+            # Add texts with metadata
+            texts = ["Machine learning tutorial", "Python programming guide"]
+            metadatas = [
+                {"category": "AI", "difficulty": "beginner"},
+                {"category": "Programming", "difficulty": "intermediate"}
+            ]
+            ids = vector_store.add_texts(texts, metadatas=metadatas)
+
+            # Add texts with custom IDs
+            texts = ["Document 1", "Document 2"]
+            custom_ids = ["doc_001", "doc_002"]
+            ids = vector_store.add_texts(texts, ids=custom_ids)
         """
         embeddings = self.embedding.embed_documents(list(texts))
 
@@ -356,33 +361,68 @@ class ArangoVector(VectorStore):
         or a hybrid approach combining vector and keyword search. The search type
         can be overridden for individual queries.
 
-        Args:
-            query: The text query to search for.
-            k: The number of most similar documents to return. Defaults to 4.
-            return_fields: Set of additional document fields to return in results.
-                The _key and text fields are always returned.
-            use_approx: Whether to use approximate nearest neighbor search.
-                Enables faster but potentially less accurate results.
-                Defaults to True.
-            embedding: Optional pre-computed embedding for the query.
-                If not provided, the query will be embedded using the embedding
-                function.
-            filter_clause: Optional AQL filter clause to apply to the search.
-                Can be used to filter results based on document properties.
-            search_type: Override the default search type for this query.
-                Can be either "vector" or "hybrid".
-            vector_weight: Weight to apply to vector similarity scores in hybrid search.
-                Only used when search_type is "hybrid". Defaults to 1.0.
-            keyword_weight: Weight to apply to keyword search scores in hybrid search.
-                Only used when search_type is "hybrid". Defaults to 1.0.
-            keyword_search_clause: Optional AQL filter clause to apply Full Text Search.
-                If empty, a default search clause will be used.
-            metadata_clause: Optional AQL clause to return additional metadata once
-                the top k results are retrieved. If specified, the metadata will be
-                added to the Document.metadata field.
+        :param query: The text query to search for.
+        :type query: str
+        :param k: The number of most similar documents to return. Defaults to 4.
+        :type k: int
+        :param return_fields: Set of additional document fields to return in results.
+            The _key and text fields are always returned.
+        :type return_fields: set[str]
+        :param use_approx: Whether to use approximate nearest neighbor search.
+            Enables faster but potentially less accurate results.
+            Defaults to True.
+        :type use_approx: bool
+        :param embedding: Optional pre-computed embedding for the query.
+            If not provided, the query will be embedded using the embedding
+            function.
+        :type embedding: Optional[List[float]]
+        :param filter_clause: Optional AQL filter clause to apply to the search.
+            Can be used to filter results based on document properties.
+        :type filter_clause: str
+        :param search_type: Override the default search type for this query.
+            Can be either SearchType.VECTOR or SearchType.HYBRID.
+        :type search_type: Optional[SearchType]
+        :param vector_weight: Weight to apply to vector similarity
+            scores in hybrid search. Only used when search_type is SearchType.HYBRID.
+            Defaults to 1.0.
+        :type vector_weight: float
+        :param keyword_weight: Weight to apply to keyword search scores in hybrid
+            search. Only used when search_type is SearchType.HYBRID. Defaults to 1.0.
+        :type keyword_weight: float
+        :param keyword_search_clause: Optional AQL filter clause to apply
+          Full Text Search. If empty, a default search clause will be used.
+        :type keyword_search_clause: str
+        :param metadata_clause: Optional AQL clause to return additional metadata once
+            the top k results are retrieved. If specified, the metadata will be
+            added to the Document.metadata field.
+        :type metadata_clause: str
+        :param kwargs: Additional keyword arguments.
+        :type kwargs: Any
+        :return: List of Document objects most similar to the query.
+        :rtype: List[Document]
 
-        Returns:
-            List of Document objects most similar to the query.
+        .. code-block:: python
+
+            # Simple vector search
+            results = vector_store.similarity_search("hello", k=1)
+            print(results[0].page_content)
+
+            # Search with metadata filtering
+            results = vector_store.similarity_search(
+                "machine learning",
+                k=2,
+                filter_clause="doc.category == 'AI'",
+                return_fields={"category", "difficulty"}
+            )
+
+            # Hybrid search with custom weights
+            results = vector_store.similarity_search(
+                "neural networks",
+                k=3,
+                search_type=SearchType.HYBRID,
+                vector_weight=0.8,
+                keyword_weight=0.2
+            )
         """
         search_type = search_type or self.search_type
         embedding = embedding or self.embedding.embed_query(query)
@@ -430,30 +470,41 @@ class ArangoVector(VectorStore):
         Similar to similarity_search but returns a tuple of (Document, score) for each
         result. The score represents the similarity between the query and the document.
 
-        Args:
-            query: The text query to search for.
-            k: The number of most similar documents to return. Defaults to 4.
-            return_fields: Set of additional document fields to return in results.
-                The _key and text fields are always returned.
-            use_approx: Whether to use approximate nearest neighbor search.
-                Enables faster but potentially less accurate results.
-                Defaults to True.
-            embedding: Optional pre-computed embedding for the query.
-                If not provided, the query will be embedded using the embedding
-                function.
-            filter_clause: Optional AQL filter clause to apply to the search.
-                Can be used to filter results based on document properties.
-            search_type: Override the default search type for this query.
-                Can be either "vector" or "hybrid".
-            vector_weight: Weight to apply to vector similarity scores in hybrid search.
-                Only used when search_type is "hybrid". Defaults to 1.0.
-            keyword_weight: Weight to apply to keyword search scores in hybrid search.
-                Only used when search_type is "hybrid". Defaults to 1.0.
-            keyword_search_clause: Optional AQL filter clause to apply Full Text Search.
-                If empty, a default search clause will be used.
-
-        Returns:
-            List of tuples containing (Document, score) pairs, sorted by score.
+        :param query: The text query to search for.
+        :type query: str
+        :param k: The number of most similar documents to return. Defaults to 4.
+        :type k: int
+        :param return_fields: Set of additional document fields to return in results.
+            The _key and text fields are always returned.
+        :type return_fields: set[str]
+        :param use_approx: Whether to use approximate nearest neighbor search.
+            Enables faster but potentially less accurate results. Defaults to True.
+        :type use_approx: bool
+        :param embedding: Optional pre-computed embedding for the query.
+            If not provided, the query will be embedded using the embedding function.
+        :type embedding: Optional[List[float]]
+        :param filter_clause: Optional AQL filter clause to apply to the search.
+            Can be used to filter results based on document properties.
+        :type filter_clause: str
+        :param search_type: Override the default search type for this query.
+            Can be either SearchType.VECTOR or SearchType.HYBRID.
+        :type search_type: Optional[SearchType]
+        :param vector_weight: Weight to apply to vector similarity scores in
+            hybrid search. Only used when search_type is SearchType.HYBRID.
+            Defaults to 1.0.
+        :type vector_weight: float
+        :param keyword_weight: Weight to apply to keyword search scores
+            in hybrid search. Only used when search_type is SearchType.HYBRID.
+            Defaults to 1.0.
+        :type keyword_weight: float
+        :param keyword_search_clause: Optional AQL filter clause to apply
+            Full Text Search. If empty, a default search clause will be used.
+        :type keyword_search_clause: str
+        :param metadata_clause: Optional AQL clause to return additional metadata once
+            the top k results are retrieved.
+        :type metadata_clause: str
+        :return: List of tuples containing (Document, score) pairs, sorted by score.
+        :rtype: List[tuple[Document, float]]
         """
         search_type = search_type or self.search_type
         embedding = embedding or self.embedding.embed_query(query)
@@ -494,21 +545,27 @@ class ArangoVector(VectorStore):
     ) -> List[Document]:
         """Return docs most similar to embedding vector.
 
-        Args:
-            embedding: Embedding to look up documents similar to.
-            k: Number of Documents to return. Defaults to 4.
-            return_fields: Fields to return in the result. For example,
-                {"foo", "bar"} will return the "foo" and "bar" fields of the document,
-                in addition to the _key & text field. Defaults to an empty set.
-            use_approx: Whether to use approximate vector search via ANN.
-                Defaults to True. If False, exact vector search will be used.
-            filter_clause: Filter clause to apply to the query.
-            metadata_clause: Optional AQL clause to return additional metadata once
-                the top k results are retrieved. If specified, the metadata will be
-                added to the Document.metadata field.
-
-        Returns:
-            List of Documents most similar to the query vector.
+        :param embedding: Embedding to look up documents similar to.
+        :type embedding: List[float]
+        :param k: Number of Documents to return. Defaults to 4.
+        :type k: int
+        :param return_fields: Fields to return in the result. For example,
+            {"foo", "bar"} will return the "foo" and "bar" fields of the document,
+            in addition to the _key & text field. Defaults to an empty set.
+        :type return_fields: set[str]
+        :param use_approx: Whether to use approximate vector search via ANN.
+            Defaults to True. If False, exact vector search will be used.
+        :type use_approx: bool
+        :param filter_clause: Filter clause to apply to the query.
+        :type filter_clause: str
+        :param metadata_clause: Optional AQL clause to return additional metadata once
+            the top k results are retrieved. If specified, the metadata will be
+            added to the Document.metadata field.
+        :type metadata_clause: str
+        :param kwargs: Additional keyword arguments.
+        :type kwargs: Any
+        :return: List of Documents most similar to the query vector.
+        :rtype: List[Document]
         """
         results = self.similarity_search_by_vector_with_score(
             embedding=embedding,
@@ -558,24 +615,28 @@ class ArangoVector(VectorStore):
         filter_clause: str = "",
         metadata_clause: str = "",
     ) -> List[tuple[Document, float]]:
-        """Return docs most similar to embedding vector.
+        """Return docs most similar to embedding vector with scores.
 
-        Args:
-            embedding: Embedding to look up documents similar to.
-            k: Number of Documents to return. Defaults to 4.
-            return_fields: Fields to return in the result. For example,
-                {"foo", "bar"} will return the "foo" and "bar" fields of the document,
-                in addition to the _key & text field. Defaults to an empty set.
-            use_approx: Whether to use approximate vector search via ANN.
-                Defaults to True. If False, exact vector search will be used.
-            filter_clause: Filter clause to apply to the query.
-            metadata_clause: Optional AQL clause to return additional metadata once
-                the top k results are retrieved. If specified, the metadata will be
-                added to the Document.metadata field.
-            **kwargs: Additional keyword arguments passed to the query execution.
-
-        Returns:
-            List of Documents most similar to the query vector.
+        :param embedding: Embedding to look up documents similar to.
+        :type embedding: List[float]
+        :param k: Number of Documents to return. Defaults to 4.
+        :type k: int
+        :param return_fields: Fields to return in the result. For example,
+            {"foo", "bar"} will return the "foo" and "bar" fields of the document,
+            in addition to the _key & text field. Defaults to an empty set.
+        :type return_fields: set[str]
+        :param use_approx: Whether to use approximate vector search via ANN.
+            Defaults to True. If False, exact vector search will be used.
+        :type use_approx: bool
+        :param filter_clause: Filter clause to apply to the query.
+        :type filter_clause: str
+        :param metadata_clause: Optional AQL clause to return additional metadata once
+            the top k results are retrieved. If specified, the metadata will be
+            added to the Document.metadata field.
+        :type metadata_clause: str
+        :return: List of tuples containing (Document, score)
+            pairs most similar to the query vector.
+        :rtype: List[tuple[Document, float]]
         """
         aql_query, bind_vars = self._build_vector_search_query(
             embedding=embedding,
@@ -605,29 +666,41 @@ class ArangoVector(VectorStore):
         keyword_search_clause: str = "",
         metadata_clause: str = "",
     ) -> List[tuple[Document, float]]:
-        """Run similarity search with ArangoDB.
+        """Run hybrid similarity search combining vector and keyword search with scores.
 
-        Args:
-            query (str): Query text to search for.
-            k (int): Number of results to return. Defaults to 4.
-            return_fields: Fields to return in the result. For example,
-                {"foo", "bar"} will return the "foo" and "bar" fields of the document,
-                in addition to the _key & text field. Defaults to an empty set.
-            use_approx: Whether to use approximate vector search via ANN.
-                Defaults to True. If False, exact vector search will be used.
-            filter_clause: Filter clause to apply to the query.
-            vector_weight: Weight to apply to vector similarity scores in hybrid search.
-                Only used when search_type is "hybrid". Defaults to 1.0.
-            keyword_weight: Weight to apply to keyword search scores in hybrid search.
-                Only used when search_type is "hybrid". Defaults to 1.0.
-            keyword_search_clause: Optional AQL filter clause to apply Full Text Search.
-                If empty, a default search clause will be used.
-            metadata_clause: Optional AQL clause to return additional metadata once
-                the top k results are retrieved. If specified, the metadata will be
-                added to the Document.metadata field.
-
-        Returns:
-            List of Documents most similar to the query.
+        :param query: Query text to search for.
+        :type query: str
+        :param embedding: Embedding vector for the query.
+        :type embedding: List[float]
+        :param k: Number of results to return. Defaults to 4.
+        :type k: int
+        :param return_fields: Fields to return in the result. For example,
+            {"foo", "bar"} will return the "foo" and "bar" fields of the document,
+            in addition to the _key & text field. Defaults to an empty set.
+        :type return_fields: set[str]
+        :param use_approx: Whether to use approximate vector search via ANN.
+            Defaults to True. If False, exact vector search will be used.
+        :type use_approx: bool
+        :param filter_clause: Filter clause to apply to the query.
+        :type filter_clause: str
+        :param vector_weight: Weight to apply to vector similarity scores
+            in hybrid search. Only used when search_type is SearchType.HYBRID.
+            Defaults to 1.0.
+        :type vector_weight: float
+        :param keyword_weight: Weight to apply to keyword search scores in
+            hybrid search. Only used when search_type is SearchType.HYBRID.
+            Defaults to 1.0.
+        :type keyword_weight: float
+        :param keyword_search_clause: Optional AQL filter clause to apply
+            Full Text Search. If empty, a default search clause will be used.
+        :type keyword_search_clause: str
+        :param metadata_clause: Optional AQL clause to return additional metadata once
+            the top k results are retrieved. If specified, the metadata will be
+            added to the Document.metadata field.
+        :type metadata_clause: str
+        :return: List of tuples containing (Document, score)
+            pairs most similar to thequery.
+        :rtype: List[tuple[Document, float]]
         """
 
         aql_query, bind_vars = self._build_hybrid_search_query(
@@ -652,13 +725,13 @@ class ArangoVector(VectorStore):
     def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
         """Delete by vector ID or other criteria.
 
-        Args:
-            ids: List of ids to delete.
-            **kwargs: Other keyword arguments that can be used to delete vectors.
-
-        Returns:
-            Optional[bool]: True if deletion is successful,
-                None if no ids are provided, or raises an exception if an error occurs.
+        :param ids: List of ids to delete.
+        :type ids: Optional[List[str]]
+        :param kwargs: Other keyword arguments that can be used to delete vectors.
+        :type kwargs: Any
+        :return: True if deletion is successful, None if no ids are provided,
+            or raises an exception if an error occurs.
+        :rtype: Optional[bool]
         """
         if not ids:
             return None
@@ -672,11 +745,10 @@ class ArangoVector(VectorStore):
     def get_by_ids(self, ids: Sequence[str], /) -> list[Document]:
         """Get documents by their IDs.
 
-        Args:
-            ids: List of ids to get.
-
-        Returns:
-            List of Documents with the given ids.
+        :param ids: List of ids to get.
+        :type ids: Sequence[str]
+        :return: List of Documents with the given ids.
+        :rtype: list[Document]
         """
         docs = []
         doc: dict[str, Any]
@@ -703,31 +775,61 @@ class ArangoVector(VectorStore):
         """Search for documents using Maximal Marginal Relevance (MMR).
 
         MMR optimizes for both similarity to the query and diversity among the results.
-        It helps avoid returning redundant or very similar documents.
+        It helps avoid returning redundant or very similar documents by balancing
+        relevance and diversity in the selection process.
 
-        Args:
-            query: The text query to search for.
-            k: The number of documents to return. Defaults to 4.
-            fetch_k: The number of documents to fetch for MMR selection.
-                Should be larger than k to allow for diversity selection.
-                Defaults to 20.
-            lambda_mult: Controls the diversity vs relevance tradeoff.
-                Values between 0 and 1, where:
-                - 0: Maximum diversity
-                - 1: Maximum relevance
-                Defaults to 0.5.
-            return_fields: Set of additional document fields to return in results.
-                The _key and text fields are always returned.
-            use_approx: Whether to use approximate nearest neighbor search.
-                Enables faster but potentially less accurate results.
-                Defaults to True.
-            embedding: Optional pre-computed embedding for the query.
-                If not provided, the query will be embedded using the embedding
-                function.
-            **kwargs: Additional keyword arguments passed to the search methods.
+        :param query: The text query to search for.
+        :type query: str
+        :param k: The number of documents to return. Defaults to 4.
+        :type k: int
+        :param fetch_k: The number of documents to fetch for MMR selection.
+            Should be larger than k to allow for diversity selection.
+            Defaults to 20.
+        :type fetch_k: int
+        :param lambda_mult: Controls the diversity vs relevance tradeoff.
+            Values between 0 and 1, where 0 = maximum diversity, 1 = maximum relevance.
+            Defaults to 0.5.
+        :type lambda_mult: float
+        :param return_fields: Set of additional document fields to return in results.
+            The _key and text fields are always returned.
+        :type return_fields: set[str]
+        :param use_approx: Whether to use approximate nearest neighbor search.
+            Enables faster but potentially less accurate results.
+            Defaults to True.
+        :type use_approx: bool
+        :param embedding: Optional pre-computed embedding for the query.
+            If not provided, the query will be embedded using the embedding
+            function.
+        :type embedding: Optional[List[float]]
+        :param kwargs: Additional keyword arguments passed to the search methods.
+        :type kwargs: Any
+        :return: List of Document objects selected by MMR algorithm.
+        :rtype: List[Document]
 
-        Returns:
-            List of Document objects selected by MMR algorithm.
+        .. code-block:: python
+
+            # Search with balanced diversity and relevance
+            results = vector_store.max_marginal_relevance_search(
+                "machine learning",
+                k=3,
+                fetch_k=10
+            )
+
+            # Emphasize diversity over relevance
+            diverse_results = vector_store.max_marginal_relevance_search(
+                "neural networks",
+                k=5,
+                fetch_k=20,
+                lambda_mult=0.1  # More diverse results
+            )
+
+            # Emphasize relevance over diversity
+            relevant_results = vector_store.max_marginal_relevance_search(
+                "deep learning",
+                k=3,
+                fetch_k=15,
+                lambda_mult=0.9  # More relevant results
+            )
         """
         return_fields.add(self.embedding_field)
 
@@ -801,36 +903,89 @@ class ArangoVector(VectorStore):
         This is a convenience method that creates a new ArangoVector instance,
         embeds the provided texts, and stores them in ArangoDB.
 
-        Args:
-            texts: List of text strings to add to the vector store.
-            embedding: The embedding function to use for converting text to vectors.
-            metadatas: Optional list of metadata dictionaries to associate with each
-                text.
-            database: The ArangoDB database instance to use.
-            collection_name: The name of the ArangoDB collection to use.
-                Defaults to "documents".
-            search_type: The type of search to perform. Can be either "vector" or
-                "hybrid". Defaults to "vector".
-            embedding_field: The field name to store embeddings. Defaults to
-                "embedding".
-            text_field: The field name to store text content. Defaults to "text".
-            index_name: The name of the vector index. Defaults to "vector_index".
-            distance_strategy: The distance metric to use. Defaults to "COSINE".
-            num_centroids: Number of centroids for vector index. Defaults to 1.
-            ids: Optional list of unique identifiers for each text.
-            overwrite_index: Whether to delete and recreate existing indexes.
-                Defaults to False.
-            insert_text: Whether to store the text content in the database.
-                Required for hybrid search. Defaults to True.
-            keyword_index_name: Name of the keyword search index. Defaults to
-                "keyword_index".
-            keyword_analyzer: Text analyzer for keyword search. Defaults to "text_en".
-            rrf_constant: Constant for RRF scoring in hybrid search. Defaults to 60.
-            rrf_search_limit: Maximum results for RRF scoring. Defaults to 100.
-            **kwargs: Additional keyword arguments passed to the constructor.
+        :param texts: List of text strings to add to the vector store.
+        :type texts: List[str]
+        :param embedding: The embedding function to use for converting text to vectors.
+        :type embedding: langchain.embeddings.base.Embeddings
+        :param metadatas: Optional list of metadata dictionaries to associate with each
+            text.
+        :type metadatas: Optional[List[dict]]
+        :param database: The ArangoDB database instance to use.
+        :type database: Optional[arango.database.StandardDatabase]
+        :param collection_name: The name of the ArangoDB collection to use.
+            Defaults to "documents".
+        :type collection_name: str
+        :param search_type: The type of search to perform.
+            Can be either SearchType.VECTOR or SearchType.HYBRID.
+            Defaults to SearchType.VECTOR.
+        :type search_type: SearchType
+        :param embedding_field: The field name to store embeddings. Defaults to
+            "embedding".
+        :type embedding_field: str
+        :param text_field: The field name to store text content. Defaults to "text".
+        :type text_field: str
+        :param index_name: The name of the vector index. Defaults to "vector_index".
+        :type index_name: str
+        :param distance_strategy: The distance metric to use. Can be
+            DistanceStrategy.COSINE or DistanceStrategy.EUCLIDEAN_DISTANCE.
+            Defaults to DistanceStrategy.COSINE.
+        :type distance_strategy: DistanceStrategy
+        :param num_centroids: Number of centroids for vector index. Defaults to 1.
+        :type num_centroids: int
+        :param ids: Optional list of unique identifiers for each text.
+        :type ids: Optional[List[str]]
+        :param overwrite_index: Whether to delete and recreate existing indexes.
+            Defaults to False.
+        :type overwrite_index: bool
+        :param insert_text: Whether to store the text content in the database.
+            Required for hybrid search. Defaults to True.
+        :type insert_text: bool
+        :param keyword_index_name: Name of the keyword search index. Defaults to
+            "keyword_index".
+        :type keyword_index_name: str
+        :param keyword_analyzer: Text analyzer for keyword search.
+            Defaults to "text_en".
+        :type keyword_analyzer: str
+        :param rrf_constant: Constant for RRF scoring in hybrid search. Defaults to 60.
+        :type rrf_constant: int
+        :param rrf_search_limit: Maximum results for RRF scoring. Defaults to 100.
+        :type rrf_search_limit: int
+        :param kwargs: Additional keyword arguments passed to the constructor.
+        :type kwargs: Any
+        :return: A new ArangoVector instance with the texts embedded and stored.
+        :rtype: ArangoVector
 
-        Returns:
-            A new ArangoVector instance with the texts embedded and stored.
+        .. code-block:: python
+
+            from arango import ArangoClient
+            from langchain_arangodb.vectorstores import ArangoVector
+            from langchain_community.embeddings import OpenAIEmbeddings
+
+            # Connect to ArangoDB
+            client = ArangoClient("http://localhost:8529")
+            db = client.db("test", username="root", password="openSesame")
+
+            # Create vector store from texts
+            texts = ["hello world", "hello arango", "test document"]
+            metadatas = [{"source": "doc1"}, {"source": "doc2"}, {"source": "doc3"}]
+
+            vector_store = ArangoVector.from_texts(
+                texts=texts,
+                embedding=OpenAIEmbeddings(),
+                metadatas=metadatas,
+                database=db,
+                collection_name="test_collection"
+            )
+
+            # Create hybrid search store
+            hybrid_store = ArangoVector.from_texts(
+                texts=["Machine learning algorithms", "Deep neural networks"],
+                embedding=OpenAIEmbeddings(),
+                database=db,
+                search_type=SearchType.HYBRID,
+                collection_name="hybrid_docs",
+                overwrite_index=True  # Clean start
+            )
         """
         if not database:
             raise ValueError("Database must be provided.")
@@ -897,34 +1052,52 @@ class ArangoVector(VectorStore):
         This method reads documents from an existing collection, extracts specified
         text properties, embeds them, and creates a new vector store.
 
-        Args:
-            collection_name: Name of the existing ArangoDB collection.
-            text_properties_to_embed: List of document properties containing text to
-                embed. These properties will be concatenated to create the
-                text for embedding.
-            embedding: The embedding function to use for converting text to vectors.
-            database: The ArangoDB database instance to use.
-            embedding_field: The field name to store embeddings. Defaults to
-                "embedding".
-            text_field: The field name to store text content. Defaults to "text".
-            batch_size: Number of documents to process in each batch. Defaults to 1000.
-            aql_return_text_query: Custom AQL query to extract text from properties.
-                Defaults to "RETURN doc[p]".
-            insert_text: Whether to store the concatenated text in the database.
-                Required for hybrid search. Defaults to False.
-            skip_existing_embeddings: Whether to skip documents that already have
-                embeddings. Defaults to False.
-            search_type: The type of search to perform. Can be either "vector" or
-                "hybrid". Defaults to "vector".
-            keyword_index_name: Name of the keyword search index. Defaults to
-                "keyword_index".
-            keyword_analyzer: Text analyzer for keyword search. Defaults to "text_en".
-            rrf_constant: Constant for RRF scoring in hybrid search. Defaults to 60.
-            rrf_search_limit: Maximum results for RRF scoring. Defaults to 100.
-            **kwargs: Additional keyword arguments passed to the constructor.
-
-        Returns:
-            A new ArangoVector instance with embeddings created from the collection.
+        :param collection_name: Name of the existing ArangoDB collection.
+        :type collection_name: str
+        :param text_properties_to_embed: List of document properties containing text to
+            embed. These properties will be concatenated to create
+            the text for embedding.
+        :type text_properties_to_embed: List[str]
+        :param embedding: The embedding function to use for converting text to vectors.
+        :type embedding: Embeddings
+        :param database: The ArangoDB database instance to use.
+        :type database: StandardDatabase
+        :param embedding_field: The field name to store embeddings.
+            Defaults to "embedding".
+        :type embedding_field: str
+        :param text_field: The field name to store text content. Defaults to "text".
+        :type text_field: str
+        :param batch_size: Number of documents to process in each batch.
+            Defaults to 1000.
+        :type batch_size: int
+        :param aql_return_text_query: Custom AQL query to extract text from properties.
+            Defaults to "RETURN doc[p]".
+        :type aql_return_text_query: str
+        :param insert_text: Whether to store the concatenated text in the database.
+            Required for hybrid search. Defaults to False.
+        :type insert_text: bool
+        :param skip_existing_embeddings: Whether to skip documents that already have
+            embeddings. Defaults to False.
+        :type skip_existing_embeddings: bool
+        :param search_type: The type of search to perform.
+            Can be either SearchType.VECTOR or SearchType.HYBRID.
+            Defaults to SearchType.VECTOR.
+        :type search_type: SearchType
+        :param keyword_index_name: Name of the keyword search index.
+            Defaults to "keyword_index".
+        :type keyword_index_name: str
+        :param keyword_analyzer: Text analyzer for keyword search.
+            Defaults to "text_en".
+        :type keyword_analyzer: str
+        :param rrf_constant: Constant for RRF scoring in hybrid search. Defaults to 60.
+        :type rrf_constant: int
+        :param rrf_search_limit: Maximum results for RRF scoring. Defaults to 100.
+        :type rrf_search_limit: int
+        :param kwargs: Additional keyword arguments passed to the constructor.
+        :type kwargs: Any
+        :return: A new ArangoVector instance with embeddings created from the
+            collection.
+        :rtype: ArangoVector
         """
         if not text_properties_to_embed:
             m = "Parameter `text_properties_to_embed` must not be an empty list"
@@ -1070,7 +1243,7 @@ class ArangoVector(VectorStore):
                 LIMIT {k}
                 {filter_clause if use_approx else ""}
                 LET data = KEEP(doc, {return_fields_list})
-                LET metadata = {f'({metadata_clause})' if metadata_clause else '{}'}
+                LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
                 RETURN {{data, score, metadata}}
         """
 
@@ -1164,7 +1337,7 @@ class ArangoVector(VectorStore):
                         LIMIT 1
                         RETURN KEEP(doc, {return_fields_list})
                 )
-                LET metadata = {f'({metadata_clause})' if metadata_clause else '{}'}
+                LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
                 RETURN {{ data, score, metadata }}
         """
 

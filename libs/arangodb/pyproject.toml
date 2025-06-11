@@ -29,6 +29,8 @@ pytest-socket = "^0.7.0"
 pytest-watcher = "^0.3.4"
 langchain-core = {git = "https://github.com/langchain-ai/langchain.git", subdirectory = "libs/core"}
 pytest-cov = "^6.0.0"
+sphinx = "^7.0.0"
+sphinx-rtd-theme = "^2.0.0"
 
 [tool.poetry.group.codespell]
 optional = true

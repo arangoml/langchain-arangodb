@@ -1,0 +1,6 @@
+sphinx
+sphinx_rtd_theme
+langchain
+langchain-core
+python-arango
+langchain-arangodb
