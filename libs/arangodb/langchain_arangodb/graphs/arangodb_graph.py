@@ -35,7 +35,7 @@ def get_arangodb_client(
     :param dbname: Arango DB name. Can be passed in as named arg or set as
         environment var ``ARANGODB_DBNAME``. Defaults to "_system".
     :type dbname: str
-    :param username: Can be passed in as named arg or set as environment var    
+    :param username: Can be passed in as named arg or set as environment var
         ``ARANGODB_USERNAME``. Defaults to "root".
     :type username: str
     :param password: Can be passed in as named arg or set as environment var
@@ -64,8 +64,8 @@ class ArangoGraph(GraphStore):
     :param generate_schema_on_init: Whether to generate the graph schema
         on initialization. Defaults to True.
     :type generate_schema_on_init: bool
-    :param schema_sample_ratio: The ratio of documents/edges to sample in relation to the Collection size
-        to generate each Collection Schema. If 0, one document/edge
+    :param schema_sample_ratio: The ratio of documents/edges to sample in relation to
+        the Collection size to generate each Collection Schema. If 0, one document/edge
         is used per Collection. Defaults to 0.
     :type schema_sample_ratio: float
     :param schema_graph_name: The name of an existing ArangoDB Graph to specifically
@@ -104,7 +104,7 @@ class ArangoGraph(GraphStore):
 
         See https://python.langchain.com/docs/security for more information.
 
-        
+
     """
 
     def __init__(
@@ -118,7 +118,7 @@ class ArangoGraph(GraphStore):
         schema_string_limit: int = 256,
     ) -> None:
         """
-        Initializes the ArangoGraph instance.   
+        Initializes the ArangoGraph instance.
 
         """
         self.__db: StandardDatabase = db
@@ -151,7 +151,7 @@ class ArangoGraph(GraphStore):
     @property
     def schema_json(self) -> str:
         """Returns the schema of the Graph Database as a JSON string
-        
+
         :return: The schema of the Graph Database as a JSON string
         :rtype: str
         """
@@ -160,7 +160,7 @@ class ArangoGraph(GraphStore):
     @property
     def schema_yaml(self) -> str:
         """Returns the schema of the Graph Database as a YAML string
-        
+
         :return: The schema of the Graph Database as a YAML string
         :rtype: str
         """
@@ -168,7 +168,7 @@ class ArangoGraph(GraphStore):
 
     def set_schema(self, schema: Dict[str, Any]) -> None:
         """Sets a custom schema for the ArangoDB Database.
-        
+
         :param schema: The schema to set.
         :type schema: Dict[str, Any]
         :return: None
@@ -186,8 +186,8 @@ class ArangoGraph(GraphStore):
         """
         Refresh the graph schema information.
 
-        Parameters: 
-        
+        Parameters:
+
         :param sample_ratio: A float (0 to 1) to determine the
             ratio of documents/edges sampled in relation to the Collection size
             to generate each Collection Schema. If 0, one document/edge
@@ -421,11 +421,13 @@ class ArangoGraph(GraphStore):
         :type include_source: bool
         :param graph_name: The name of the graph to add the documents to.
         :type graph_name: Optional[str]
-        :param update_graph_definition_if_exists: Whether to update the graph definition if it already exists.
-        :type update_graph_definition_if_exists: bool   
+        :param update_graph_definition_if_exists: Whether to update the graph definition
+            if it already exists.
+        :type update_graph_definition_if_exists: bool
         :param batch_size: The number of documents to process in each batch.
         :type batch_size: int
-        :param use_one_entity_collection: Whether to use one entity collection for all nodes.
+        :param use_one_entity_collection: Whether to use one entity collection
+            for all nodes.
         :type use_one_entity_collection: bool
         :param insert_async: Whether to insert the documents asynchronously.
         :type insert_async: bool
@@ -435,7 +437,7 @@ class ArangoGraph(GraphStore):
         :type source_edge_collection_name: Union[str, None]
         :param entity_collection_name: The name of the entity collection.
         :type entity_collection_name: Union[str, None]
-        :param entity_edge_collection_name: The name of the entity edge collection.     
+        :param entity_edge_collection_name: The name of the entity edge collection.
         :type entity_edge_collection_name: Union[str, None]
         :param embeddings: The embeddings model to use.
         :type embeddings: Union[Embeddings, None]
@@ -452,7 +454,8 @@ class ArangoGraph(GraphStore):
 
         :return: None
         :rtype: None
-        :raises ValueError: If the capitalization strategy is not 'lower', 'upper', or 'none'.
+        :raises ValueError: If the capitalization strategy is not 'lower',
+            'upper', or 'none'.
         :raises ArangoClientError: If the ArangoDB client cannot be created.
         :raises ArangoServerError: If the ArangoDB server cannot be reached.
         :raises ArangoCollectionError: If the collection cannot be created.
@@ -712,9 +715,9 @@ class ArangoGraph(GraphStore):
 
         :return: An arango.database.StandardDatabase.
         :rtype: Any
-        :raises ArangoClientError: If the ArangoDB client cannot be created.    
+        :raises ArangoClientError: If the ArangoDB client cannot be created.
         :raises ArangoServerError: If the ArangoDB server cannot be reached.
-       
+
         """
         db = get_arangodb_client(
             url=url, dbname=dbname, username=username, password=password
@@ -728,7 +731,7 @@ class ArangoGraph(GraphStore):
         is_edge: bool,
     ) -> None:
         """Imports data into the ArangoDB database in bulk.
-        
+
         :param db: The ArangoDB database instance.
         :type db: Database
         :param data: The data to import.
@@ -752,7 +755,7 @@ class ArangoGraph(GraphStore):
         self, collection_name: str, is_edge: bool = False, **kwargs: Any
     ) -> None:
         """Creates a collection in the ArangoDB database if it does not exist.
-        
+
         :param collection_name: The name of the collection to create.
         :type collection_name: str
         :param is_edge: Whether the collection is an edge.
@@ -775,7 +778,7 @@ class ArangoGraph(GraphStore):
         entity_collection_name: str,
     ) -> str:
         """Processes a Graph Document Node into ArangoDB as a unanimous Entity.
-        
+
         :param node_key: The key of the node.
         :type node_key: str
         :param node: The node to process.
@@ -802,7 +805,7 @@ class ArangoGraph(GraphStore):
         self, node_key: str, node: Node, nodes: DefaultDict[str, list], _: str
     ) -> str:
         """Processes a Graph Document Node into ArangoDB based on its Node Type.
-        
+
         :param node_key: The key of the node.
         :type node_key: str
         :param node: The node to process.
@@ -832,7 +835,7 @@ class ArangoGraph(GraphStore):
         _: DefaultDict[str, DefaultDict[str, set[str]]],
     ) -> None:
         """Processes a Graph Document Edge into ArangoDB as a unanimous Entity.
-        
+
         :param edge: The edge to process.
         :type edge: Relationship
         :param edge_str: The string representation of the edge.
@@ -883,7 +886,7 @@ class ArangoGraph(GraphStore):
         edge_definitions_dict: DefaultDict[str, DefaultDict[str, set[str]]],
     ) -> None:
         """Processes a Graph Document Edge into ArangoDB based on its Edge Type.
-        
+
         :param edge: The edge to process.
         :type edge: Relationship
         :param edge_str: The string representation of the edge.
@@ -896,10 +899,6 @@ class ArangoGraph(GraphStore):
         :type target_key: str
         :param edges: The edges to process.
         :type edges: DefaultDict[str, list]
-        :param _1: The name of the edge type.
-        :type _1: str
-        :param _2: The name of the edge type.
-        :type _2: str
         :param edge_definitions_dict: The edge definitions dictionary.
         :type edge_definitions_dict: DefaultDict[str, DefaultDict[str, set[str]]]
 
@@ -938,7 +937,7 @@ class ArangoGraph(GraphStore):
         process_node_fn: Any,
     ) -> str:
         """Gets the key of a node and processes it if it doesn't exist.
-        
+
         :param node: The node to process.
         :type node: Node
         :param nodes: The nodes to process.
@@ -975,7 +974,7 @@ class ArangoGraph(GraphStore):
         insertion_db: Database,
     ) -> str:
         """Processes a Graph Document Source into ArangoDB.
-        
+
         :param source: The source to process.
         :type source: Document
         :param source_collection_name: The name of the source collection.
@@ -1013,13 +1012,14 @@ class ArangoGraph(GraphStore):
 
     def _hash(self, value: Any) -> str:
         """Applies the Farmhash hash function to a value.
-        
+
         :param value: The value to hash.
         :type value: Any
 
         :return: The hashed value.
         :rtype: str
-        :raises ValueError: If the value is not a string or has no string representation.
+        :raises ValueError: If the value is not a string or has no
+            string representation.
         """
         try:
             value_str = str(value)
@@ -1078,7 +1078,7 @@ class ArangoGraph(GraphStore):
         :raises ValueError: If the input is not a dictionary or list.
         :raises ValueError: If the list limit is less than 0.
         :raises ValueError: If the string limit is less than 0.
-        
+
         """
 
         if isinstance(d, dict):

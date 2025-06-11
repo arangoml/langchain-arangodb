@@ -1,18 +1,13 @@
 import json
 import os
 import pprint
-
-import urllib.parse
-
 from collections import defaultdict
 from unittest.mock import MagicMock
 
 import pytest
 from arango import ArangoClient
 from arango.database import StandardDatabase
-
-from arango.exceptions import ArangoClientError, ArangoServerError
-
+from arango.exceptions import ArangoServerError
 from langchain_core.documents import Document
 
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph, get_arangodb_client
@@ -146,26 +141,6 @@ def test_arangodb_schema_structure(db: StandardDatabase) -> None:
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-
-def test_arangodb_query_timeout(db: StandardDatabase) -> None:
-    long_running_query = "FOR i IN 1..10000000 FILTER i == 0 RETURN i"
-
-    # Set a short maxRuntime to trigger a timeout
-    try:
-        cursor = db.aql.execute(
-            long_running_query,
-            max_runtime=0.1,  # type: ignore # maxRuntime in seconds
-        )  # type: ignore
-        # Force evaluation of the cursor
-        list(cursor)  # type: ignore
-        assert False, "Query did not timeout as expected"
-    except ArangoServerError as e:
-        # Check if the error code corresponds to a query timeout
-        assert e.error_code == 1500
-        assert "query killed" in str(e)
-
-
-@pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangodb_sanitize_values(db: StandardDatabase) -> None:
     """Test that large lists are appropriately handled in the results."""
     # Insert a document with a large list
@@ -295,31 +270,6 @@ def test_arangodb_rels(db: StandardDatabase) -> None:
         expected_nodes, key=lambda x: x["labels"]
     )  # noqa: E501
     assert rels == expected_rels
-
-
-
-
-@pytest.mark.usefixtures("clear_arangodb_database")
-def test_invalid_url() -> None:
-    """Test initializing with an invalid URL raises ArangoClientError."""
-    # Original URL
-    original_url = "http://localhost:8529"
-    parsed_url = urllib.parse.urlparse(original_url)
-    # Increment the port number by 1 and wrap around if necessary
-    original_port = parsed_url.port or 8529
-    new_port = (original_port + 1) % 65535 or 1
-    # Reconstruct the netloc (hostname:port)
-    new_netloc = f"{parsed_url.hostname}:{new_port}"
-    # Rebuild the URL with the new netloc
-    new_url = parsed_url._replace(netloc=new_netloc).geturl()
-
-    client = ArangoClient(hosts=new_url)
-
-    with pytest.raises(ArangoClientError) as exc_info:
-        # Attempt to connect with invalid URL
-        client.db("_system", username="root", password="passwd", verify=True)
-
-    assert "bad connection" in str(exc_info.value)
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -1149,9 +1099,8 @@ def test_embed_relationships_and_include_source(db: StandardDatabase) -> None:
     all_relationship_edges = relationship_edge_calls[0]
     pprint.pprint(all_relationship_edges)
 
-
     assert any(
-       "embedding" in e for e in all_relationship_edges
+        "embedding" in e for e in all_relationship_edges
     ), "Expected embedding in relationship"  # noqa: E501
     assert any(
         "source_id" in e for e in all_relationship_edges

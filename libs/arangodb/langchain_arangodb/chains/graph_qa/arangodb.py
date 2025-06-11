@@ -109,7 +109,7 @@ class ArangoGraphQAChain(Chain):
         return [self.input_key]
 
     @property
-    def output_keys(self) -> List[str]: 
+    def output_keys(self) -> List[str]:
         """Get the output keys for the chain."""
         return [self.output_key]
 
