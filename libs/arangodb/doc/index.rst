@@ -7,7 +7,7 @@ LangChain ArangoDB is a Python package that provides ArangoDB integrations for L
 
    <div style="display: flex; align-items: center; gap: 10px;">
       <a href="https://www.langchain.com/">
-      
+
          <img src="https://python.langchain.com/img/brand/wordmark.png" alt="LangChain" style="height: 60px;">
       </a>
       <a href="https://www.arangodb.com/">
@@ -46,9 +46,9 @@ LangChain ArangoDB provides comprehensive integrations for building AI applicati
 
 Requirements
 ------------
-- Python 3.10+
+- Python 3.9+
 - LangChain
-- ArangoDB 3.10+
+- ArangoDB
 - python-arango
 
 Installation
