@@ -318,11 +318,11 @@ Messages are stored in ArangoDB with the following structure:
 - ``time``: Timestamp for message ordering (automatically added by ArangoDB)
 
 Indexing Strategy
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 The class automatically creates a persistent index on ``session_id`` to ensure efficient retrieval:
 
-.. code-block:: aql
+.. code-block:: python
 
     // Automatic index creation
     CREATE INDEX session_idx ON ChatHistory (session_id) OPTIONS {type: "persistent", unique: false}
@@ -333,7 +333,7 @@ Best Practices
 --------------
 
 Session ID Management
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 1. **Use descriptive session IDs**: Include user context or conversation type
 2. **Avoid special characters**: Stick to alphanumeric characters and underscores
@@ -347,7 +347,7 @@ Session ID Management
     session_id = f"training_{model_version}_{session_counter}"
 
 Memory Management
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 1. **Choose appropriate memory types** based on conversation length
 2. **Implement session cleanup** for privacy or storage management
@@ -373,7 +373,7 @@ Memory Management
         db.aql.execute(query, bind_vars=bind_vars)
 
 Error Handling
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -397,7 +397,7 @@ Error Handling
         print(f"Unexpected error: {e}")
 
 Performance Considerations
--------------------------
+--------------------------   
 
 1. **Session ID indexing**: Automatic indexing ensures O(log n) lookup performance
 2. **Message ordering**: Uses ArangoDB's built-in sorting capabilities
@@ -405,7 +405,7 @@ Performance Considerations
 4. **Collection sizing**: Monitor and archive old conversations as needed
 
 Example: Complete Chat Application
----------------------------------
+----------------------------------
 
 .. code-block:: python
 
@@ -499,7 +499,7 @@ Troubleshooting
 ---------------
 
 Common Issues
-~~~~~~~~~~~~
+~~~~~~~~~~~~~   
 
 **ValueError: Please ensure that the session_id parameter is provided**
    - Ensure session_id is not None, empty string, or 0
