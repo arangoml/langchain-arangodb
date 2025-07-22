@@ -257,6 +257,10 @@ class ArangoGraph(GraphStore):
         if not 0 <= sample_ratio <= 1:
             raise ValueError("**sample_ratio** value must be in between 0 to 1")
 
+        #####
+        # Step 1: Generate Graph Schema
+        ####
+
         graph_schema: List[Dict[str, Any]] = []
         if graph_name:
             # Fetch a single graph
@@ -282,6 +286,10 @@ class ArangoGraph(GraphStore):
                 collection["name"]
                 for collection in self.db.collections()  # type: ignore
             }
+
+        #####
+        # Step 2: Generate Collection Schema
+        ####
 
         # Stores the schema of every ArangoDB Document/Edge collection
         collection_schema: List[Dict[str, Any]] = []
@@ -324,7 +332,55 @@ class ArangoGraph(GraphStore):
 
             collection_schema.append(collection_schema_entry)
 
-        return {"graph_schema": graph_schema, "collection_schema": collection_schema}
+        #####
+        # Step 3: Generate View Schema
+        #####
+
+        view_schema: List[Dict[str, Any]] = []
+        try:
+            for view in self.db.views():  # type: ignore
+                view_name = view["name"]
+                view_type = view["type"]
+                view_info = self.db.view(view_name)  # type: ignore
+
+                linked_collections = []
+                links = view_info.get("links", {})
+                for col_name, config in links.items():
+                    fields = list(config.get("fields", {}).keys())
+                    analyzers = config.get("analyzers", [])
+                    linked_collections.append({
+                        "collection": col_name,
+                        "fields": fields,
+                        "analyzers": analyzers,
+                        "includeAllFields": config.get("includeAllFields", False)
+                    })
+
+                view_schema.append({
+                    "name": view_name,
+                    "type": view_type,
+                    "linked_collections": linked_collections
+                })
+        except Exception as e:
+            print(f"Error fetching view schema: {e}")
+
+        #####
+        # Step 4: Generate Analyzer Schema
+        #####
+
+        analyzer_schema: List[Dict[str, Any]] = []
+        try:
+            for analyzer in self.db.analyzers():  # type: ignore
+                analyzer_schema.append({
+                    "name": analyzer["name"],
+                    "type": analyzer["type"],
+                    "properties": analyzer.get("properties", {}),
+                    "features": analyzer.get("features", [])
+                })
+        except Exception as e:
+            print(f"Error fetching analyzer schema: {e}")
+
+        return {"graph_schema": graph_schema, "collection_schema": collection_schema, "view_schema": view_schema, "analyzer_schema": analyzer_schema}
+
 
     def query(
         self,
