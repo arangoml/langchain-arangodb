@@ -348,20 +348,24 @@ class ArangoGraph(GraphStore):
                 for col_name, config in links.items():
                     fields = list(config.get("fields", {}).keys())
                     analyzers = config.get("analyzers", [])
-                    linked_collections.append({
-                        "collection": col_name,
-                        "fields": fields,
-                        "analyzers": analyzers,
-                        "includeAllFields": config.get("includeAllFields", False)
-                    })
+                    linked_collections.append(
+                        {
+                            "collection": col_name,
+                            "fields": fields,
+                            "analyzers": analyzers
+                        }
+                    )
 
-                view_schema.append({
-                    "name": view_name,
-                    "type": view_type,
-                    "linked_collections": linked_collections
-                })
+                view_schema.append(
+                    {
+                        "name": view_name,
+                        "type": view_type,
+                        "linked_collections": linked_collections,
+                    }
+                )
         except Exception as e:
-            print(f"Error fetching view schema: {e}")
+            m = f"Error fetching view schema: {e}"
+            raise ValueError(m)
 
         #####
         # Step 4: Generate Analyzer Schema
@@ -370,17 +374,17 @@ class ArangoGraph(GraphStore):
         analyzer_schema: List[Dict[str, Any]] = []
         try:
             for analyzer in self.db.analyzers():  # type: ignore
-                analyzer_schema.append({
-                    "name": analyzer["name"],
-                    "type": analyzer["type"],
-                    "properties": analyzer.get("properties", {}),
-                    "features": analyzer.get("features", [])
-                })
+                analyzer_schema.append(analyzer["name"])
         except Exception as e:
-            print(f"Error fetching analyzer schema: {e}")
+            m = f"Error fetching analyzer schema: {e}"
+            raise ValueError(m)
 
-        return {"graph_schema": graph_schema, "collection_schema": collection_schema, "view_schema": view_schema, "analyzer_schema": analyzer_schema}
-
+        return {
+            "graph_schema": graph_schema,
+            "collection_schema": collection_schema,
+            "view_schema": view_schema,
+            "analyzer_schema": analyzer_schema,
+        }
 
     def query(
         self,
