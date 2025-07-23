@@ -352,7 +352,7 @@ class ArangoGraph(GraphStore):
                             {
                                 "collection": collection,
                                 "fields": fields,
-                                "analyzers": analyzers
+                                "analyzers": analyzers,
                             }
                         )
                     view_schema.append(
@@ -368,18 +368,9 @@ class ArangoGraph(GraphStore):
                     for idx in indexes:
                         collection = idx["collection"]
                         index = idx["index"]
-                        indexes_ls.append(
-                            {
-                                "collection": collection,
-                                "index": index
-                            }
-                        )
+                        indexes_ls.append({"collection": collection, "index": index})
                     view_schema.append(
-                        {
-                            "name": view_name,
-                            "type": view_type,
-                            "indexes": indexes_ls
-                        }
+                        {"name": view_name, "type": view_type, "indexes": indexes_ls}
                     )
         except Exception as e:
             m = f"Error fetching view schema: {e}"

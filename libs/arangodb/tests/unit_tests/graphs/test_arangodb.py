@@ -1063,7 +1063,7 @@ class TestArangoGraph:
         # ---- Mock views ----
         mock_db.views.return_value = [
             {"name": "SearchView", "type": "arangosearch"},
-            {"name": "AliasView", "type": "search-alias"}
+            {"name": "AliasView", "type": "search-alias"},
         ]
 
         mock_db.view.side_effect = [
@@ -1073,8 +1073,8 @@ class TestArangoGraph:
                         "analyzers": ["text_en"],
                         "fields": {
                             "title": {"analyzers": ["text_en"]},
-                            "desc": {"analyzers": ["text_en"]}
-                        }
+                            "desc": {"analyzers": ["text_en"]},
+                        },
                     }
                 }
             },
@@ -1082,7 +1082,7 @@ class TestArangoGraph:
                 "indexes": [
                     {"collection": "TestCollection", "index": "inverted_index_1"}
                 ]
-            }
+            },
         ]
 
         # ---- Mock analyzers ----

@@ -20,7 +20,7 @@ def test_aql_generating_run(db: StandardDatabase) -> None:
 
     # Check schema structure - analyzer_schema may contain default analyzers
     assert "collection_schema" in graph.schema
-    assert "graph_schema" in graph.schema  
+    assert "graph_schema" in graph.schema
     assert "view_schema" in graph.schema
     assert "analyzer_schema" in graph.schema
     assert graph.schema["collection_schema"] == []
@@ -79,7 +79,7 @@ def test_aql_top_k(db: StandardDatabase) -> None:
 
     # Check schema structure - analyzer_schema may contain default analyzers
     assert "collection_schema" in graph.schema
-    assert "graph_schema" in graph.schema  
+    assert "graph_schema" in graph.schema
     assert "view_schema" in graph.schema
     assert "analyzer_schema" in graph.schema
     assert graph.schema["collection_schema"] == []
@@ -395,24 +395,28 @@ def test_exclude_examples(db: StandardDatabase) -> None:
             "type": "document",
         },
     ]
-    
+
     # Check that required schema structure is present
     assert "collection_schema" in chain.graph.schema  # type: ignore
     assert "graph_schema" in chain.graph.schema  # type: ignore
     assert "view_schema" in chain.graph.schema  # type: ignore
     assert "analyzer_schema" in chain.graph.schema  # type: ignore
-    
-    # Check specific content for collection and graph schemas  
+
+    # Check specific content for collection and graph schemas
     assert chain.graph.schema["graph_schema"] == []  # type: ignore
-    
+
     # Compare collection schemas by converting to sets (order-independent comparison)
-    actual_collections = {col["name"] for col in chain.graph.schema["collection_schema"]}  # type: ignore
+    actual_collections = {
+        col["name"] for col in chain.graph.schema["collection_schema"]
+    }  # type: ignore
     expected_collections = {col["name"] for col in expected_collection_schema}
     assert actual_collections == expected_collections
-    
+
     # Verify we have the expected number of collections
-    assert len(chain.graph.schema["collection_schema"]) == len(expected_collection_schema)  # type: ignore
-    
+    assert len(chain.graph.schema["collection_schema"]) == len(
+        expected_collection_schema
+    )  # type: ignore
+
     # Note: analyzer_schema and view_schema may contain default/system entries, so we don't check them for exact equality
 
 
