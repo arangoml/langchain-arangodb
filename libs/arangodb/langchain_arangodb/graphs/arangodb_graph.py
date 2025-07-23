@@ -5,8 +5,8 @@ from collections import defaultdict
 from math import ceil
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Union
 
-import farmhash
-import yaml
+import farmhash  # type: ignore
+import yaml  # type: ignore
 from arango import ArangoClient
 from arango.database import Database, StandardDatabase
 from arango.graph import Graph
@@ -346,7 +346,7 @@ class ArangoGraph(GraphStore):
                     continue
 
                 if view_type == "arangosearch":
-                    linked_collections = []
+                    linked_collections: List[Dict[str, Union[str, List[str]]]] = []
                     links = view_info.get("links", {})
                     if not isinstance(links, dict):
                         continue
@@ -363,7 +363,7 @@ class ArangoGraph(GraphStore):
                             {
                                 "collection": collection,
                                 "fields": fields,
-                                "analyzers": analyzers
+                                "analyzers": analyzers,
                             }
                         )
                     view_schema.append(
@@ -378,24 +378,15 @@ class ArangoGraph(GraphStore):
                     if not isinstance(indexes, list):
                         continue
 
-                    indexes_ls = []
+                    indexes_ls: List[Dict[str, str]] = []
                     for idx in indexes:
                         if not isinstance(idx, dict):
                             continue
                         collection = idx.get("collection", "")
                         index = idx.get("index", "")
-                        indexes_ls.append(
-                            {
-                                "collection": collection,
-                                "index": index
-                            }
-                        )
+                        indexes_ls.append({"collection": collection, "index": index})
                     view_schema.append(
-                        {
-                            "name": view_name,
-                            "type": view_type,
-                            "indexes": indexes_ls
-                        }
+                        {"name": view_name, "type": view_type, "indexes": indexes_ls}
                     )
         except Exception as e:
             m = f"Error fetching view schema: {e}"
@@ -405,14 +396,19 @@ class ArangoGraph(GraphStore):
         # Step 4: Generate Analyzer Schema
         #####
 
-        analyzer_schema: List[str] = []  # Changed type hint to List[str] since we only store names
+        analyzer_names: List[str] = []  # Store analyzer names
         try:
             for analyzer in self.db.analyzers():  # type: ignore
                 if isinstance(analyzer, dict) and "name" in analyzer:
-                    analyzer_schema.append(analyzer["name"])
+                    analyzer_names.append(analyzer["name"])
         except Exception as e:
             m = f"Error fetching analyzer schema: {e}"
             raise ValueError(m)
+
+        # Convert analyzer names to schema format
+        analyzer_schema: List[Dict[str, Any]] = [
+            {"name": name, "type": "analyzer"} for name in analyzer_names
+        ]
 
         return {
             "graph_schema": graph_schema,
