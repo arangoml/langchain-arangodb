@@ -69,9 +69,9 @@ def test_arangovector_from_texts_and_similarity_search(
     index_info = None
     indexes_raw = collection.indexes()
     assert indexes_raw is not None, "collection.indexes() returned None"
-    assert isinstance(indexes_raw, list), (
-        f"collection.indexes() expected list, got {type(indexes_raw)}"
-    )
+    assert isinstance(
+        indexes_raw, list
+    ), f"collection.indexes() expected list, got {type(indexes_raw)}"
     indexes: List[Dict[str, Any]] = indexes_raw
     for index in indexes:
         if index.get("name") == "test_index" and index.get("type") == "vector":
@@ -121,13 +121,13 @@ def test_arangovector_euclidean_distance(
     collection_euclidean: StandardCollection = _collection_obj_euclidean
     index_info = None
     indexes_raw_euclidean = collection_euclidean.indexes()
-    assert indexes_raw_euclidean is not None, (
-        "collection_euclidean.indexes() returned None"
-    )
-    assert isinstance(indexes_raw_euclidean, list), (
-        f"collection_euclidean.indexes() expected list, \
+    assert (
+        indexes_raw_euclidean is not None
+    ), "collection_euclidean.indexes() returned None"
+    assert isinstance(
+        indexes_raw_euclidean, list
+    ), f"collection_euclidean.indexes() expected list, \
             got {type(indexes_raw_euclidean)}"
-    )
     indexes_euclidean: List[Dict[str, Any]] = indexes_raw_euclidean
     for index in indexes_euclidean:
         if index.get("name") == "test_index" and index.get("type") == "vector":
@@ -380,26 +380,26 @@ def test_arangovector_delete_documents(
 
     # Check that deleted documents are indeed gone
     deleted_docs_check_raw = collection_delete.get_many(ids_to_delete)
-    assert deleted_docs_check_raw is not None, (
-        "collection.get_many() returned None for deleted_docs_check"
-    )
-    assert isinstance(deleted_docs_check_raw, list), (
-        f"collection.get_many() expected list for deleted_docs_check,\
+    assert (
+        deleted_docs_check_raw is not None
+    ), "collection.get_many() returned None for deleted_docs_check"
+    assert isinstance(
+        deleted_docs_check_raw, list
+    ), f"collection.get_many() expected list for deleted_docs_check,\
               got {type(deleted_docs_check_raw)}"
-    )
     deleted_docs_check: List[Dict[str, Any]] = deleted_docs_check_raw
     assert len(deleted_docs_check) == 0
 
     # Check that remaining documents are still present
     remaining_ids_expected = ["id_keep1", "id_keep2"]
     remaining_docs_check_raw = collection_delete.get_many(remaining_ids_expected)
-    assert remaining_docs_check_raw is not None, (
-        "collection.get_many() returned None for remaining_docs_check"
-    )
-    assert isinstance(remaining_docs_check_raw, list), (
-        f"collection.get_many() expected list for remaining_docs_check,\
+    assert (
+        remaining_docs_check_raw is not None
+    ), "collection.get_many() returned None for remaining_docs_check"
+    assert isinstance(
+        remaining_docs_check_raw, list
+    ), f"collection.get_many() expected list for remaining_docs_check,\
               got {type(remaining_docs_check_raw)}"
-    )
     remaining_docs_check: List[Dict[str, Any]] = remaining_docs_check_raw
     assert len(remaining_docs_check) == 2
 
@@ -831,9 +831,9 @@ def test_arangovector_core_functionality(
     # 8. Testing search by ID
     all_docs_cursor = collection_core.all()
     assert all_docs_cursor is not None, "collection.all() returned None"
-    assert isinstance(all_docs_cursor, Cursor), (
-        f"collection.all() expected Cursor, got {type(all_docs_cursor)}"
-    )
+    assert isinstance(
+        all_docs_cursor, Cursor
+    ), f"collection.all() expected Cursor, got {type(all_docs_cursor)}"
     all_ids = [doc["_key"] for doc in all_docs_cursor]
     assert new_ids[0] in all_ids
 
@@ -958,9 +958,9 @@ def test_arangovector_from_existing_collection(
     # Check that embeddings were added to the original documents
     doc_data1 = collection_exist.get("doc1")
     assert doc_data1 is not None, "Document 'doc1' not found in collection_exist"
-    assert isinstance(doc_data1, dict), (
-        f"Expected 'doc1' to be a dict, got {type(doc_data1)}"
-    )
+    assert isinstance(
+        doc_data1, dict
+    ), f"Expected 'doc1' to be a dict, got {type(doc_data1)}"
     doc1: Dict[str, Any] = doc_data1
     assert "embedding" in doc1
     assert isinstance(doc1["embedding"], list)
@@ -991,9 +991,9 @@ def test_arangovector_from_existing_collection(
     # Check that custom embeddings were added
     doc_data2 = collection_exist.get("doc1")
     assert doc_data2 is not None, "Document 'doc1' not found after custom processing"
-    assert isinstance(doc_data2, dict), (
-        f"Expected 'doc1' after custom processing to be a dict, got {type(doc_data2)}"
-    )
+    assert isinstance(
+        doc_data2, dict
+    ), f"Expected 'doc1' after custom processing to be a dict, got {type(doc_data2)}"
     doc2: Dict[str, Any] = doc_data2
     assert "custom_embedding" in doc2
     assert "custom_text" in doc2
@@ -1036,12 +1036,12 @@ def test_arangovector_from_existing_collection(
 
     # Check that the combined text was inserted
     doc_data3 = collection_exist.get("doc1")
-    assert doc_data3 is not None, (
-        "Document 'doc1' not found after insert_text processing"
-    )
-    assert isinstance(doc_data3, dict), (
-        f"Expected 'doc1' after insert_text to be a dict, got {type(doc_data3)}"
-    )
+    assert (
+        doc_data3 is not None
+    ), "Document 'doc1' not found after insert_text processing"
+    assert isinstance(
+        doc_data3, dict
+    ), f"Expected 'doc1' after insert_text to be a dict, got {type(doc_data3)}"
     doc3: Dict[str, Any] = doc_data3
     assert "combined_title_content" in doc3
     assert "The Solar System" in doc3["combined_title_content"]
