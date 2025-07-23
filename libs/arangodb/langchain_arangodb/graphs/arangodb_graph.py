@@ -341,28 +341,46 @@ class ArangoGraph(GraphStore):
             for view in self.db.views():  # type: ignore
                 view_name = view["name"]
                 view_type = view["type"]
-                view_info = self.db.view(view_name)  # type: ignore
-
-                linked_collections = []
-                links = view_info.get("links", {})
-                for col_name, config in links.items():
-                    fields = list(config.get("fields", {}).keys())
-                    analyzers = config.get("analyzers", [])
-                    linked_collections.append(
+                view_info = self.db.view(view_name)
+                if view_type == "arangosearch":
+                    linked_collections = []
+                    links = view_info["links"]
+                    for collection, properties in links.items():
+                        analyzers = properties.get("analyzers", [])
+                        fields = list(properties.get("fields", {}).keys())
+                        linked_collections.append(
+                            {
+                                "collection": collection,
+                                "fields": fields,
+                                "analyzers": analyzers
+                            }
+                        )
+                    view_schema.append(
                         {
-                            "collection": col_name,
-                            "fields": fields,
-                            "analyzers": analyzers
+                            "name": view_name,
+                            "type": view_type,
+                            "linked_collections": linked_collections,
                         }
                     )
-
-                view_schema.append(
-                    {
-                        "name": view_name,
-                        "type": view_type,
-                        "linked_collections": linked_collections,
-                    }
-                )
+                else:
+                    indexes = view_info.get("indexes", [])
+                    indexes_ls = []
+                    for idx in indexes:
+                        collection = idx["collection"]
+                        index = idx["index"]
+                        indexes_ls.append(
+                            {
+                                "collection": collection,
+                                "index": index
+                            }
+                        )
+                    view_schema.append(
+                        {
+                            "name": view_name,
+                            "type": view_type,
+                            "indexes": indexes_ls
+                        }
+                    )
         except Exception as e:
             m = f"Error fetching view schema: {e}"
             raise ValueError(m)
