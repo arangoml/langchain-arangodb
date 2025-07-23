@@ -18,10 +18,14 @@ def test_aql_generating_run(db: StandardDatabase) -> None:
     """Test that AQL statement is correctly generated and executed."""
     graph = ArangoGraph(db)
 
-    assert graph.schema == {
-        "collection_schema": [],
-        "graph_schema": [],
-    }
+    # Check schema structure - analyzer_schema may contain default analyzers
+    assert "collection_schema" in graph.schema
+    assert "graph_schema" in graph.schema  
+    assert "view_schema" in graph.schema
+    assert "analyzer_schema" in graph.schema
+    assert graph.schema["collection_schema"] == []
+    assert graph.schema["graph_schema"] == []
+    # analyzer_schema and view_schema may contain default/system entries
 
     # Create two nodes and a relationship
     graph.db.create_collection("Actor")
@@ -41,6 +45,9 @@ def test_aql_generating_run(db: StandardDatabase) -> None:
 
     assert len(graph.schema["collection_schema"]) == 3
     assert len(graph.schema["graph_schema"]) == 0
+    # view_schema and analyzer_schema may contain default/system entries
+    assert isinstance(graph.schema["view_schema"], list)
+    assert isinstance(graph.schema["analyzer_schema"], list)
 
     query = """```
         FOR m IN Movie
@@ -70,10 +77,14 @@ def test_aql_top_k(db: StandardDatabase) -> None:
     TOP_K = 1
     graph = ArangoGraph(db)
 
-    assert graph.schema == {
-        "collection_schema": [],
-        "graph_schema": [],
-    }
+    # Check schema structure - analyzer_schema may contain default analyzers
+    assert "collection_schema" in graph.schema
+    assert "graph_schema" in graph.schema  
+    assert "view_schema" in graph.schema
+    assert "analyzer_schema" in graph.schema
+    assert graph.schema["collection_schema"] == []
+    assert graph.schema["graph_schema"] == []
+    # analyzer_schema and view_schema may contain default/system entries
 
     # Create two nodes and a relationship
     graph.db.create_collection("Actor")
@@ -93,6 +104,9 @@ def test_aql_top_k(db: StandardDatabase) -> None:
 
     assert len(graph.schema["collection_schema"]) == 3
     assert len(graph.schema["graph_schema"]) == 0
+    # view_schema and analyzer_schema may contain default/system entries
+    assert isinstance(graph.schema["view_schema"], list)
+    assert isinstance(graph.schema["analyzer_schema"], list)
 
     query = """```
         FOR m IN Movie
@@ -322,69 +336,84 @@ def test_exclude_examples(db: StandardDatabase) -> None:
     )
     pprint.pprint(chain.graph.schema)  # type: ignore
 
-    expected_schema = {
-        "collection_schema": [
-            {
-                "name": "ActedIn",
-                "properties": [
-                    {"_key": "str"},
-                    {"_id": "str"},
-                    {"_from": "str"},
-                    {"_to": "str"},
-                    {"_rev": "str"},
-                ],
-                "size": 1,
-                "type": "edge",
-            },
-            {
-                "name": "Directed",
-                "properties": [
-                    {"_key": "str"},
-                    {"_id": "str"},
-                    {"_from": "str"},
-                    {"_to": "str"},
-                    {"_rev": "str"},
-                ],
-                "size": 1,
-                "type": "edge",
-            },
-            {
-                "name": "Person",
-                "properties": [
-                    {"_key": "str"},
-                    {"_id": "str"},
-                    {"_rev": "str"},
-                    {"name": "str"},
-                ],
-                "size": 1,
-                "type": "document",
-            },
-            {
-                "name": "Actor",
-                "properties": [
-                    {"_key": "str"},
-                    {"_id": "str"},
-                    {"_rev": "str"},
-                    {"name": "str"},
-                ],
-                "size": 1,
-                "type": "document",
-            },
-            {
-                "name": "Movie",
-                "properties": [
-                    {"_key": "str"},
-                    {"_id": "str"},
-                    {"_rev": "str"},
-                    {"title": "str"},
-                ],
-                "size": 1,
-                "type": "document",
-            },
-        ],
-        "graph_schema": [],
-    }
-    assert set(chain.graph.schema) == set(expected_schema)  # type: ignore
+    expected_collection_schema = [
+        {
+            "name": "ActedIn",
+            "properties": [
+                {"_key": "str"},
+                {"_id": "str"},
+                {"_from": "str"},
+                {"_to": "str"},
+                {"_rev": "str"},
+            ],
+            "size": 1,
+            "type": "edge",
+        },
+        {
+            "name": "Directed",
+            "properties": [
+                {"_key": "str"},
+                {"_id": "str"},
+                {"_from": "str"},
+                {"_to": "str"},
+                {"_rev": "str"},
+            ],
+            "size": 1,
+            "type": "edge",
+        },
+        {
+            "name": "Person",
+            "properties": [
+                {"_key": "str"},
+                {"_id": "str"},
+                {"_rev": "str"},
+                {"name": "str"},
+            ],
+            "size": 1,
+            "type": "document",
+        },
+        {
+            "name": "Actor",
+            "properties": [
+                {"_key": "str"},
+                {"_id": "str"},
+                {"_rev": "str"},
+                {"name": "str"},
+            ],
+            "size": 1,
+            "type": "document",
+        },
+        {
+            "name": "Movie",
+            "properties": [
+                {"_key": "str"},
+                {"_id": "str"},
+                {"_rev": "str"},
+                {"title": "str"},
+            ],
+            "size": 1,
+            "type": "document",
+        },
+    ]
+    
+    # Check that required schema structure is present
+    assert "collection_schema" in chain.graph.schema  # type: ignore
+    assert "graph_schema" in chain.graph.schema  # type: ignore
+    assert "view_schema" in chain.graph.schema  # type: ignore
+    assert "analyzer_schema" in chain.graph.schema  # type: ignore
+    
+    # Check specific content for collection and graph schemas  
+    assert chain.graph.schema["graph_schema"] == []  # type: ignore
+    
+    # Compare collection schemas by converting to sets (order-independent comparison)
+    actual_collections = {col["name"] for col in chain.graph.schema["collection_schema"]}  # type: ignore
+    expected_collections = {col["name"] for col in expected_collection_schema}
+    assert actual_collections == expected_collections
+    
+    # Verify we have the expected number of collections
+    assert len(chain.graph.schema["collection_schema"]) == len(expected_collection_schema)  # type: ignore
+    
+    # Note: analyzer_schema and view_schema may contain default/system entries, so we don't check them for exact equality
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
