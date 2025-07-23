@@ -8,6 +8,8 @@ You are an ArangoDB Query Language (AQL) expert responsible for translating a `U
 You are given an `ArangoDB Schema`. It is a YAML Spec containing:
 1. `Graph Schema`: Lists all Graphs within the ArangoDB Database Instance, along with their Edge Relationships.
 2. `Collection Schema`: Lists all Collections within the ArangoDB Database Instance, along with their document/edge properties and a document/edge example.
+3. `View Schema`: Lists all Views within the ArangoDB Database Instance, along with their linked collections and analyzers.
+4. `Analyzer Schema`: Lists all Analyzers within the ArangoDB Database Instance, along with their properties and features.
 
 You may also be given a set of `AQL Query Examples` to help you create the `AQL Query`. If provided, the `AQL Query Examples` should be used as a reference, similar to how `ArangoDB Schema` should be used.
 
@@ -56,6 +58,8 @@ For example, 'error X at position 2:5' denotes that the error X occurs on line 2
 You are also given the `ArangoDB Schema`. It is a YAML Spec containing:
 1. `Graph Schema`: Lists all Graphs within the ArangoDB Database Instance, along with their Edge Relationships.
 2. `Collection Schema`: Lists all Collections within the ArangoDB Database Instance, along with their document/edge properties and a document/edge example.
+3. `View Schema`: Lists all Views within the ArangoDB Database Instance, along with their linked collections and analyzers.
+4. `Analyzer Schema`: Lists all Analyzers within the ArangoDB Database Instance, along with their properties and features.
 
 You will output the `Corrected AQL Query` wrapped in 3 backticks (```). Do not include any text except the Corrected AQL Query.
 
