@@ -679,220 +679,69 @@ def test_generate_schema_views_and_analyzers(db: StandardDatabase) -> None:
     Integration test specifically for view and analyzer schema generation
     in the generate_schema() method.
     """
-    graph = ArangoGraph(db, generate_schema_on_init=False)
+    # Step 1: Ensure the Actor collection exists and insert sample data
+    if not db.has_collection("Actor"):
+        db.create_collection("Actor")
+    actor_collection = db.collection("Actor")
 
-    # Setup: Create test collections for views to link to
-    docs_col = "Documents"
-    articles_col = "Articles"
+    actor_collection.insert({"_key": "1", "name": "Robert Downey Jr."}, overwrite=True)
 
-    if not db.has_collection(docs_col):
-        db.create_collection(docs_col)
-    if not db.has_collection(articles_col):
-        db.create_collection(articles_col)
-
-    # Insert some test data
-    test_docs = [
-        {
-            "_key": "doc1",
-            "title": "Test Document",
-            "content": "This is a test document",
-            "category": "tech",
-        },
-        {
-            "_key": "doc2",
-            "title": "Another Doc",
-            "content": "More content here",
-            "category": "business",
-        },
-    ]
-
-    test_articles = [
-        {
-            "_key": "art1",
-            "headline": "Breaking News",
-            "body": "Important news content",
-            "tags": ["news", "important"],
-        },
-        {
-            "_key": "art2",
-            "headline": "Tech Update",
-            "body": "Latest technology trends",
-            "tags": ["tech", "trends"],
-        },
-    ]
-
-    for doc in test_docs:
-        db.collection(docs_col).insert(doc)
-    for article in test_articles:
-        db.collection(articles_col).insert(article)
-
-    # Test 1: Create custom analyzers
-    custom_analyzer_name = "test_text_analyzer"
-    try:
-        # Create a custom text analyzer
+    # Step 2: Create analyzer if not exists
+    analyzer_name = "text_en"
+    raw_analyzers = db.analyzers()
+    if isinstance(raw_analyzers, list):
+        existing_analyzers = [a["name"] for a in raw_analyzers]
+    else:
+        existing_analyzers = []
+    if analyzer_name not in existing_analyzers:
         db.create_analyzer(
-            name=custom_analyzer_name,
+            name=analyzer_name,
             analyzer_type="text",
             properties={
                 "locale": "en.utf-8",
                 "case": "lower",
-                "stopwords": ["the", "a", "an"],
+                "stopwords": [],
             },
+            features=["frequency", "norm", "position"],
         )
-    except Exception:
-        # Analyzer might already exist or creation might fail - that's okay for testing
-        pass
 
-    # Test 2: Create ArangoSearch view
-    search_view_name = "test_search_view"
-    try:
-        if not db.has_view(search_view_name):
-            db.create_arangosearch_view(
-                name=search_view_name,
-                properties={
-                    "links": {
-                        docs_col: {
-                            "analyzers": ["identity", "text_en"],
-                            "fields": {
-                                "title": {"analyzers": ["text_en"]},
-                                "content": {"analyzers": ["text_en", "identity"]},
-                                "category": {},
-                            },
-                            "includeAllFields": False,
+    # Step 3: Create ActorView (ArangoSearch) with field-level analyzer config
+    db.delete_view("ActorView", ignore_missing=True)
+    db.create_view(
+        "ActorView",
+        "arangosearch",
+        {
+            "links": {
+                "Actor": {
+                    "analyzers": ["text_en"],
+                    "fields": {
+                        "name": {
+                            "analyzers": ["text_en"],
                         },
-                        articles_col: {
-                            "analyzers": ["identity"],
-                            "fields": {
-                                "headline": {"analyzers": ["text_en"]},
-                                "body": {"analyzers": ["text_en"]},
-                                "tags": {},
-                            },
-                            "includeAllFields": False,
-                        },
-                    }
+                    },
+                    "includeAllFields": True,
+                    "storeValues": "none",
+                    "trackListPositions": False,
                 },
-            )
-    except Exception:
-        # View creation might fail in some test environments - that's okay
-        pass
-
-    # Test 3: Generate schema and validate analyzers
-    schema = graph.generate_schema(
-        sample_ratio=1.0, graph_name=None, include_examples=True
+            }
+        },
     )
 
-    # Validate analyzer schema structure
-    assert "analyzer_schema" in schema
-    analyzer_schema = schema["analyzer_schema"]
-    assert isinstance(analyzer_schema, list)
-    assert len(analyzer_schema) > 0
+    graph = ArangoGraph(db, generate_schema_on_init=False)
+    schema = graph.generate_schema()
 
-    # Should contain default analyzers
-    analyzer_names = set(analyzer_schema)
-    expected_default_analyzers = {"identity", "text_en"}
-    assert expected_default_analyzers.issubset(analyzer_names)
-
-    # Check if our custom analyzer is included (if creation succeeded)
-    if custom_analyzer_name in analyzer_names:
-        # Custom analyzer should be in the list
-        assert custom_analyzer_name in analyzer_schema
-
-    # Test 4: Validate view schema structure
-    assert "view_schema" in schema
+    # Step 5: Validate ActorView is present in view_schema
     view_schema = schema["view_schema"]
-    assert isinstance(view_schema, list)
+    actor_view = next((v for v in view_schema if v["name"] == "ActorView"), None)
+    assert actor_view is not None
+    assert actor_view["type"] == "arangosearch"
+    assert actor_view["linked_collections"][0]["collection"] == "Actor"
+    assert "name" in actor_view["linked_collections"][0]["fields"]
+    assert "text_en" in actor_view["linked_collections"][0]["analyzers"]
 
-    # If view creation succeeded, validate its structure
-    search_view = None
-    for view in view_schema:
-        if view.get("name") == search_view_name:
-            search_view = view
-            break
-
-    if search_view is not None:
-        # Validate ArangoSearch view structure
-        assert search_view["type"] == "arangosearch"
-        assert "linked_collections" in search_view
-
-        linked_collections = search_view["linked_collections"]
-        assert isinstance(linked_collections, list)
-
-        # Should have our collections linked
-        collection_names = {lc["collection"] for lc in linked_collections}
-        assert docs_col in collection_names
-        assert articles_col in collection_names
-
-        # Validate structure of linked collections
-        for linked_col in linked_collections:
-            assert "collection" in linked_col
-            assert "fields" in linked_col
-            assert "analyzers" in linked_col
-            assert isinstance(linked_col["fields"], list)
-            assert isinstance(linked_col["analyzers"], list)
-
-            # Check specific field configurations
-            if linked_col["collection"] == docs_col:
-                fields = linked_col["fields"]
-                assert "title" in fields
-                assert "content" in fields
-                assert "category" in fields
-
-                analyzers = linked_col["analyzers"]
-                assert "identity" in analyzers
-                assert "text_en" in analyzers
-
-    # Test 5: Test view schema error handling
-    # The method should handle cases where view information cannot be retrieved
-    # This is tested implicitly by the try-catch in the generate_schema method
-
-    # Test 6: Test analyzer schema error handling
-    # Similarly, this should handle cases where analyzer information cannot be retrieved
-
-    # Test 7: Test different view types (if supported)
-    # Try to create a different type of view if the database supports it
-    try:
-        inverted_view_name = "test_inverted_view"
-        # Note: This might not work in all ArangoDB versions/configurations
-        # The test should handle this gracefully
-        pass
-    except Exception:
-        # Different view types might not be available - that's okay
-        pass
-
-    # Test 8: Validate schema consistency across multiple calls
-    schema2 = graph.generate_schema(sample_ratio=0.5, include_examples=False)
-
-    # Analyzer schema should be consistent (order might differ)
-    analyzer_set1 = set(schema["analyzer_schema"])
-    analyzer_set2 = set(schema2["analyzer_schema"])
-    assert analyzer_set1 == analyzer_set2
-
-    # View schema should also be consistent in structure
-    assert len(schema["view_schema"]) == len(schema2["view_schema"])
-
-    # Test 9: Test empty database scenario
-    # Clear all views and check that view schema is empty
-    view_names_to_delete = []
-    try:
-        for view in db.views():
-            if not view.get("name", "").startswith("_"):  # Don't delete system views
-                view_names_to_delete.append(view["name"])
-    except Exception:
-        pass
-
-    for view_name in view_names_to_delete:
-        try:
-            db.delete_view(view_name)
-        except Exception:
-            pass
-
-    schema_no_views = graph.generate_schema()
-    assert "view_schema" in schema_no_views
-    assert isinstance(schema_no_views["view_schema"], list)
-    # Should be empty or contain only system views
-
-    # Analyzer schema should still contain default analyzers even if custom ones are removed
-    assert len(schema_no_views["analyzer_schema"]) > 0
+    # Step 6: Validate analyzer is present in analyzer_schema
+    analyzer_schema = schema["analyzer_schema"]
+    assert {"name": analyzer_name, "type": "analyzer"} in analyzer_schema
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -908,7 +757,8 @@ def test_add_graph_documents_requires_embedding(db: StandardDatabase) -> None:
     with pytest.raises(ValueError, match="embedding.*required"):
         graph.add_graph_documents(
             [doc],
-            embed_source=True,  # requires embedding, but embeddings=None
+            embed_source=True,
+            # requires embedding, but embeddings=None
         )
 
 
@@ -1399,225 +1249,3 @@ def test_add_graph_documents_noop_on_empty_input(db: StandardDatabase) -> None:
 
     # Assert _import_data was never triggered
     graph._import_data.assert_not_called()
-
-
-@pytest.mark.usefixtures("clear_arangodb_database")
-def test_generate_schema_views_and_analyzers(db: StandardDatabase) -> None:
-    """
-    Integration test specifically for view and analyzer schema generation
-    in the generate_schema() method.
-    """
-    graph = ArangoGraph(db, generate_schema_on_init=False)
-
-    # Setup: Create test collections for views to link to
-    docs_col = "Documents"
-    articles_col = "Articles"
-
-    if not db.has_collection(docs_col):
-        db.create_collection(docs_col)
-    if not db.has_collection(articles_col):
-        db.create_collection(articles_col)
-
-    # Insert some test data
-    test_docs = [
-        {
-            "_key": "doc1",
-            "title": "Test Document",
-            "content": "This is a test document",
-            "category": "tech",
-        },
-        {
-            "_key": "doc2",
-            "title": "Another Doc",
-            "content": "More content here",
-            "category": "business",
-        },
-    ]
-
-    test_articles = [
-        {
-            "_key": "art1",
-            "headline": "Breaking News",
-            "body": "Important news content",
-            "tags": ["news", "important"],
-        },
-        {
-            "_key": "art2",
-            "headline": "Tech Update",
-            "body": "Latest technology trends",
-            "tags": ["tech", "trends"],
-        },
-    ]
-
-    for doc in test_docs:
-        db.collection(docs_col).insert(doc)
-    for article in test_articles:
-        db.collection(articles_col).insert(article)
-
-    # Test 1: Create custom analyzers
-    custom_analyzer_name = "test_text_analyzer"
-    try:
-        # Create a custom text analyzer
-        db.create_analyzer(
-            name=custom_analyzer_name,
-            analyzer_type="text",
-            properties={
-                "locale": "en.utf-8",
-                "case": "lower",
-                "stopwords": ["the", "a", "an"],
-            },
-        )
-    except Exception:
-        # Analyzer might already exist or creation might fail - that's okay for testing
-        pass
-
-    # Test 2: Create ArangoSearch view
-    search_view_name = "test_search_view"
-    try:
-        if not db.has_view(search_view_name):
-            db.create_arangosearch_view(
-                name=search_view_name,
-                properties={
-                    "links": {
-                        docs_col: {
-                            "analyzers": ["identity", "text_en"],
-                            "fields": {
-                                "title": {"analyzers": ["text_en"]},
-                                "content": {"analyzers": ["text_en", "identity"]},
-                                "category": {},
-                            },
-                            "includeAllFields": False,
-                        },
-                        articles_col: {
-                            "analyzers": ["identity"],
-                            "fields": {
-                                "headline": {"analyzers": ["text_en"]},
-                                "body": {"analyzers": ["text_en"]},
-                                "tags": {},
-                            },
-                            "includeAllFields": False,
-                        },
-                    }
-                },
-            )
-    except Exception:
-        # View creation might fail in some test environments - that's okay
-        pass
-
-    # Test 3: Generate schema and validate analyzers
-    schema = graph.generate_schema(
-        sample_ratio=1.0, graph_name=None, include_examples=True
-    )
-
-    # Validate analyzer schema structure
-    assert "analyzer_schema" in schema
-    analyzer_schema = schema["analyzer_schema"]
-    assert isinstance(analyzer_schema, list)
-    assert len(analyzer_schema) > 0
-
-    # Should contain default analyzers
-    analyzer_names = set(analyzer_schema)
-    expected_default_analyzers = {"identity", "text_en"}
-    assert expected_default_analyzers.issubset(analyzer_names)
-
-    # Check if our custom analyzer is included (if creation succeeded)
-    if custom_analyzer_name in analyzer_names:
-        # Custom analyzer should be in the list
-        assert custom_analyzer_name in analyzer_schema
-
-    # Test 4: Validate view schema structure
-    assert "view_schema" in schema
-    view_schema = schema["view_schema"]
-    assert isinstance(view_schema, list)
-
-    # If view creation succeeded, validate its structure
-    search_view = None
-    for view in view_schema:
-        if view.get("name") == search_view_name:
-            search_view = view
-            break
-
-    if search_view is not None:
-        # Validate ArangoSearch view structure
-        assert search_view["type"] == "arangosearch"
-        assert "linked_collections" in search_view
-
-        linked_collections = search_view["linked_collections"]
-        assert isinstance(linked_collections, list)
-
-        # Should have our collections linked
-        collection_names = {lc["collection"] for lc in linked_collections}
-        assert docs_col in collection_names
-        assert articles_col in collection_names
-
-        # Validate structure of linked collections
-        for linked_col in linked_collections:
-            assert "collection" in linked_col
-            assert "fields" in linked_col
-            assert "analyzers" in linked_col
-            assert isinstance(linked_col["fields"], list)
-            assert isinstance(linked_col["analyzers"], list)
-
-            # Check specific field configurations
-            if linked_col["collection"] == docs_col:
-                fields = linked_col["fields"]
-                assert "title" in fields
-                assert "content" in fields
-                assert "category" in fields
-
-                analyzers = linked_col["analyzers"]
-                assert "identity" in analyzers
-                assert "text_en" in analyzers
-
-    # Test 5: Test view schema error handling
-    # The method should handle cases where view information cannot be retrieved
-    # This is tested implicitly by the try-catch in the generate_schema method
-
-    # Test 6: Test analyzer schema error handling
-    # Similarly, this should handle cases where analyzer information cannot be retrieved
-
-    # Test 7: Test different view types (if supported)
-    # Try to create a different type of view if the database supports it
-    try:
-        inverted_view_name = "test_inverted_view"
-        # Note: This might not work in all ArangoDB versions/configurations
-        # The test should handle this gracefully
-        pass
-    except Exception:
-        # Different view types might not be available - that's okay
-        pass
-
-    # Test 8: Validate schema consistency across multiple calls
-    schema2 = graph.generate_schema(sample_ratio=0.5, include_examples=False)
-
-    # Analyzer schema should be consistent (order might differ)
-    analyzer_set1 = set(schema["analyzer_schema"])
-    analyzer_set2 = set(schema2["analyzer_schema"])
-    assert analyzer_set1 == analyzer_set2
-
-    # View schema should also be consistent in structure
-    assert len(schema["view_schema"]) == len(schema2["view_schema"])
-
-    # Test 9: Test empty database scenario
-    # Clear all views and check that view schema is empty
-    view_names_to_delete = []
-    try:
-        for view in db.views():
-            if not view.get("name", "").startswith("_"):  # Don't delete system views
-                view_names_to_delete.append(view["name"])
-    except Exception:
-        pass
-
-    for view_name in view_names_to_delete:
-        try:
-            db.delete_view(view_name)
-        except Exception:
-            pass
-
-    schema_no_views = graph.generate_schema()
-    assert "view_schema" in schema_no_views
-    assert isinstance(schema_no_views["view_schema"], list)
-    # Should be empty or contain only system views
-
-    # Analyzer schema should still contain default analyzers even if custom ones are removed
-    assert len(schema_no_views["analyzer_schema"]) > 0

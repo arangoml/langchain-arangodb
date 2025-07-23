@@ -1052,7 +1052,9 @@ class TestArangoGraph:
             )
 
     @patch("langchain_arangodb.graphs.arangodb_graph.ArangoClient")
-    def test_generate_schema_includes_view_and_analyzer(self, mock_client_cls):
+    def test_generate_schema_includes_view_and_analyzer(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         # Setup mock DB and ArangoGraph instance
         mock_db = MagicMock()
         mock_client = MagicMock()
@@ -1115,8 +1117,9 @@ class TestArangoGraph:
         assert alias_view["indexes"][0]["index"] == "inverted_index_1"
 
         # Check analyzers
-        assert "text_en" in analyzer_schema
-        assert "identity" in analyzer_schema
+        names = [a["name"] for a in analyzer_schema]
+        assert "text_en" in names
+        assert "identity" in names
 
     class DummyEmbeddings(Embeddings):
         def embed_documents(self, texts: List[str]) -> List[List[float]]:
