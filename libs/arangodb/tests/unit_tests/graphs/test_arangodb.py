@@ -1051,6 +1051,73 @@ class TestArangoGraph:
                 embed_source=True,  # any of these True triggers the check
             )
 
+    @patch("langchain_arangodb.graphs.arangodb_graph.ArangoClient")
+    def test_generate_schema_includes_view_and_analyzer(self, mock_client_cls):
+        # Setup mock DB and ArangoGraph instance
+        mock_db = MagicMock()
+        mock_client = MagicMock()
+        mock_client.db.return_value = mock_db
+        mock_client_cls.return_value = mock_client
+        graph = ArangoGraph(db=mock_db)
+
+        # ---- Mock views ----
+        mock_db.views.return_value = [
+            {"name": "SearchView", "type": "arangosearch"},
+            {"name": "AliasView", "type": "search-alias"}
+        ]
+
+        mock_db.view.side_effect = [
+            {
+                "links": {
+                    "TestCollection": {
+                        "analyzers": ["text_en"],
+                        "fields": {
+                            "title": {"analyzers": ["text_en"]},
+                            "desc": {"analyzers": ["text_en"]}
+                        }
+                    }
+                }
+            },
+            {
+                "indexes": [
+                    {"collection": "TestCollection", "index": "inverted_index_1"}
+                ]
+            }
+        ]
+
+        # ---- Mock analyzers ----
+        mock_db.analyzers.return_value = [
+            {"name": "text_en", "type": "text"},
+            {"name": "identity", "type": "identity"},
+        ]
+
+        # ---- Call generate_schema() ----
+        schema = graph.generate_schema()
+
+        # ---- Assertions ----
+        assert "view_schema" in schema
+        assert "analyzer_schema" in schema
+
+        view_schema = schema["view_schema"]
+        analyzer_schema = schema["analyzer_schema"]
+
+        # Check arangosearch view
+        search_view = next(v for v in view_schema if v["name"] == "SearchView")
+        assert search_view["type"] == "arangosearch"
+        assert search_view["linked_collections"][0]["collection"] == "TestCollection"
+        assert set(search_view["linked_collections"][0]["fields"]) == {"title", "desc"}
+        assert search_view["linked_collections"][0]["analyzers"] == ["text_en"]
+
+        # Check search-alias view
+        alias_view = next(v for v in view_schema if v["name"] == "AliasView")
+        assert alias_view["type"] == "search-alias"
+        assert alias_view["indexes"][0]["collection"] == "TestCollection"
+        assert alias_view["indexes"][0]["index"] == "inverted_index_1"
+
+        # Check analyzers
+        assert "text_en" in analyzer_schema
+        assert "identity" in analyzer_schema
+
     class DummyEmbeddings(Embeddings):
         def embed_documents(self, texts: List[str]) -> List[List[float]]:
             return [[0.0] * 5 for _ in texts]
