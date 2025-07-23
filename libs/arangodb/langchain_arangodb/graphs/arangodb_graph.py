@@ -342,17 +342,28 @@ class ArangoGraph(GraphStore):
                 view_name = view["name"]
                 view_type = view["type"]
                 view_info = self.db.view(view_name)
+                if not isinstance(view_info, dict):
+                    continue
+
                 if view_type == "arangosearch":
                     linked_collections = []
-                    links = view_info["links"]
+                    links = view_info.get("links", {})
+                    if not isinstance(links, dict):
+                        continue
+
                     for collection, properties in links.items():
+                        if not isinstance(properties, dict):
+                            continue
                         analyzers = properties.get("analyzers", [])
-                        fields = list(properties.get("fields", {}).keys())
+                        fields_dict = properties.get("fields", {})
+                        if not isinstance(fields_dict, dict):
+                            continue
+                        fields = list(fields_dict.keys())
                         linked_collections.append(
                             {
                                 "collection": collection,
                                 "fields": fields,
-                                "analyzers": analyzers,
+                                "analyzers": analyzers
                             }
                         )
                     view_schema.append(
@@ -364,13 +375,27 @@ class ArangoGraph(GraphStore):
                     )
                 else:
                     indexes = view_info.get("indexes", [])
+                    if not isinstance(indexes, list):
+                        continue
+
                     indexes_ls = []
                     for idx in indexes:
-                        collection = idx["collection"]
-                        index = idx["index"]
-                        indexes_ls.append({"collection": collection, "index": index})
+                        if not isinstance(idx, dict):
+                            continue
+                        collection = idx.get("collection", "")
+                        index = idx.get("index", "")
+                        indexes_ls.append(
+                            {
+                                "collection": collection,
+                                "index": index
+                            }
+                        )
                     view_schema.append(
-                        {"name": view_name, "type": view_type, "indexes": indexes_ls}
+                        {
+                            "name": view_name,
+                            "type": view_type,
+                            "indexes": indexes_ls
+                        }
                     )
         except Exception as e:
             m = f"Error fetching view schema: {e}"
@@ -380,10 +405,11 @@ class ArangoGraph(GraphStore):
         # Step 4: Generate Analyzer Schema
         #####
 
-        analyzer_schema: List[Dict[str, Any]] = []
+        analyzer_schema: List[str] = []  # Changed type hint to List[str] since we only store names
         try:
             for analyzer in self.db.analyzers():  # type: ignore
-                analyzer_schema.append(analyzer["name"])
+                if isinstance(analyzer, dict) and "name" in analyzer:
+                    analyzer_schema.append(analyzer["name"])
         except Exception as e:
             m = f"Error fetching analyzer schema: {e}"
             raise ValueError(m)
