@@ -17,6 +17,8 @@ Things you should do:
 - Think step by step.
 - Rely on `ArangoDB Schema` and `AQL Query Examples` (if provided) to generate the query.
 - Begin the `AQL Query` by the `WITH` AQL keyword to specify all of the ArangoDB Collections required.
+- If a `View Schema` is defined and contains analyzers for specific fields, prefer using the View with the `SEARCH` and `ANALYZER` clauses instead of a direct collection scan.
+- Use `PHRASE(...)`, `TOKENS(...)`, or `IN TOKENS(...)` as appropriate when analyzers are available on a field.
 - Return the `AQL Query` wrapped in 3 backticks (```).
 - Use only the provided relationship types and properties in the `ArangoDB Schema` and any `AQL Query Examples` queries.
 - Only answer to requests related to generating an AQL Query.
