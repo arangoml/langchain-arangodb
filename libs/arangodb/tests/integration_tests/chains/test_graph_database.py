@@ -18,10 +18,12 @@ def test_aql_generating_run(db: StandardDatabase) -> None:
     """Test that AQL statement is correctly generated and executed."""
     graph = ArangoGraph(db)
 
-    assert graph.schema == {
-        "collection_schema": [],
-        "graph_schema": [],
-    }
+    # Check schema structure - analyzer_schema may contain default analyzers
+    assert "collection_schema" in graph.schema
+    assert "graph_schema" in graph.schema
+    assert graph.schema["collection_schema"] == []
+    assert graph.schema["graph_schema"] == []
+    # analyzer_schema and view_schema may contain default/system entries
 
     # Create two nodes and a relationship
     graph.db.create_collection("Actor")
@@ -70,10 +72,12 @@ def test_aql_top_k(db: StandardDatabase) -> None:
     TOP_K = 1
     graph = ArangoGraph(db)
 
-    assert graph.schema == {
-        "collection_schema": [],
-        "graph_schema": [],
-    }
+    # Check schema structure - analyzer_schema may contain default analyzers
+    assert "collection_schema" in graph.schema
+    assert "graph_schema" in graph.schema
+    assert graph.schema["collection_schema"] == []
+    assert graph.schema["graph_schema"] == []
+    # analyzer_schema and view_schema may contain default/system entries
 
     # Create two nodes and a relationship
     graph.db.create_collection("Actor")

@@ -674,6 +674,62 @@ def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
+def test_generate_schema_views_and_analyzers(db: StandardDatabase) -> None:
+    # Step 1: Create the Actor collection and insert sample data
+    if not db.has_collection("Actor"):
+        db.create_collection("Actor")
+    actor_collection = db.collection("Actor")
+    actor_collection.insert({"_key": "1", "name": "Robert Downey Jr."}, overwrite=True)
+
+    # Step 3: Create an ArangoSearch view on the Actor collection
+    db.delete_view("ActorView", ignore_missing=True)
+    db.create_view(
+        "ActorView",
+        "arangosearch",
+        {
+            "links": {
+                "Actor": {
+                    "analyzers": ["text_en"],
+                    "fields": {
+                        "name": {
+                            "analyzers": ["text_en"],
+                        },
+                    },
+                    "includeAllFields": True,
+                    "storeValues": "none",
+                    "trackListPositions": False,
+                },
+            }
+        },
+    )
+
+    # Step 4: Generate schema
+    graph = ArangoGraph(db, generate_schema_on_init=False, schema_include_views=True)
+    schema = graph.generate_schema(schema_include_views=True)
+
+    # Step 5: Validate ActorView is present in view_schema
+    view_schema = schema["view_schema"]
+    actor_view = next((v for v in view_schema if v["name"] == "ActorView"), None)
+    assert actor_view is not None
+    assert actor_view["type"] == "arangosearch"
+
+    linked_collections = actor_view["linked_collections"][0]
+    assert "Actor" in linked_collections
+    actor_link = linked_collections["Actor"]
+
+    assert "fields" in actor_link
+    assert "name" in actor_link["fields"]
+    assert "analyzers" in actor_link
+    assert "text_en" in actor_link["analyzers"]
+
+    # Step 6: Validate analyzer is present in analyzer_schema
+    analyzer_schema = schema["analyzer_schema"]
+    matching_analyzer = next((a for a in analyzer_schema if "text_en" in a), None)
+    assert matching_analyzer is not None
+    assert isinstance(matching_analyzer["text_en"], dict)
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
 def test_add_graph_documents_requires_embedding(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
@@ -686,7 +742,8 @@ def test_add_graph_documents_requires_embedding(db: StandardDatabase) -> None:
     with pytest.raises(ValueError, match="embedding.*required"):
         graph.add_graph_documents(
             [doc],
-            embed_source=True,  # requires embedding, but embeddings=None
+            embed_source=True,
+            # requires embedding, but embeddings=None
         )
 
 
@@ -1099,12 +1156,12 @@ def test_embed_relationships_and_include_source(db: StandardDatabase) -> None:
     all_relationship_edges = relationship_edge_calls[0]
     pprint.pprint(all_relationship_edges)
 
-    assert any(
-        "embedding" in e for e in all_relationship_edges
-    ), "Expected embedding in relationship"  # noqa: E501
-    assert any(
-        "source_id" in e for e in all_relationship_edges
-    ), "Expected source_id in relationship"  # noqa: E501
+    assert any("embedding" in e for e in all_relationship_edges), (
+        "Expected embedding in relationship"
+    )  # noqa: E501
+    assert any("source_id" in e for e in all_relationship_edges), (
+        "Expected source_id in relationship"
+    )  # noqa: E501
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")

@@ -1051,6 +1051,93 @@ class TestArangoGraph:
                 embed_source=True,  # any of these True triggers the check
             )
 
+    @patch("langchain_arangodb.graphs.arangodb_graph.ArangoClient")
+    def test_generate_schema_includes_view_and_analyzer(
+        self, mock_client_cls: MagicMock
+    ) -> None:
+        # Setup mock DB and ArangoGraph instance
+        mock_db = MagicMock()
+        mock_client = MagicMock()
+        mock_client.db.return_value = mock_db
+        mock_client_cls.return_value = mock_client
+        graph = ArangoGraph(db=mock_db, schema_include_views=True)
+
+        # ---- Mock views ----
+        mock_db.views.return_value = [
+            {"name": "SearchView", "type": "arangosearch"},
+            {"name": "AliasView", "type": "search-alias"},
+        ]
+
+        mock_db.view.side_effect = [
+            {
+                "links": {
+                    "TestCollection": {
+                        "analyzers": ["identity"],
+                        "fields": {
+                            "title": {"analyzers": ["text_en"]},
+                            "desc": {"analyzers": ["text_en"]},
+                        },
+                        "includeAllFields": False,
+                        "storeValues": "none",
+                        "trackListPositions": False,
+                    }
+                }
+            },
+            {
+                "indexes": [
+                    {"collection": "TestCollection", "index": "inverted_index_1"}
+                ]
+            },
+        ]
+
+        # ---- Mock analyzers ----
+        mock_db.analyzers.return_value = [
+            {
+                "name": "text_en",
+                "type": "text",
+                "properties": {
+                    "locale": "en",
+                    "case": "lower",
+                    "stopwords": [],
+                    "accent": False,
+                    "stemming": True,
+                },
+            },
+            {
+                "name": "identity",
+                "type": "identity",
+                "properties": {},
+            },
+        ]
+
+        # ---- Call generate_schema() ----
+        schema = graph.generate_schema(schema_include_views=True)
+
+        # ---- Assertions ----
+        assert "view_schema" in schema
+        assert "analyzer_schema" in schema
+
+        view_schema = schema["view_schema"]
+        analyzer_schema = schema["analyzer_schema"]
+
+        # --- Check arangosearch view ---
+        search_view = next(v for v in view_schema if v["name"] == "SearchView")
+        assert search_view["type"] == "arangosearch"
+        linked = search_view["linked_collections"][0]
+        assert "TestCollection" in linked
+        assert linked["TestCollection"]["analyzers"] == ["identity"]
+        assert set(linked["TestCollection"]["fields"].keys()) == {"title", "desc"}
+
+        # --- Check search-alias view ---
+        alias_view = next(v for v in view_schema if v["name"] == "AliasView")
+        assert alias_view["type"] == "search-alias"
+        assert alias_view["indexes"][0]["collection"] == "TestCollection"
+        assert alias_view["indexes"][0]["index"] == "inverted_index_1"
+
+        # --- Check analyzer schema ---
+        names = [list(a.keys())[0] for a in analyzer_schema]
+        assert "text_en" in names
+
     class DummyEmbeddings(Embeddings):
         def embed_documents(self, texts: List[str]) -> List[List[float]]:
             return [[0.0] * 5 for _ in texts]
