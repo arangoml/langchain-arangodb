@@ -21,8 +21,6 @@ def test_aql_generating_run(db: StandardDatabase) -> None:
     # Check schema structure - analyzer_schema may contain default analyzers
     assert "collection_schema" in graph.schema
     assert "graph_schema" in graph.schema
-    assert "view_schema" in graph.schema
-    assert "analyzer_schema" in graph.schema
     assert graph.schema["collection_schema"] == []
     assert graph.schema["graph_schema"] == []
     # analyzer_schema and view_schema may contain default/system entries
@@ -45,9 +43,6 @@ def test_aql_generating_run(db: StandardDatabase) -> None:
 
     assert len(graph.schema["collection_schema"]) == 3
     assert len(graph.schema["graph_schema"]) == 0
-    # view_schema and analyzer_schema may contain default/system entries
-    assert isinstance(graph.schema["view_schema"], list)
-    assert isinstance(graph.schema["analyzer_schema"], list)
 
     query = """```
         FOR m IN Movie
@@ -80,8 +75,6 @@ def test_aql_top_k(db: StandardDatabase) -> None:
     # Check schema structure - analyzer_schema may contain default analyzers
     assert "collection_schema" in graph.schema
     assert "graph_schema" in graph.schema
-    assert "view_schema" in graph.schema
-    assert "analyzer_schema" in graph.schema
     assert graph.schema["collection_schema"] == []
     assert graph.schema["graph_schema"] == []
     # analyzer_schema and view_schema may contain default/system entries
@@ -104,9 +97,6 @@ def test_aql_top_k(db: StandardDatabase) -> None:
 
     assert len(graph.schema["collection_schema"]) == 3
     assert len(graph.schema["graph_schema"]) == 0
-    # view_schema and analyzer_schema may contain default/system entries
-    assert isinstance(graph.schema["view_schema"], list)
-    assert isinstance(graph.schema["analyzer_schema"], list)
 
     query = """```
         FOR m IN Movie
@@ -397,8 +387,6 @@ def test_exclude_examples(db: StandardDatabase) -> None:
             },
         ],
         "graph_schema": [],
-        "view_schema": [],
-        "analyzer_schema": [],
     }
     assert set(chain.graph.schema) == set(expected_schema)  # type: ignore
 
