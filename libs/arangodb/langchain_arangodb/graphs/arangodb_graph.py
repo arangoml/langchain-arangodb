@@ -116,6 +116,7 @@ class ArangoGraph(GraphStore):
         schema_include_examples: bool = True,
         schema_list_limit: int = 32,
         schema_string_limit: int = 256,
+        schema_include_views: bool = False,
     ) -> None:
         """
         Initializes the ArangoGraph instance.
@@ -132,6 +133,7 @@ class ArangoGraph(GraphStore):
                 schema_include_examples,
                 schema_list_limit,
                 schema_string_limit,
+                schema_include_views,
             )
 
     @property
@@ -224,6 +226,7 @@ class ArangoGraph(GraphStore):
         include_examples: bool = True,
         list_limit: int = 32,
         schema_string_limit: int = 256,
+        schema_include_views: bool = False,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Generates the schema of the ArangoDB Database and returns it
@@ -332,40 +335,31 @@ class ArangoGraph(GraphStore):
 
             collection_schema.append(collection_schema_entry)
 
+        if not schema_include_views:
+            return {
+                "graph_schema": graph_schema,
+                "collection_schema": collection_schema,
+            }
+
         #####
         # Step 3: Generate View Schema
         #####
-
         view_schema: List[Dict[str, Any]] = []
-        try:
-            for view in self.db.views():  # type: ignore
-                view_name = view["name"]
-                view_type = view["type"]
-                view_info = self.db.view(view_name)
-                if not isinstance(view_info, dict):
-                    continue
-
-                if view_type == "arangosearch":
-                    linked_collections: List[Dict[str, Union[str, List[str]]]] = []
+        unique_analyzers = set()
+        for view in self.db.views():  # type: ignore
+            view_name = view["name"]
+            view_type = view["type"]
+            view_info = self.db.view(view_name)
+            if view_type == "arangosearch":
+                linked_collections: List[Dict[str, Union[str, List[str]]]] = []
+                if isinstance(view_info, dict):
                     links = view_info.get("links", {})
-                    if not isinstance(links, dict):
-                        continue
-
-                    for collection, properties in links.items():
-                        if not isinstance(properties, dict):
-                            continue
-                        analyzers = properties.get("analyzers", [])
-                        fields_dict = properties.get("fields", {})
-                        if not isinstance(fields_dict, dict):
-                            continue
-                        fields = list(fields_dict.keys())
-                        linked_collections.append(
-                            {
-                                "collection": collection,
-                                "fields": fields,
-                                "analyzers": analyzers,
-                            }
-                        )
+                    linked_collections.append(links)
+                    for collection in links:
+                        unique_analyzers.update(links[collection]["analyzers"])
+                        for val in links[collection]["fields"].values():
+                            if "analyzers" in val:
+                                unique_analyzers.update(val["analyzers"])
                     view_schema.append(
                         {
                             "name": view_name,
@@ -373,42 +367,20 @@ class ArangoGraph(GraphStore):
                             "linked_collections": linked_collections,
                         }
                     )
-                else:
+            else:
+                if isinstance(view_info, dict):
                     indexes = view_info.get("indexes", [])
-                    if not isinstance(indexes, list):
-                        continue
-
-                    indexes_ls: List[Dict[str, str]] = []
-                    for idx in indexes:
-                        if not isinstance(idx, dict):
-                            continue
-                        collection = idx.get("collection", "")
-                        index = idx.get("index", "")
-                        indexes_ls.append({"collection": collection, "index": index})
                     view_schema.append(
-                        {"name": view_name, "type": view_type, "indexes": indexes_ls}
+                        {"name": view_name, "type": view_type, "indexes": indexes}
                     )
-        except Exception as e:
-            m = f"Error fetching view schema: {e}"
-            raise ValueError(m)
 
         #####
         # Step 4: Generate Analyzer Schema
         #####
-
-        analyzer_names: List[str] = []  # Store analyzer names
-        try:
-            for analyzer in self.db.analyzers():  # type: ignore
-                if isinstance(analyzer, dict) and "name" in analyzer:
-                    analyzer_names.append(analyzer["name"])
-        except Exception as e:
-            m = f"Error fetching analyzer schema: {e}"
-            raise ValueError(m)
-
-        # Convert analyzer names to schema format
-        analyzer_schema: List[Dict[str, Any]] = [
-            {"name": name, "type": "analyzer"} for name in analyzer_names
-        ]
+        analyzer_schema: List[Dict[str, Any]] = []
+        for a in self.db.analyzers():  # type: ignore
+            if a["name"] in unique_analyzers:
+                analyzer_schema.append({a["name"]: a["properties"]})
 
         return {
             "graph_schema": graph_schema,
