@@ -85,7 +85,8 @@ class ArangoGraph(GraphStore):
         in a string. If the string is longer than this limit, a string
         describing the string will be used in the schema instead. Default is 256.
     :type schema_string_limit: int
-    :param schema_include_views: Whether to include the view and analyzer schema in the schema.
+    :param schema_include_views: Whether to include the view and analyzer schema
+        in the schema.
         Default is False.
     :type schema_include_views: bool
 
@@ -253,7 +254,8 @@ class ArangoGraph(GraphStore):
             in a string. If the string is longer than this limit, a string
             describing the string will be used in the schema instead. Default is 128.
         :type schema_string_limit: int
-        :param schema_include_views: Whether to include the view and analyzer schema in the schema.
+        :param schema_include_views: Whether to include the view and analyzer schema
+            in the schema.
             Default is False.
         :type schema_include_views: bool
         :return: A dictionary containing the graph schema and collection schema.
