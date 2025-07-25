@@ -1138,7 +1138,6 @@ class TestArangoGraph:
         names = [list(a.keys())[0] for a in analyzer_schema]
         assert "text_en" in names
 
-
     class DummyEmbeddings(Embeddings):
         def embed_documents(self, texts: List[str]) -> List[List[float]]:
             return [[0.0] * 5 for _ in texts]
