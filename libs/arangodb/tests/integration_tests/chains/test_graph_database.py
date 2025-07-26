@@ -13,8 +13,6 @@ from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from tests.llms.fake_llm import FakeLLM
 
-from ipdb import set_trace
-
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_aql_generating_run(db: StandardDatabase) -> None:

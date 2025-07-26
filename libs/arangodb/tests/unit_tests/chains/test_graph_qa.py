@@ -3,7 +3,6 @@
 import math
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, Mock
-
 import pytest
 from arango import AQLQueryExecuteError
 from langchain_core.callbacks import CallbackManagerForChainRun
