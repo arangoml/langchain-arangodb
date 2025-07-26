@@ -12,6 +12,7 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
+from langchain_openai import OpenAIEmbeddings
 from pydantic import Field
 
 from langchain_arangodb.chains.graph_qa.prompts import (
@@ -46,6 +47,7 @@ class ArangoGraphQAChain(Chain):
     """
 
     graph: GraphStore = Field(exclude=True)
+    embedding: OpenAIEmbeddings = Field(default=None, exclude=True)
     aql_generation_chain: Runnable[Dict[str, Any], Any]
     aql_fix_chain: Runnable[Dict[str, Any], Any]
     qa_chain: Runnable[Dict[str, Any], Any]
@@ -87,9 +89,10 @@ class ArangoGraphQAChain(Chain):
         See https://python.langchain.com/docs/security for more information.
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, embedding: Optional[OpenAIEmbeddings] = None, **kwargs: Any) -> None:
         """Initialize the chain."""
         super().__init__(**kwargs)
+        self.embedding = embedding
         if self.allow_dangerous_requests is not True:
             raise ValueError(
                 "In order to use this chain, you must acknowledge that it can make "
@@ -122,6 +125,8 @@ class ArangoGraphQAChain(Chain):
     def from_llm(
         cls,
         llm: BaseLanguageModel,
+        embedding: OpenAIEmbeddings,
+        enable_query_cache: bool = True,
         *,
         qa_prompt: Optional[BasePromptTemplate] = None,
         aql_generation_prompt: Optional[BasePromptTemplate] = None,
@@ -151,6 +156,11 @@ class ArangoGraphQAChain(Chain):
         if aql_fix_prompt is None:
             aql_fix_prompt = AQL_FIX_PROMPT
 
+        if enable_query_cache and embedding is None:
+            raise ValueError("Cannot enable query cache without passing **embedding**")
+        if embedding and not enable_query_cache:
+            raise ValueError("You passed an embedding, but you did not enable Query Cache usage.")
+
         qa_chain = qa_prompt | llm
         aql_generation_chain = aql_generation_prompt | llm
         aql_fix_chain = aql_fix_prompt | llm
@@ -159,6 +169,7 @@ class ArangoGraphQAChain(Chain):
             qa_chain=qa_chain,
             aql_generation_chain=aql_generation_chain,
             aql_fix_chain=aql_fix_chain,
+            embedding=embedding,
             **kwargs,
         )
 
@@ -212,128 +223,180 @@ class ArangoGraphQAChain(Chain):
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
         user_input = inputs[self.input_key]
+        use_query_cache = inputs.get("use_query_cache", False)
 
-        ######################
-        # Generate AQL Query #
-        ######################
-
-        aql_generation_output = self.aql_generation_chain.invoke(
-            {
-                "adb_schema": self.graph.schema_yaml,
-                "aql_examples": self.aql_examples,
-                "user_input": user_input,
-            },
-            callbacks=callbacks,
-        )
-
-        aql_query = ""
-        aql_error = ""
-        aql_result = None
-        aql_generation_attempt = 1
+        params = {
+            "top_k": self.top_k,
+            "list_limit": self.output_list_limit,
+            "string_limit": self.output_string_limit,
+        }
 
         aql_execution_func = (
-            self.graph.query if self.execute_aql_query else self.graph.explain
+                self.graph.query if self.execute_aql_query else self.graph.explain
         )
 
-        while (
-            aql_result is None
-            and aql_generation_attempt < self.max_aql_generation_attempts + 1
-        ):
-            if isinstance(aql_generation_output, str):
-                aql_generation_output_content = aql_generation_output
-            elif isinstance(aql_generation_output, AIMessage):
-                aql_generation_output_content = str(aql_generation_output.content)
+        if use_query_cache:
+
+            ######################
+            # Check Query Cache #
+            ######################
+
+            # Exact Search 
+            exact_search_check = list(self.graph.db.collection("Queries").find({"text": user_input}, limit=1))
+            if len(exact_search_check) == 1:
+                cached_query = exact_search_check[0]["aql"]
+                print("!!!using exact search!!!")
             else:
-                m = f"Invalid AQL Generation Output: {aql_generation_output} (type: {type(aql_generation_output)})"  # noqa: E501
-                raise ValueError(m)
+                # Vector Search 
+                query_embedding = self.embedding.embed_query(user_input)
+                vector_search_check = """
+                    FOR q IN Queries
+                        LET score = COSINE_SIMILARITY(q.embedding, @query_embedding)
+                        SORT score DESC
+                        LIMIT 1
+                        FILTER score > @score_threshold
+                        RETURN q.aql        
+                """
+                vector_result = list(self.graph.db.aql.execute(vector_search_check, bind_vars={"query_embedding": query_embedding, "score_threshold": 0.80}))
+                cached_query = vector_result[0] if vector_result else None
+                if cached_query:
+                    print("!!!using vector search!!!") 
 
-            #####################
-            # Extract AQL Query #
-            #####################
+        if not use_query_cache or not cached_query:
+            print("!!!using aql generation!!!")
 
-            pattern = r"```(?i:aql)?(.*?)```"
-            matches: List[str] = re.findall(
-                pattern, aql_generation_output_content, re.DOTALL
+            ######################
+            # Generate AQL Query #
+            ######################
+
+            aql_generation_output = self.aql_generation_chain.invoke(
+                {
+                    "adb_schema": self.graph.schema_yaml,
+                    "aql_examples": self.aql_examples,
+                    "user_input": user_input,
+                },
+                callbacks=callbacks,
             )
 
-            if not matches:
-                _run_manager.on_text(
-                    "Invalid Response: ", end="\n", verbose=self.verbose
+            aql_query = ""
+            aql_error = ""
+            aql_result = None
+            aql_generation_attempt = 1
+
+            while (
+                aql_result is None
+                and aql_generation_attempt < self.max_aql_generation_attempts + 1
+            ):
+                if isinstance(aql_generation_output, str):
+                    aql_generation_output_content = aql_generation_output
+                elif isinstance(aql_generation_output, AIMessage):
+                    aql_generation_output_content = str(aql_generation_output.content)
+                else:
+                    m = f"Invalid AQL Generation Output: {aql_generation_output} (type: {type(aql_generation_output)})"  # noqa: E501
+                    raise ValueError(m)
+
+                #####################
+                # Extract AQL Query #
+                #####################
+
+                pattern = r"```(?i:aql)?(.*?)```"
+                matches: List[str] = re.findall(
+                    pattern, aql_generation_output_content, re.DOTALL
                 )
 
+                if not matches:
+                    _run_manager.on_text(
+                        "Invalid Response: ", end="\n", verbose=self.verbose
+                    )
+
+                    _run_manager.on_text(
+                        aql_generation_output_content,
+                        color="red",
+                        end="\n",
+                        verbose=self.verbose,
+                    )
+
+                    m = f"Unable to extract AQL Query from response: {aql_generation_output_content}"  # noqa: E501
+                    raise ValueError(m)
+
+                aql_query = matches[0].strip()
+
+                if self.force_read_only_query:
+                    is_read_only, write_operation = self._is_read_only_query(aql_query)
+
+                    if not is_read_only:
+                        error_msg = f"""
+                            Security violation: Write operations are not allowed.
+                            Detected write operation in query: {write_operation}
+                        """
+                        raise ValueError(error_msg)
+
                 _run_manager.on_text(
-                    aql_generation_output_content,
-                    color="red",
-                    end="\n",
-                    verbose=self.verbose,
+                    f"AQL Query ({aql_generation_attempt}):", verbose=self.verbose
+                )
+                _run_manager.on_text(
+                    aql_query, color="green", end="\n", verbose=self.verbose
                 )
 
-                m = f"Unable to extract AQL Query from response: {aql_generation_output_content}"  # noqa: E501
+                #############################
+                # Execute/Explain AQL Query #
+                #############################
+
+                try:
+                    aql_result = aql_execution_func(aql_query, params)
+                except (AQLQueryExecuteError, AQLQueryExplainError) as e:
+                    aql_error = str(e.error_message)
+
+                    _run_manager.on_text(
+                        "AQL Query Execution Error: ", end="\n", verbose=self.verbose
+                    )
+                    _run_manager.on_text(
+                        aql_error, color="yellow", end="\n\n", verbose=self.verbose
+                    )
+
+                    ########################
+                    # Retry AQL Generation #
+                    ########################
+
+                    aql_generation_output = self.aql_fix_chain.invoke(
+                        {
+                            "adb_schema": self.graph.schema_yaml,
+                            "aql_query": aql_query,
+                            "aql_error": aql_error,
+                        },
+                        callbacks=callbacks,
+                    )
+
+                aql_generation_attempt += 1
+
+            if aql_result is None:
+                m = f"""
+                    Maximum amount of AQL Query Generation attempts reached.
+                    Unable to execute the AQL Query due to the following error:
+                    {aql_error}
+                """
                 raise ValueError(m)
 
-            aql_query = matches[0].strip()
+            ######################
+            # Store Query in Cache #
+            ######################
 
-            if self.force_read_only_query:
-                is_read_only, write_operation = self._is_read_only_query(aql_query)
+            self.graph.db.collection("Queries").insert({
+                "text": user_input,
+                "embedding": query_embedding,
+                "aql": aql_query,
+            })
 
-                if not is_read_only:
-                    error_msg = f"""
-                        Security violation: Write operations are not allowed.
-                        Detected write operation in query: {write_operation}
-                    """
-                    raise ValueError(error_msg)
+        if use_query_cache and cached_query:
+            aql_query = cached_query
+            aql_result = aql_execution_func(aql_query, params)
 
             _run_manager.on_text(
-                f"AQL Query ({aql_generation_attempt}):", verbose=self.verbose
-            )
+                    f"AQL Query (used cached query):", verbose=self.verbose
+                )
             _run_manager.on_text(
                 aql_query, color="green", end="\n", verbose=self.verbose
             )
-
-            #############################
-            # Execute/Explain AQL Query #
-            #############################
-
-            try:
-                params = {
-                    "top_k": self.top_k,
-                    "list_limit": self.output_list_limit,
-                    "string_limit": self.output_string_limit,
-                }
-
-                aql_result = aql_execution_func(aql_query, params)
-            except (AQLQueryExecuteError, AQLQueryExplainError) as e:
-                aql_error = str(e.error_message)
-
-                _run_manager.on_text(
-                    "AQL Query Execution Error: ", end="\n", verbose=self.verbose
-                )
-                _run_manager.on_text(
-                    aql_error, color="yellow", end="\n\n", verbose=self.verbose
-                )
-
-                ########################
-                # Retry AQL Generation #
-                ########################
-
-                aql_generation_output = self.aql_fix_chain.invoke(
-                    {
-                        "adb_schema": self.graph.schema_yaml,
-                        "aql_query": aql_query,
-                        "aql_error": aql_error,
-                    },
-                    callbacks=callbacks,
-                )
-
-            aql_generation_attempt += 1
-
-        if aql_result is None:
-            m = f"""
-                Maximum amount of AQL Query Generation attempts reached.
-                Unable to execute the AQL Query due to the following error:
-                {aql_error}
-            """
-            raise ValueError(m)
 
         text = "AQL Result:" if self.execute_aql_query else "AQL Explain:"
         _run_manager.on_text(text, end="\n", verbose=self.verbose)
@@ -360,7 +423,7 @@ class ArangoGraphQAChain(Chain):
             callbacks=callbacks,
         )
 
-        results: Dict[str, Any] = {self.output_key: result}
+        results: Dict[str, Any] = {self.output_key: result.content}
 
         if self.return_aql_query:
             results["aql_query"] = aql_generation_output
