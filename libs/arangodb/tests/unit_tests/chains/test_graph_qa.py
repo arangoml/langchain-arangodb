@@ -210,6 +210,7 @@ class TestArangoGraphQAChain:
         self, fake_graph_store: FakeGraphStore, mock_chains: Dict[str, Runnable]
     ) -> None:
         """Test successful AQL query execution."""
+        print("DEBUG Result:")
         chain = ArangoGraphQAChain(
             graph=fake_graph_store,
             aql_generation_chain=mock_chains["aql_generation_chain"],
@@ -219,9 +220,10 @@ class TestArangoGraphQAChain:
         )
 
         result = chain._call({"query": "Find all movies"})
+        print("DEBUG Result:", result)
 
         assert "result" in result
-        assert result["result"] == "This is a test answer"
+        assert result["result"].content == "This is a test answer"
         assert len(fake_graph_store.queries_executed) == 1
 
     def test_call_with_ai_message_response(
