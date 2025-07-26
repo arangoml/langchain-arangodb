@@ -27,6 +27,16 @@ class FakeGraphStore(ArangoGraph):
         self.explains_run = []  # type: ignore
         self.refreshed = False
         self.graph_documents_added = []  # type: ignore
+        
+        # Mock the database interface
+        self.db = Mock()
+        self.db.collection = Mock()
+        mock_queries_collection = Mock()
+        mock_queries_collection.find = Mock(return_value=[])
+        mock_queries_collection.insert = Mock()
+        self.db.collection.return_value = mock_queries_collection
+        self.db.aql = Mock()
+        self.db.aql.execute = Mock(return_value=[])
 
         # Mock the database interface
         self.__db = Mock()
@@ -117,7 +127,7 @@ class TestArangoGraphQAChain:
                 return []
 
         qa_chain = CompliantRunnable()
-        qa_chain.invoke = MagicMock(return_value="This is a test answer")  # type: ignore
+        qa_chain.invoke = MagicMock(return_value=AIMessage(content="This is a test answer"))  # type: ignore
 
         aql_generation_chain = CompliantRunnable()
         aql_generation_chain.invoke = MagicMock(  # type: ignore
