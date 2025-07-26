@@ -129,8 +129,8 @@ class ArangoGraphQAChain(Chain):
     def from_llm(
         cls,
         llm: BaseLanguageModel,
-        embedding: OpenAIEmbeddings,
-        enable_query_cache: bool = True,
+        embedding: Optional[OpenAIEmbeddings] = None,
+        enable_query_cache: bool = False,
         *,
         qa_prompt: Optional[BasePromptTemplate] = None,
         aql_generation_prompt: Optional[BasePromptTemplate] = None,
@@ -445,8 +445,8 @@ class ArangoGraphQAChain(Chain):
                 self.graph.query if self.execute_aql_query else self.graph.explain
         )
 
+        cached_query = None
         if use_query_cache:
-
             ######################
             # Check Query Cache #
             ######################
@@ -470,7 +470,7 @@ class ArangoGraphQAChain(Chain):
                 vector_result = list(self.graph.db.aql.execute(vector_search_check, bind_vars={"query_embedding": query_embedding, "score_threshold": 0.80}))
                 cached_query = vector_result[0] if vector_result else None
                 if cached_query:
-                    print("!!!using vector search!!!") 
+                    print("!!!using vector search!!!")
 
         if not use_query_cache or not cached_query:
             print("!!!using aql generation!!!")
@@ -591,11 +591,13 @@ class ArangoGraphQAChain(Chain):
             # Store Query in Cache #
             ######################
 
-            self.graph.db.collection("Queries").insert({
-                "text": user_input,
-                "embedding": query_embedding,
-                "aql": aql_query,
-            })
+            if use_query_cache:
+                query_embedding = self.embedding.embed_query(user_input)
+                self.graph.db.collection("Queries").insert({
+                    "text": user_input,
+                    "embedding": query_embedding,
+                    "aql": aql_query,
+                })
 
         if use_query_cache and cached_query:
             aql_query = cached_query
