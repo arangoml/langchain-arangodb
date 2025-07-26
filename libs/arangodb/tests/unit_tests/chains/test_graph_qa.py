@@ -2,7 +2,6 @@
 
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, Mock
-
 import pytest
 from arango import AQLQueryExecuteError
 from langchain_core.callbacks import CallbackManagerForChainRun
@@ -592,7 +591,6 @@ class TestArangoGraphQAChain:
         fake_graph_store.db.aql.execute = Mock(
             return_value=["FOR m IN Movies RETURN m"]  # Return cached query from vector search
         )
-
         chain = ArangoGraphQAChain(
             graph=fake_graph_store,
             aql_generation_chain=mock_chains["aql_generation_chain"],
