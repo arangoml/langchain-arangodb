@@ -1,10 +1,13 @@
 """Test Graph Database Chain."""
 
 import pprint
+from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
+from arango.cursor import Cursor
 from arango.database import StandardDatabase
+from arango.job import AsyncJob, BatchJob
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
@@ -884,41 +887,43 @@ def test_init_succeeds_if_dangerous_requests_allowed() -> None:
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_query_cache_exact_match(db: StandardDatabase):
+def test_query_cache_exact_match(db: StandardDatabase) -> None:
     graph = ArangoGraph(db)
     graph.db.create_collection("Movies")
     graph.db.create_collection("Queries")
-    graph.db.collection("Queries").insert({
-        "text": "Find all movies",
-        "aql": "FOR m IN Movies RETURN m",
-        "embedding": [0.123] * 5
-    })
-    movies = [
-        {"title": "Inception"},
-        {"title": "Inception2"},
-        {"title": "Inception1"}
-    ]
+    graph.db.collection("Queries").insert(
+        {
+            "text": "Find all movies",
+            "aql": "FOR m IN Movies RETURN m",
+            "embedding": [0.123] * 5,
+        }
+    )
+    movies = [{"title": "Inception"}, {"title": "Inception2"}, {"title": "Inception1"}]
     for movie in movies:
         graph.db.collection("Movies").insert(movie)
     graph.refresh_schema()
 
     aql_gen_called = {"count": 0}
+
     # def aql_gen_mock(input): aql_gen_called["count"] += 1
-    def qa_chain(x, **_):
+    def qa_chain(x: Dict[str, Any], **_: Any) -> List[str]:
         return [m["title"] for m in x["aql_result"]]
-    qa_chain = RunnableLambda(qa_chain)
-    aql_gen_chain = RunnableLambda(lambda x, **_: AIMessage(content="FOR m IN Movies RETURN m"))
+
+    qa_chain_runnable: RunnableLambda = RunnableLambda(qa_chain)
+    aql_gen_chain = RunnableLambda(
+        lambda x, **_: AIMessage(content="FOR m IN Movies RETURN m")
+    )
     aql_fix_chain = RunnableLambda(lambda x, **_: AIMessage(content=""))
 
     chain = ArangoGraphQAChain(
         graph=graph,
         aql_generation_chain=aql_gen_chain,
         aql_fix_chain=aql_fix_chain,
-        qa_chain=qa_chain,
+        qa_chain=qa_chain_runnable,
         allow_dangerous_requests=True,
-        embedding=type("FakeEmbedding", (), {
-                "embed_query": staticmethod(lambda text: [0.123] * 5)
-            })(),
+        embedding=type(
+            "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.123] * 5)}
+        )(),
     )
     result = chain._call({"query": "Find all movies", "use_query_cache": True})
 
@@ -927,24 +932,26 @@ def test_query_cache_exact_match(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_query_cache_vector_match(db: StandardDatabase):
+def test_query_cache_vector_match(db: StandardDatabase) -> None:
     """Test query cache when there is a close vector match."""
     graph = ArangoGraph(db)
     graph.db.create_collection("Movies")
     graph.db.create_collection("Queries")
-    
+
     # Insert a cached query with a different but similar vector
-    graph.db.collection("Queries").insert({
-        "text": "Show me all films",
-        "aql": "FOR m IN Movies RETURN m",
-        "embedding": [0.123, 0.456, 0.789, 0.321, 0.654]
-    })
-    
+    graph.db.collection("Queries").insert(
+        {
+            "text": "Show me all films",
+            "aql": "FOR m IN Movies RETURN m",
+            "embedding": [0.123, 0.456, 0.789, 0.321, 0.654],
+        }
+    )
+
     # Insert some test movies
     movies = [
         {"title": "The Matrix"},
         {"title": "Inception"},
-        {"title": "Interstellar"}
+        {"title": "Interstellar"},
     ]
     for movie in movies:
         graph.db.collection("Movies").insert(movie)
@@ -952,36 +959,41 @@ def test_query_cache_vector_match(db: StandardDatabase):
 
     # Track if AQL generation was called
     aql_gen_called = {"count": 0}
-    
-    def qa_chain(x, **_):
+
+    def qa_chain(x: Dict[str, Any], **_: Any) -> List[str]:
         return [m["title"] for m in x["aql_result"]]
-    qa_chain = RunnableLambda(qa_chain)
-    
+
+    qa_chain_runnable: RunnableLambda = RunnableLambda(qa_chain)
+
     # Mock chains that should not be called if cache hits
-    aql_gen_chain = RunnableLambda(lambda x, **_: 
-        AIMessage(content="FOR m IN Movies RETURN m"))
-    aql_fix_chain = RunnableLambda(lambda x, **_: 
-        AIMessage(content=""))
+    aql_gen_chain = RunnableLambda(
+        lambda x, **_: AIMessage(content="FOR m IN Movies RETURN m")
+    )
+    aql_fix_chain = RunnableLambda(lambda x, **_: AIMessage(content=""))
 
     # Create fake embedding function that returns similar vector
-    fake_embedder = type("FakeEmbedding", (), {
-        "embed_query": staticmethod(lambda text: [0.124, 0.455, 0.788, 0.322, 0.653])
-    })()
+    fake_embedder = type(
+        "FakeEmbedding",
+        (),
+        {"embed_query": staticmethod(lambda text: [0.124, 0.455, 0.788, 0.322, 0.653])},
+    )()
 
     chain = ArangoGraphQAChain(
         graph=graph,
         aql_generation_chain=aql_gen_chain,
         aql_fix_chain=aql_fix_chain,
-        qa_chain=qa_chain,
+        qa_chain=qa_chain_runnable,
         allow_dangerous_requests=True,
         embedding=fake_embedder,
     )
-    
-    result = chain._call({
-        "query": "List all movies", 
-        "use_query_cache": True,
-        "cache_threshold": 0.95  # High similarity threshold
-    })
+
+    result = chain._call(
+        {
+            "query": "List all movies",
+            "use_query_cache": True,
+            "cache_threshold": 0.95,  # High similarity threshold
+        }
+    )
 
     # Should return cached query results
     assert result["result"] == ["The Matrix", "Inception", "Interstellar"]
@@ -989,168 +1001,175 @@ def test_query_cache_vector_match(db: StandardDatabase):
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_query_cache_no_match_and_store_new_query(db: StandardDatabase):
+def test_query_cache_no_match_and_store_new_query(db: StandardDatabase) -> None:
     """Test query cache when there is no close vector match."""
     graph = ArangoGraph(db)
     graph.db.create_collection("Movies")
     graph.db.create_collection("Queries")
-    
+
     # Insert a cached query with a very different vector
-    graph.db.collection("Queries").insert({
-        "text": "Show me all films",
-        "aql": "FOR m IN Movies RETURN m",
-        "embedding": [1, 0, 0, 0, 0]
-    })
-    
+    graph.db.collection("Queries").insert(
+        {
+            "text": "Show me all films",
+            "aql": "FOR m IN Movies RETURN m",
+            "embedding": [1, 0, 0, 0, 0],
+        }
+    )
+
     # Insert test movies
-    movies = [
-        {"title": "Avatar"},
-        {"title": "Titanic"},
-        {"title": "Star Wars"}
-    ]
+    movies = [{"title": "Avatar"}, {"title": "Titanic"}, {"title": "Star Wars"}]
     for movie in movies:
         graph.db.collection("Movies").insert(movie)
     graph.refresh_schema()
 
     aql_gen_called = {"count": 0}
-    
-    def qa_chain(x, **_):
+
+    def qa_chain(x: Dict[str, Any], **_: Any) -> str:
         return "Avatar"
-    qa_chain = RunnableLambda(qa_chain)
-    
-    def aql_gen_mock(x, **_):
+
+    qa_chain_runnable: RunnableLambda = RunnableLambda(qa_chain)
+
+    def aql_gen_mock(x: Dict[str, Any], **_: Any) -> AIMessage:
         aql_gen_called["count"] += 1
         return AIMessage(content="```aql\nFOR m IN Movies LIMIT 1 RETURN m.title\n```")
-    
+
     aql_gen_chain = RunnableLambda(aql_gen_mock)
-    aql_fix_chain = RunnableLambda(lambda x, **_: 
-        AIMessage(content=""))
+    aql_fix_chain = RunnableLambda(lambda x, **_: AIMessage(content=""))
 
     # Create fake embedding function that returns very different vector
-    fake_embedder = type("FakeEmbedding", (), {
-        "embed_query": staticmethod(lambda text: [0, 1, 0, 0, 0])
-    })()
+    fake_embedder = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0, 1, 0, 0, 0])}
+    )()
 
     chain = ArangoGraphQAChain(
         graph=graph,
         aql_generation_chain=aql_gen_chain,
         aql_fix_chain=aql_fix_chain,
-        qa_chain=qa_chain,
+        qa_chain=qa_chain_runnable,
         allow_dangerous_requests=True,
         embedding=fake_embedder,
     )
-    
-    result = chain._call({
-        "query": "What is the name of the first movie?", 
-        "use_query_cache": True,
-        "cache_threshold": 0.95  # High similarity threshold
-    })
+
+    result = chain._call(
+        {
+            "query": "What is the name of the first movie?",
+            "use_query_cache": True,
+            "cache_threshold": 0.95,  # High similarity threshold
+        }
+    )
 
     # Should generate new query since vectors are too different
     assert result["result"] == "Avatar"
     assert aql_gen_called["count"] == 1  # AQL generation was called
 
     # Verify the new query was stored in cache
-    cached_queries = list(graph.db.collection("Queries").all())
+    raw_result = graph.db.collection("Queries").all()
+
+    if isinstance(raw_result, (AsyncJob, BatchJob)):
+        cursor = raw_result.result()
+    elif isinstance(raw_result, Cursor):
+        cursor = raw_result
+    else:
+        raise TypeError("Expected Cursor or job result, got None or unexpected type.")
+
+    cached_queries = list(cursor)
+
     assert len(cached_queries) == 2  # Original + newly stored query
-    
+
     # Find the newly added query
-    new_query = next(q for q in cached_queries 
-                    if q["text"] == "What is the name of the first movie?")
+    new_query = next(
+        q for q in cached_queries if q["text"] == "What is the name of the first movie?"
+    )
     assert new_query["aql"] == "FOR m IN Movies LIMIT 1 RETURN m.title"
     assert "embedding" in new_query
     assert new_query["embedding"] == [0, 1, 0, 0, 0]  # Should match our fake embedder
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_query_cache_disabled(db: StandardDatabase):
+def test_query_cache_disabled(db: StandardDatabase) -> None:
     """Test that cache is not used when disabled."""
     graph = ArangoGraph(db)
     graph.db.create_collection("Movies")
     graph.db.create_collection("Queries")
-    
+
     # Insert a cached query
-    graph.db.collection("Queries").insert({
-        "text": "List all movies",
-        "aql": "FOR m IN Movies RETURN m",
-        "embedding": [0.1, 0.2, 0.3, 0.4, 0.5]
-    })
-    
+    graph.db.collection("Queries").insert(
+        {
+            "text": "List all movies",
+            "aql": "FOR m IN Movies RETURN m",
+            "embedding": [0.1, 0.2, 0.3, 0.4, 0.5],
+        }
+    )
+
     # Insert test movies
-    movies = [
-        {"title": "The Matrix"},
-        {"title": "Inception"}
-    ]
+    movies = [{"title": "The Matrix"}, {"title": "Inception"}]
     for movie in movies:
         graph.db.collection("Movies").insert(movie)
     graph.refresh_schema()
 
     aql_gen_called = {"count": 0}
-    
-    def qa_chain(x, **_):
+
+    def qa_chain(x: Dict[str, Any], **_: Any) -> List[str]:
         return [m["title"] for m in x["aql_result"]]
-    qa_chain = RunnableLambda(qa_chain)
-    
-    def aql_gen_mock(x, **_):
+
+    qa_chain_runnable: RunnableLambda = RunnableLambda(qa_chain)
+
+    def aql_gen_mock(x: Dict[str, Any], **_: Any) -> AIMessage:
         aql_gen_called["count"] += 1
         return AIMessage(content="```aql\nFOR m IN Movies RETURN m\n```")
-    
-    aql_gen_chain = RunnableLambda(aql_gen_mock)
-    aql_fix_chain = RunnableLambda(lambda x, **_: 
-        AIMessage(content=""))
 
-    fake_embedder = type("FakeEmbedding", (), {
-        "embed_query": staticmethod(lambda text: [0.1, 0.2, 0.3, 0.4, 0.5])
-    })()
+    aql_gen_chain = RunnableLambda(aql_gen_mock)
+    aql_fix_chain = RunnableLambda(lambda x, **_: AIMessage(content=""))
+
+    fake_embedder = type(
+        "FakeEmbedding",
+        (),
+        {"embed_query": staticmethod(lambda text: [0.1, 0.2, 0.3, 0.4, 0.5])},
+    )()
 
     chain = ArangoGraphQAChain(
         graph=graph,
         aql_generation_chain=aql_gen_chain,
         aql_fix_chain=aql_fix_chain,
-        qa_chain=qa_chain,
+        qa_chain=qa_chain_runnable,
         allow_dangerous_requests=True,
         embedding=fake_embedder,
     )
-    
+
     # Execute with cache disabled
-    result = chain._call({
-        "query": "List all movies",
-        "use_query_cache": False
-    })
+    result = chain._call({"query": "List all movies", "use_query_cache": False})
 
     # Verify AQL generation was called despite cache existing
     assert aql_gen_called["count"] == 1
     assert result["result"] == ["The Matrix", "Inception"]
 
+
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_query_cache_without_embedding(db: StandardDatabase):
+def test_query_cache_without_embedding(db: StandardDatabase) -> None:
     """Test that attempting to use cache without embedding raises error."""
     graph = ArangoGraph(db)
     graph.db.create_collection("Movies")
     graph.db.create_collection("Queries")
-    
-    def qa_chain(x, **_):
+
+    def qa_chain(x: Dict[str, Any], **_: Any) -> List[str]:
         return [m["title"] for m in x["aql_result"]]
-    qa_chain = RunnableLambda(qa_chain)
-    
-    aql_gen_chain = RunnableLambda(lambda x, **_: 
-        AIMessage(content="FOR m IN Movies RETURN m"))
-    aql_fix_chain = RunnableLambda(lambda x, **_: 
-        AIMessage(content=""))
+
+    qa_chain_runnable: RunnableLambda = RunnableLambda(qa_chain)
+
+    aql_gen_chain = RunnableLambda(
+        lambda x, **_: AIMessage(content="FOR m IN Movies RETURN m")
+    )
+    aql_fix_chain = RunnableLambda(lambda x, **_: AIMessage(content=""))
 
     chain = ArangoGraphQAChain(
         graph=graph,
         aql_generation_chain=aql_gen_chain,
         aql_fix_chain=aql_fix_chain,
-        qa_chain=qa_chain,
+        qa_chain=qa_chain_runnable,
         allow_dangerous_requests=True,
         embedding=None,  # No embedding provided
     )
-    
+
     # Should raise error when trying to use cache without embedding
     with pytest.raises(ValueError, match="Cannot enable query cache without passing"):
-        chain._call({
-            "query": "List all movies",
-            "use_query_cache": True
-        })
-
+        chain._call({"query": "List all movies", "use_query_cache": True})
