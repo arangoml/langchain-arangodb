@@ -3,6 +3,7 @@
 import math
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, Mock
+
 import pytest
 from arango import AQLQueryExecuteError
 from langchain_core.callbacks import CallbackManagerForChainRun
@@ -26,7 +27,7 @@ class FakeGraphStore(ArangoGraph):
         self.explains_run = []  # type: ignore
         self.refreshed = False
         self.graph_documents_added = []  # type: ignore
-        
+
         # Mock the database interface
         self.db = Mock()
         self.db.collection = Mock()
@@ -126,7 +127,9 @@ class TestArangoGraphQAChain:
                 return []
 
         qa_chain = CompliantRunnable()
-        qa_chain.invoke = MagicMock(return_value=AIMessage(content="This is a test answer"))  # type: ignore
+        qa_chain.__class__.invoke = MagicMock(  # type: ignore
+            return_value=AIMessage(content="This is a test answer")
+        )  # type: ignore
 
         aql_generation_chain = CompliantRunnable()
         aql_generation_chain.invoke = MagicMock(  # type: ignore
@@ -227,7 +230,6 @@ class TestArangoGraphQAChain:
         self, fake_graph_store: FakeGraphStore, mock_chains: Dict[str, Runnable]
     ) -> None:
         """Test successful AQL query execution."""
-        print("DEBUG Result:")
         chain = ArangoGraphQAChain(
             graph=fake_graph_store,
             aql_generation_chain=mock_chains["aql_generation_chain"],
@@ -237,7 +239,6 @@ class TestArangoGraphQAChain:
         )
 
         result = chain._call({"query": "Find all movies"})
-        print("DEBUG Result:", result)
 
         assert "result" in result
         assert result["result"].content == "This is a test answer"
