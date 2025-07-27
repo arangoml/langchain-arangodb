@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from numbers import Number
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, cast
 
 from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain.chains.base import Chain
@@ -21,6 +22,8 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_QA_PROMPT,
 )
 from langchain_arangodb.graphs.graph_store import GraphStore
+
+from ...graphs.arangodb_graph import ArangoGraph
 
 AQL_WRITE_OPERATIONS: List[str] = [
     "INSERT",
@@ -47,7 +50,7 @@ class ArangoGraphQAChain(Chain):
     """
 
     graph: GraphStore = Field(exclude=True)
-    embedding: OpenAIEmbeddings = Field(default=None, exclude=True)
+    embedding: Optional[OpenAIEmbeddings] = Field(default=None, exclude=True)
     aql_generation_chain: Runnable[Dict[str, Any], Any]
     aql_fix_chain: Runnable[Dict[str, Any], Any]
     qa_chain: Runnable[Dict[str, Any], Any]
@@ -89,7 +92,9 @@ class ArangoGraphQAChain(Chain):
         See https://python.langchain.com/docs/security for more information.
     """
 
-    def __init__(self, embedding: Optional[OpenAIEmbeddings] = None, **kwargs: Any) -> None:
+    def __init__(
+        self, embedding: Optional[OpenAIEmbeddings] = None, **kwargs: Any
+    ) -> None:
         """Initialize the chain."""
         super().__init__(**kwargs)
         self.embedding = embedding
@@ -159,7 +164,9 @@ class ArangoGraphQAChain(Chain):
         if enable_query_cache and embedding is None:
             raise ValueError("Cannot enable query cache without passing **embedding**")
         if embedding and not enable_query_cache:
-            raise ValueError("You passed an embedding, but you did not enable Query Cache usage.")
+            raise ValueError(
+                "You passed an embedding, but you did not enable Query Cache usage."
+            )
 
         qa_chain = qa_prompt | llm
         aql_generation_chain = aql_generation_prompt | llm
@@ -235,7 +242,7 @@ class ArangoGraphQAChain(Chain):
         }
 
         aql_execution_func = (
-                self.graph.query if self.execute_aql_query else self.graph.explain
+            self.graph.query if self.execute_aql_query else self.graph.explain
         )
 
         cached_query = None
@@ -243,14 +250,24 @@ class ArangoGraphQAChain(Chain):
             ######################
             # Check Query Cache #
             ######################
+            # Exact Search
 
-            # Exact Search 
-            exact_search_check = list(self.graph.db.collection("Queries").find({"text": user_input}, limit=1))
+            exact_search_check = list(
+                cast(
+                    Iterable,
+                    cast(ArangoGraph, self.graph)
+                    .db.collection("Queries")
+                    .find({"text": user_input}, limit=1),
+                )
+            )
             if len(exact_search_check) == 1:
                 cached_query = exact_search_check[0]["aql"]
-                print("!!!using exact search!!!")
             else:
-                # Vector Search 
+                # Vector Search
+                if self.embedding is None:
+                    raise ValueError(
+                        "Embedding must be provided when using query cache"
+                    )
                 query_embedding = self.embedding.embed_query(user_input)
                 vector_search_check = """
                     FOR q IN Queries
@@ -260,14 +277,24 @@ class ArangoGraphQAChain(Chain):
                         FILTER score > @score_threshold
                         RETURN q.aql        
                 """
-                vector_result = list(self.graph.db.aql.execute(vector_search_check, bind_vars={"query_embedding": query_embedding, "score_threshold": 0.80}))
+
+                vector_result = list(
+                    cast(
+                        Iterable,
+                        cast(ArangoGraph, self.graph).db.aql.execute(
+                            vector_search_check,
+                            bind_vars={
+                                "query_embedding": cast(
+                                    Sequence[Number], query_embedding
+                                ),
+                                "score_threshold": cast(Number, 0.80),
+                            },
+                        ),
+                    )
+                )
                 cached_query = vector_result[0] if vector_result else None
-                if cached_query:
-                    print("!!!using vector search!!!")
 
         if not use_query_cache or not cached_query:
-            print("!!!using aql generation!!!")
-
             ######################
             # Generate AQL Query #
             ######################
@@ -385,20 +412,24 @@ class ArangoGraphQAChain(Chain):
             ######################
 
             if use_query_cache:
+                if self.embedding is None:
+                    raise ValueError(
+                        "Embedding must be provided when using query cache"
+                    )
                 query_embedding = self.embedding.embed_query(user_input)
-                self.graph.db.collection("Queries").insert({
-                    "text": user_input,
-                    "embedding": query_embedding,
-                    "aql": aql_query,
-                })
+                cast(ArangoGraph, self.graph).db.collection("Queries").insert(
+                    {
+                        "text": user_input,
+                        "embedding": query_embedding,
+                        "aql": aql_query,
+                    }
+                )
 
         if use_query_cache and cached_query:
             aql_query = cached_query
             aql_result = aql_execution_func(aql_query, params)
 
-            _run_manager.on_text(
-                    f"AQL Query (used cached query):", verbose=self.verbose
-                )
+            _run_manager.on_text("AQL Query (used cached query):", verbose=self.verbose)
             _run_manager.on_text(
                 aql_query, color="green", end="\n", verbose=self.verbose
             )
@@ -427,8 +458,8 @@ class ArangoGraphQAChain(Chain):
             },
             callbacks=callbacks,
         )
-
-        results: Dict[str, Any] = {self.output_key: result.content}
+        results: Dict[str, Any] = {self.output_key: result}
+        # results: Dict[str, Any] = {self.output_key: result.content}
 
         if self.return_aql_query:
             results["aql_query"] = aql_generation_output
