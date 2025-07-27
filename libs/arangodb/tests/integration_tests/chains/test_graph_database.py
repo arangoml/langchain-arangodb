@@ -1,10 +1,13 @@
 """Test Graph Database Chain."""
 
 import pprint
+from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
+from arango.cursor import Cursor
 from arango.database import StandardDatabase
+from arango.job import AsyncJob, BatchJob
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
