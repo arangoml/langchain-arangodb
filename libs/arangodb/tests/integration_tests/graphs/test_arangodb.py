@@ -681,7 +681,7 @@ def test_generate_schema_views_and_analyzers(db: StandardDatabase) -> None:
     actor_collection = db.collection("Actor")
     actor_collection.insert({"_key": "1", "name": "Robert Downey Jr."}, overwrite=True)
 
-    # Step 3: Create an ArangoSearch view on the Actor collection
+    # Step 2: Create an ArangoSearch view on the Actor collection
     db.delete_view("ActorView", ignore_missing=True)
     db.create_view(
         "ActorView",
@@ -703,6 +703,21 @@ def test_generate_schema_views_and_analyzers(db: StandardDatabase) -> None:
         },
     )
 
+    # Step 3: Create a custom analyzer
+    db.delete_analyzer("custom_analyzer", ignore_missing=True)
+    db.create_analyzer(
+        name="custom_analyzer",
+        analyzer_type="text",
+        properties={
+            "locale": "en.UTF-8",
+            "stopwords": ["the", "a", "an"],
+            "stemming": True,
+            "case": "lower",
+            "accent": False
+        },
+        features=["frequency", "norm", "position"]
+    )
+
     # Step 4: Generate schema
     graph = ArangoGraph(db, generate_schema_on_init=False, schema_include_views=True)
     schema = graph.generate_schema(schema_include_views=True)
@@ -713,21 +728,17 @@ def test_generate_schema_views_and_analyzers(db: StandardDatabase) -> None:
     assert actor_view is not None
     assert actor_view["type"] == "arangosearch"
 
-    linked_collections = actor_view["linked_collections"][0]
-    assert "Actor" in linked_collections
-    actor_link = linked_collections["Actor"]
-
-    assert "fields" in actor_link
-    assert "name" in actor_link["fields"]
-    assert "analyzers" in actor_link
-    assert "text_en" in actor_link["analyzers"]
+    links = actor_view["links"]
+    assert "Actor" in links
+    assert "fields" in links["Actor"]
+    assert "name" in links["Actor"]["fields"]
+    assert "analyzers" in links["Actor"]
+    assert "text_en" in links["Actor"]["analyzers"]
 
     # Step 6: Validate analyzer is present in analyzer_schema
     analyzer_schema = schema["analyzer_schema"]
-    matching_analyzer = next((a for a in analyzer_schema if "text_en" in a), None)
-    assert matching_analyzer is not None
-    assert isinstance(matching_analyzer["text_en"], dict)
-
+    assert "_system::custom_analyzer" in analyzer_schema[0]
+    assert analyzer_schema[0]["_system::custom_analyzer"]["stemming"] == True
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_add_graph_documents_requires_embedding(db: StandardDatabase) -> None:
