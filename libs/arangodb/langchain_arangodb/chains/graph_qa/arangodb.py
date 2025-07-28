@@ -142,6 +142,10 @@ class ArangoGraphQAChain(Chain):
 
         :param llm: The language model to use.
         :type llm: BaseLanguageModel
+        :param embedding: The embedding model to use.
+        :type embedding: OpenAIEmbeddings
+        :param enable_query_cache: Whether to enable query cache.
+        :type enable_query_cache: bool
         :param qa_prompt: The prompt to use for the QA chain.
         :type qa_prompt: BasePromptTemplate
         :param aql_generation_prompt: The prompt to use for the AQL generation chain.
@@ -162,7 +166,7 @@ class ArangoGraphQAChain(Chain):
             aql_fix_prompt = AQL_FIX_PROMPT
 
         if enable_query_cache and embedding is None:
-            raise ValueError("Cannot enable query cache without passing **embedding**")
+            raise ValueError("Cannot enable query cache without passing embedding.")
         if embedding and not enable_query_cache:
             raise ValueError(
                 "You passed an embedding, but you did not enable Query Cache usage."
@@ -250,8 +254,8 @@ class ArangoGraphQAChain(Chain):
             ######################
             # Check Query Cache #
             ######################
-            # Exact Search
 
+            # Exact Search
             exact_search_check = list(
                 cast(
                     Iterable,
@@ -262,6 +266,7 @@ class ArangoGraphQAChain(Chain):
             )
             if len(exact_search_check) == 1:
                 cached_query = exact_search_check[0]["aql"]
+                # print("Exact Search")
             else:
                 # Vector Search
                 if self.embedding is None:
@@ -293,12 +298,14 @@ class ArangoGraphQAChain(Chain):
                     )
                 )
                 cached_query = vector_result[0] if vector_result else None
+                # if cached_query:
+                #     print("Vector Search")
 
         if not use_query_cache or not cached_query:
             ######################
             # Generate AQL Query #
             ######################
-
+            # print("Generate AQL Query")
             aql_generation_output = self.aql_generation_chain.invoke(
                 {
                     "adb_schema": self.graph.schema_yaml,
