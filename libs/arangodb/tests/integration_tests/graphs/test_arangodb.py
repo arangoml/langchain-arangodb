@@ -713,9 +713,9 @@ def test_generate_schema_views_and_analyzers(db: StandardDatabase) -> None:
             "stopwords": ["the", "a", "an"],
             "stemming": True,
             "case": "lower",
-            "accent": False
+            "accent": False,
         },
-        features=["frequency", "norm", "position"]
+        features=["frequency", "norm", "position"],
     )
 
     # Step 4: Generate schema
@@ -738,7 +738,8 @@ def test_generate_schema_views_and_analyzers(db: StandardDatabase) -> None:
     # Step 6: Validate analyzer is present in analyzer_schema
     analyzer_schema = schema["analyzer_schema"]
     assert "_system::custom_analyzer" in analyzer_schema[0]
-    assert analyzer_schema[0]["_system::custom_analyzer"]["stemming"] == True
+    assert analyzer_schema[0]["_system::custom_analyzer"]["case"] == "lower"
+
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_add_graph_documents_requires_embedding(db: StandardDatabase) -> None:
