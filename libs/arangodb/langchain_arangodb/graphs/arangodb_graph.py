@@ -20,6 +20,22 @@ from langchain_arangodb.graphs.graph_document import (
 )
 from langchain_arangodb.graphs.graph_store import GraphStore
 
+DEFAULT_ANALYZERS = {
+    "text_fr",
+    "text_pt",
+    "identity",
+    "text_de",
+    "text_zh",
+    "text_fi",
+    "text_it",
+    "text_no",
+    "text_nl",
+    "text_es",
+    "text_ru",
+    "text_en",
+    "text_sv",
+}
+
 
 def get_arangodb_client(
     url: Optional[str] = None,
@@ -349,42 +365,24 @@ class ArangoGraph(GraphStore):
         #####
         # Step 3: Generate View Schema
         #####
+
         view_schema: List[Dict[str, Any]] = []
-        unique_analyzers = set()
         for view in self.db.views():  # type: ignore
             view_name = view["name"]
             view_type = view["type"]
             view_info = self.db.view(view_name)
-            if view_type == "arangosearch":
-                linked_collections: List[Dict[str, Union[str, List[str]]]] = []
-                if isinstance(view_info, dict):
-                    links = view_info.get("links", {})
-                    linked_collections.append(links)
-                    for collection in links:
-                        unique_analyzers.update(links[collection]["analyzers"])
-                        for val in links[collection]["fields"].values():
-                            if "analyzers" in val:
-                                unique_analyzers.update(val["analyzers"])
-                    view_schema.append(
-                        {
-                            "name": view_name,
-                            "type": view_type,
-                            "linked_collections": linked_collections,
-                        }
-                    )
-            else:
-                if isinstance(view_info, dict):
-                    indexes = view_info.get("indexes", [])
-                    view_schema.append(
-                        {"name": view_name, "type": view_type, "indexes": indexes}
-                    )
+            key = "links" if view_type == "arangosearch" else "indexes"
+            view_schema.append(
+                {"name": view_name, "type": view_type, key: view_info.get(key, [])}  # type: ignore
+            )
 
         #####
         # Step 4: Generate Analyzer Schema
         #####
+
         analyzer_schema: List[Dict[str, Any]] = []
         for a in self.db.analyzers():  # type: ignore
-            if a["name"] in unique_analyzers:
+            if a["name"] not in DEFAULT_ANALYZERS:
                 analyzer_schema.append({a["name"]: a["properties"]})
 
         return {
