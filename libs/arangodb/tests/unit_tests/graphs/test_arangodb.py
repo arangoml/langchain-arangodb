@@ -1093,8 +1093,8 @@ class TestArangoGraph:
         # ---- Mock analyzers ----
         mock_db.analyzers.return_value = [
             {
-                "name": "text_en",
-                "type": "text",
+                "name": "custom_analyzer",
+                "analyzer_type": "text",
                 "properties": {
                     "locale": "en",
                     "case": "lower",
@@ -1102,12 +1102,7 @@ class TestArangoGraph:
                     "accent": False,
                     "stemming": True,
                 },
-            },
-            {
-                "name": "identity",
-                "type": "identity",
-                "properties": {},
-            },
+            }
         ]
 
         # ---- Call generate_schema() ----
@@ -1123,10 +1118,10 @@ class TestArangoGraph:
         # --- Check arangosearch view ---
         search_view = next(v for v in view_schema if v["name"] == "SearchView")
         assert search_view["type"] == "arangosearch"
-        linked = search_view["linked_collections"][0]
-        assert "TestCollection" in linked
-        assert linked["TestCollection"]["analyzers"] == ["identity"]
-        assert set(linked["TestCollection"]["fields"].keys()) == {"title", "desc"}
+        links = search_view["links"]
+        assert "TestCollection" in links
+        assert links["TestCollection"]["analyzers"] == ["identity"]
+        assert links["TestCollection"]["fields"]["title"]["analyzers"] == ["text_en"]
 
         # --- Check search-alias view ---
         alias_view = next(v for v in view_schema if v["name"] == "AliasView")
@@ -1135,8 +1130,8 @@ class TestArangoGraph:
         assert alias_view["indexes"][0]["index"] == "inverted_index_1"
 
         # --- Check analyzer schema ---
-        names = [list(a.keys())[0] for a in analyzer_schema]
-        assert "text_en" in names
+        assert "custom_analyzer" in analyzer_schema[0]
+        assert analyzer_schema[0]["custom_analyzer"]["case"] == "lower"
 
     class DummyEmbeddings(Embeddings):
         def embed_documents(self, texts: List[str]) -> List[List[float]]:
