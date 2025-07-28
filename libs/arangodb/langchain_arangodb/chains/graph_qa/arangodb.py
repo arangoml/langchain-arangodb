@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import re
-from numbers import Number
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple
 
 from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain.chains.base import Chain
@@ -23,8 +22,6 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_QA_PROMPT,
 )
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
-
-from ...graphs.arangodb_graph import ArangoGraph
 
 AQL_WRITE_OPERATIONS: List[str] = [
     "INSERT",
@@ -452,24 +449,20 @@ class ArangoGraphQAChain(Chain):
             self.graph.query if self.execute_aql_query else self.graph.explain
         )
 
+        ######################
+        # Check Query Cache #
+        ######################
+
         cached_query = None
         if use_query_cache:
-            ######################
-            # Check Query Cache #
-            ######################
-
             # Exact Search
             exact_search_check = list(
-                cast(
-                    Iterable,
-                    cast(ArangoGraph, self.graph)
-                    .db.collection("Queries")
-                    .find({"text": user_input}, limit=1),
+                self.graph.db.collection("Queries").find(  # type: ignore
+                    {"text": user_input}, limit=1
                 )
             )
             if len(exact_search_check) == 1:
                 cached_query = exact_search_check[0]["aql"]
-                # print("Exact Search")
             else:
                 # Vector Search
                 if self.embedding is None:
@@ -487,28 +480,21 @@ class ArangoGraphQAChain(Chain):
                 """
 
                 vector_result = list(
-                    cast(
-                        Iterable,
-                        cast(ArangoGraph, self.graph).db.aql.execute(
-                            vector_search_check,
-                            bind_vars={
-                                "query_embedding": cast(
-                                    Sequence[Number], query_embedding
-                                ),
-                                "score_threshold": cast(Number, 0.80),
-                            },
-                        ),
-                    )
+                    self.graph.db.aql.execute(  # type: ignore
+                        vector_search_check,
+                        bind_vars={
+                            "query_embedding": query_embedding,  # type: ignore
+                            "score_threshold": 0.80,  # type: ignore
+                        },
+                    ),
                 )
                 cached_query = vector_result[0] if vector_result else None
-                # if cached_query:
-                #     print("Vector Search")
+
+        ######################
+        # Generate AQL Query #
+        ######################
 
         if not use_query_cache or not cached_query:
-            ######################
-            # Generate AQL Query #
-            ######################
-            # print("Generate AQL Query")
             aql_generation_output = self.aql_generation_chain.invoke(
                 {
                     "adb_schema": self.graph.schema_yaml,
@@ -627,7 +613,7 @@ class ArangoGraphQAChain(Chain):
                         "Embedding must be provided when using query cache"
                     )
                 query_embedding = self.embedding.embed_query(user_input)
-                cast(ArangoGraph, self.graph).db.collection("Queries").insert(
+                self.graph.db.collection("Queries").insert(  # type: ignore
                     {
                         "text": user_input,
                         "embedding": query_embedding,
@@ -720,7 +706,6 @@ class ArangoGraphQAChain(Chain):
             callbacks=callbacks,
         )
         results: Dict[str, Any] = {self.output_key: result}
-        # results: Dict[str, Any] = {self.output_key: result.content}
 
         if self.return_aql_query:
             results["aql_query"] = aql_generation_output
