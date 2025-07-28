@@ -5,8 +5,8 @@ from collections import defaultdict
 from math import ceil
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Union
 
-import farmhash  # type: ignore
-import yaml  # type: ignore
+import farmhash
+import yaml
 from arango import ArangoClient
 from arango.database import Database, StandardDatabase
 from arango.graph import Graph
