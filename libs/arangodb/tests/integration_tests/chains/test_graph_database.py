@@ -11,6 +11,7 @@ from arango.job import AsyncJob, BatchJob
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
+from langchain_core.embeddings import Embeddings
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
