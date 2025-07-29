@@ -1,17 +1,13 @@
 """Test Graph Database Chain."""
 
 import pprint
-from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
-from arango.cursor import Cursor
 from arango.database import StandardDatabase
-from arango.job import AsyncJob, BatchJob
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
-from langchain_core.embeddings import Embeddings
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
@@ -889,7 +885,13 @@ def test_init_succeeds_if_dangerous_requests_allowed() -> None:
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_query_cache(db: StandardDatabase) -> None:
-    """Test query cache when there is a close vector match."""
+    """Test query cache in 5 situations:
+    1. Exact search
+    2. Vector search
+    3. AQL generation and store new query
+    4. Query cache disabled
+    5. Query cache without embedding
+    """
     graph = ArangoGraph(db)
     graph.db.create_collection("Movies")
     graph.db.create_collection("Queries")
@@ -901,7 +903,6 @@ def test_query_cache(db: StandardDatabase) -> None:
             "embedding": [0.123, 0.456, 0.789, 0.321, 0.654],
         }
     ]
-
     graph.db.collection("Queries").insert_many(queries)
 
     movies = [
@@ -915,7 +916,7 @@ def test_query_cache(db: StandardDatabase) -> None:
     dummy_llm = RunnableLambda(lambda prompt: "```FOR m IN Movies LIMIT 1 RETURN m```")
 
     chain = ArangoGraphQAChain.from_llm(
-        llm=dummy_llm,
+        llm=dummy_llm,  # type: ignore
         graph=graph,
         verbose=True,
         allow_dangerous_requests=True,
@@ -923,24 +924,34 @@ def test_query_cache(db: StandardDatabase) -> None:
     )
 
     chain.embedding = type(
-            "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.123] * 5)}
-        )()
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.123] * 5)}
+    )()
 
     # 1. Test with exact search
     result1 = chain.invoke({"query": "List all movies", "use_query_cache": True})
-    assert [m["title"] for m in result1["aql_result"]] == ["The Matrix", "Inception", "Interstellar"]
+    assert [m["title"] for m in result1["aql_result"]] == [
+        "The Matrix",
+        "Inception",
+        "Interstellar",
+    ]
 
     # 2. Test with vector search
     result2 = chain.invoke({"query": "Show me all movies", "use_query_cache": True})
-    assert [m["title"] for m in result2["aql_result"]] == ["The Matrix", "Inception", "Interstellar"]
+    assert [m["title"] for m in result2["aql_result"]] == [
+        "The Matrix",
+        "Inception",
+        "Interstellar",
+    ]
 
     # 3. Test with aql generation and store new query
     chain.embedding = type(
-            "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [1, 0, 0, 0, 0])}
-        )()
-    result3 = chain.invoke({"query": "What is the name of the first movie?", "use_query_cache": True})
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [1, 0, 0, 0, 0])}
+    )()
+    result3 = chain.invoke(
+        {"query": "What is the name of the first movie?", "use_query_cache": True}
+    )
     assert result3["aql_result"][0]["title"] == "The Matrix"
-    assert len(graph.db.collection("Queries").all()) == 2
+    assert len(graph.db.collection("Queries").all()) == 2  # type: ignore
 
     # 4. Test with query cache disabled
     result4 = chain.invoke({"query": "What is the name of the first movie?"})
@@ -948,5 +959,7 @@ def test_query_cache(db: StandardDatabase) -> None:
 
     # 5. Test with query cache without embedding
     chain.embedding = None
-    with pytest.raises(ValueError, match="Cannot enable query cache without passing embedding"):
+    with pytest.raises(
+        ValueError, match="Cannot enable query cache without passing embedding"
+    ):
         chain.invoke({"query": "List all movies", "use_query_cache": True})
