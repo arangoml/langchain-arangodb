@@ -166,6 +166,58 @@ class ArangoGraphQAChain(Chain):
             **kwargs,
         )
 
+    def __get_cached_query(self, user_input: str) -> Optional[Tuple[str, float]]:
+        """Get the cached query for the user input. Only used if embedding
+        is provided and **use_query_cache** is True.
+
+        :param user_input: The user input to search for in the cache.
+        :type user_input: str
+
+        :return: The cached query and score, if found.
+        :rtype: Optional[Tuple[str, int]]
+        """
+        if self.embedding is None:
+            raise ValueError("Cannot enable query cache without passing embedding")
+
+        # 1. Exact Search
+
+        query = """
+            FOR q IN Queries
+                FILTER q.text == @user_input
+                LIMIT 1
+                RETURN q.aql
+        """
+
+        result = list(
+            self.graph.db.aql.execute(query, bind_vars={"user_input": user_input})  # type: ignore
+        )
+
+        if result:
+            return result[0], 1.0
+
+        # 2. Vector Search
+
+        embedding = self.embedding.embed_query(user_input)
+        query = """
+            FOR q IN Queries
+                LET score = COSINE_SIMILARITY(q.embedding, @embedding)
+                SORT score DESC
+                LIMIT 1
+                FILTER score > @score_threshold
+                RETURN {aql: q.aql, score: score}        
+        """
+
+        result = list(
+            self.graph.db.aql.execute(  # type: ignore
+                query, bind_vars={"embedding": embedding, "score_threshold": 0.80}
+            )
+        )
+
+        if result:
+            return result[0]["aql"], result[0]["score"]
+
+        return None
+
     def _call(
         self,
         inputs: Dict[str, Any],
@@ -235,53 +287,24 @@ class ArangoGraphQAChain(Chain):
         # Check Query Cache #
         ######################
 
-        cached_query = None
+        cached_query, score = None, None
         if use_query_cache:
-            # Exact Search
-            exact_search_check = list(
-                self.graph.db.collection("Queries").find(  # type: ignore
-                    {"text": user_input}, limit=1
-                )
-            )
-            if len(exact_search_check) == 1:
-                cached_query = exact_search_check[0]["aql"]
-                # score = "1.0"
-                score: Optional[int] = None
-            else:
-                # Vector Search
-                if self.embedding is None:
-                    raise ValueError(
-                        "Embedding must be provided when using query cache"
-                    )
-                query_embedding = self.embedding.embed_query(user_input)
-                vector_search_check = """
-                    FOR q IN Queries
-                        LET score = COSINE_SIMILARITY(q.embedding, @query_embedding)
-                        SORT score DESC
-                        LIMIT 1
-                        FILTER score > @score_threshold
-                        RETURN {aql: q.aql, score: score}        
-                """
+            if self.embedding is None:
+                m = "Embedding must be provided when using query cache"
+                raise ValueError(m)
 
-                vector_result = list(
-                    self.graph.db.aql.execute(  # type: ignore
-                        vector_search_check,
-                        bind_vars={
-                            "query_embedding": query_embedding,  # type: ignore
-                            "score_threshold": 0.80,  # type: ignore
-                        },
-                    ),
-                )
-                if vector_result:
-                    result = vector_result[0] if vector_result else None
-                    cached_query = result["aql"]  # type: ignore
-                    score = f"{result['score']:.2f}"  # type: ignore
+            cache_result = self.__get_cached_query(user_input)
+
+            if cache_result is not None:
+                cached_query, score = cache_result
 
         ######################
         # Generate AQL Query #
         ######################
 
-        if not use_query_cache or not cached_query:
+        if cached_query:
+            aql_generation_output = f"```aql{cached_query}```"
+        else:
             aql_generation_output = self.aql_generation_chain.invoke(
                 {
                     "adb_schema": self.graph.schema_yaml,
@@ -291,135 +314,128 @@ class ArangoGraphQAChain(Chain):
                 callbacks=callbacks,
             )
 
-            aql_query = ""
-            aql_error = ""
-            aql_result = None
-            aql_generation_attempt = 1
+        aql_query = ""
+        aql_error = ""
+        aql_result = None
+        aql_generation_attempt = 1
 
-            while (
-                aql_result is None
-                and aql_generation_attempt < self.max_aql_generation_attempts + 1
-            ):
-                if isinstance(aql_generation_output, str):
-                    aql_generation_output_content = aql_generation_output
-                elif isinstance(aql_generation_output, AIMessage):
-                    aql_generation_output_content = str(aql_generation_output.content)
-                else:
-                    m = f"Invalid AQL Generation Output: {aql_generation_output} (type: {type(aql_generation_output)})"  # noqa: E501
-                    raise ValueError(m)
-
-                #####################
-                # Extract AQL Query #
-                #####################
-
-                pattern = r"```(?i:aql)?(.*?)```"
-                matches: List[str] = re.findall(
-                    pattern, aql_generation_output_content, re.DOTALL
-                )
-
-                if not matches:
-                    _run_manager.on_text(
-                        "Invalid Response: ", end="\n", verbose=self.verbose
-                    )
-
-                    _run_manager.on_text(
-                        aql_generation_output_content,
-                        color="red",
-                        end="\n",
-                        verbose=self.verbose,
-                    )
-
-                    m = f"Unable to extract AQL Query from response: {aql_generation_output_content}"  # noqa: E501
-                    raise ValueError(m)
-
-                aql_query = matches[0].strip()
-
-                if self.force_read_only_query:
-                    is_read_only, write_operation = self._is_read_only_query(aql_query)
-
-                    if not is_read_only:
-                        error_msg = f"""
-                            Security violation: Write operations are not allowed.
-                            Detected write operation in query: {write_operation}
-                        """
-                        raise ValueError(error_msg)
-
-                _run_manager.on_text(
-                    f"AQL Query ({aql_generation_attempt}):", verbose=self.verbose
-                )
-                _run_manager.on_text(
-                    aql_query, color="green", end="\n", verbose=self.verbose
-                )
-
-                #############################
-                # Execute/Explain AQL Query #
-                #############################
-
-                try:
-                    aql_result = aql_execution_func(aql_query, params)
-                except (AQLQueryExecuteError, AQLQueryExplainError) as e:
-                    aql_error = str(e.error_message)
-
-                    _run_manager.on_text(
-                        "AQL Query Execution Error: ", end="\n", verbose=self.verbose
-                    )
-                    _run_manager.on_text(
-                        aql_error, color="yellow", end="\n\n", verbose=self.verbose
-                    )
-
-                    ########################
-                    # Retry AQL Generation #
-                    ########################
-
-                    aql_generation_output = self.aql_fix_chain.invoke(
-                        {
-                            "adb_schema": self.graph.schema_yaml,
-                            "aql_query": aql_query,
-                            "aql_error": aql_error,
-                        },
-                        callbacks=callbacks,
-                    )
-
-                aql_generation_attempt += 1
-
-            if aql_result is None:
-                m = f"""
-                    Maximum amount of AQL Query Generation attempts reached.
-                    Unable to execute the AQL Query due to the following error:
-                    {aql_error}
-                """
+        while (
+            aql_result is None
+            and aql_generation_attempt < self.max_aql_generation_attempts + 1
+        ):
+            if isinstance(aql_generation_output, str):
+                aql_generation_output_content = aql_generation_output
+            elif isinstance(aql_generation_output, AIMessage):
+                aql_generation_output_content = str(aql_generation_output.content)
+            else:
+                m = f"Invalid AQL Generation Output: {aql_generation_output} (type: {type(aql_generation_output)})"  # noqa: E501
                 raise ValueError(m)
 
-            ######################
-            # Store Query in Cache #
-            ######################
+            #####################
+            # Extract AQL Query #
+            #####################
 
-            if use_query_cache:
-                if self.embedding is None:
-                    raise ValueError(
-                        "Embedding must be provided when using query cache"
-                    )
-                query_embedding = self.embedding.embed_query(user_input)
-                self.graph.db.collection("Queries").insert(  # type: ignore
-                    {
-                        "text": user_input,
-                        "embedding": query_embedding,
-                        "aql": aql_query,
-                    }
+            pattern = r"```(?i:aql)?(.*?)```"
+            matches: List[str] = re.findall(
+                pattern, aql_generation_output_content, re.DOTALL
+            )
+
+            if not matches:
+                _run_manager.on_text(
+                    "Invalid Response: ", end="\n", verbose=self.verbose
                 )
 
-        if use_query_cache and cached_query:
-            aql_query = cached_query
-            aql_result = aql_execution_func(aql_query, params)
+                _run_manager.on_text(
+                    aql_generation_output_content,
+                    color="red",
+                    end="\n",
+                    verbose=self.verbose,
+                )
 
-            score_string = score if score is not None else "1.0"
+                m = f"Unable to extract AQL Query from response: {aql_generation_output_content}"  # noqa: E501
+                raise ValueError(m)
 
-            _run_manager.on_text(
-                f"AQL Query (used cached query, score: {score_string})",
-                verbose=self.verbose,
-            )
+            aql_query = matches[0].strip()
+
+            if self.force_read_only_query:
+                is_read_only, write_operation = self._is_read_only_query(aql_query)
+
+                if not is_read_only:
+                    error_msg = f"""
+                        Security violation: Write operations are not allowed.
+                        Detected write operation in query: {write_operation}
+                    """
+                    raise ValueError(error_msg)
+
+            query_message = f"AQL Query ({aql_generation_attempt})"
+            if cached_query:
+                query_message += f" (used cached query, score: {score})"
+
+            _run_manager.on_text(query_message, verbose=self.verbose)
             _run_manager.on_text(
                 aql_query, color="green", end="\n", verbose=self.verbose
+            )
+
+            #############################
+            # Execute/Explain AQL Query #
+            #############################
+
+            try:
+                aql_result = aql_execution_func(aql_query, params)
+            except (AQLQueryExecuteError, AQLQueryExplainError) as e:
+                aql_error = str(e.error_message)
+
+                _run_manager.on_text(
+                    "AQL Query Execution Error: ", end="\n", verbose=self.verbose
+                )
+                _run_manager.on_text(
+                    aql_error, color="yellow", end="\n\n", verbose=self.verbose
+                )
+
+                ########################
+                # Retry AQL Generation #
+                ########################
+
+                aql_generation_output = self.aql_fix_chain.invoke(
+                    {
+                        "adb_schema": self.graph.schema_yaml,
+                        "aql_query": aql_query,
+                        "aql_error": aql_error,
+                    },
+                    callbacks=callbacks,
+                )
+
+            aql_generation_attempt += 1
+
+        if aql_result is None:
+            m = f"""
+                Maximum amount of AQL Query Generation attempts reached.
+                Unable to execute the AQL Query due to the following error:
+                {aql_error}
+            """
+            raise ValueError(m)
+
+        ########################
+        # Store Query in Cache #
+        ########################
+
+        # TODO: This should be removed and migrated to a separate
+        # public function that can be called by the user.
+        # We should not be storing the query in the cache by default,
+        # since we can't guarantee that the result is correct!
+        # e.g
+        # result = chain.invoke(query)
+        # chain.cache_query(query, result["aql_query"])
+        # OR:
+        # chain.cache_query() # caches last query and aql_query automatically
+        if use_query_cache and self.embedding:
+            query_embedding = self.embedding.embed_query(user_input)
+            self.graph.db.collection("Queries").insert(  # type: ignore
+                {
+                    "text": user_input,
+                    "embedding": query_embedding,
+                    "aql": aql_query,
+                }
             )
 
         text = "AQL Result:" if self.execute_aql_query else "AQL Explain:"
