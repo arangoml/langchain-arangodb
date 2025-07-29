@@ -61,7 +61,7 @@ You are also given the `ArangoDB Schema`. It is a YAML Spec containing:
 1. `Graph Schema`: Lists all Graphs within the ArangoDB Database Instance, along with their Edge Relationships.
 2. `Collection Schema`: Lists all Collections within the ArangoDB Database Instance, along with their document/edge properties and a document/edge example.
 3. `View Schema`: Lists all Views within the ArangoDB Database Instance, along with their linked collections and analyzers.
-4. `Analyzer Schema`: Lists all Analyzers within the ArangoDB Database Instance, along with their properties and features.
+4. `Analyzer Schema`: Lists all custom-built Analyzers within the ArangoDB Database Instance, along with their properties and features. Does not mention the default ArangoDB analyzers (i.e text_en, text_fr, etc.)
 
 You will output the `Corrected AQL Query` wrapped in 3 backticks (```). Do not include any text except the Corrected AQL Query.
 
