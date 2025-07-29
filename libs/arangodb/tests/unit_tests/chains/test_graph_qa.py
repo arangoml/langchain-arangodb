@@ -127,9 +127,7 @@ class TestArangoGraphQAChain:
                 return []
 
         qa_chain = CompliantRunnable()
-        qa_chain.__class__.invoke = MagicMock(  # type: ignore
-            return_value=AIMessage(content="This is a test answer")
-        )  # type: ignore
+        qa_chain.invoke = MagicMock(return_value="This is a test answer")  # type: ignore
 
         aql_generation_chain = CompliantRunnable()
         aql_generation_chain.invoke = MagicMock(  # type: ignore
@@ -241,7 +239,7 @@ class TestArangoGraphQAChain:
         result = chain._call({"query": "Find all movies"})
 
         assert "result" in result
-        assert result["result"].content == "This is a test answer"
+        assert result["result"] == "This is a test answer"
         assert len(fake_graph_store.queries_executed) == 1
 
     def test_call_with_ai_message_response(
