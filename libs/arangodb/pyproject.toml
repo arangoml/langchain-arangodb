@@ -14,7 +14,6 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
 langchain-core = "^0.3.8"
-langchain-openai = ">=0.3.8"
 langchain = "^0.3.7"
 python-arango = "^8.0.0"
 cityhash = "^0.4.8"
@@ -48,7 +47,7 @@ optional = true
 optional = true
 
 [tool.poetry.group.lint.dependencies]
-ruff = ">=0.12"
+ruff = "0.12.5"
 
 [tool.poetry.group.typing.dependencies]
 mypy = "^1.10"
