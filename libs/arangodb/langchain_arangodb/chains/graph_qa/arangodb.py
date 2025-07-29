@@ -8,12 +8,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain.chains.base import Chain
 from langchain_core.callbacks import CallbackManagerForChainRun
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
-from langchain_core.embeddings import Embeddings
-
 from pydantic import Field
 
 from langchain_arangodb.chains.graph_qa.prompts import (
@@ -90,9 +89,7 @@ class ArangoGraphQAChain(Chain):
         See https://python.langchain.com/docs/security for more information.
     """
 
-    def __init__(
-        self, **kwargs: Any
-    ) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         """Initialize the chain."""
         super().__init__(**kwargs)
         if self.allow_dangerous_requests is not True:
@@ -222,7 +219,7 @@ class ArangoGraphQAChain(Chain):
         use_query_cache = inputs.get("use_query_cache", False)
 
         if use_query_cache and self.embedding is None:
-            raise ValueError("Cannot enable query cache without passing **embedding**")
+            raise ValueError("Cannot enable query cache without passing embedding")
 
         params = {
             "top_k": self.top_k,
@@ -248,6 +245,8 @@ class ArangoGraphQAChain(Chain):
             )
             if len(exact_search_check) == 1:
                 cached_query = exact_search_check[0]["aql"]
+                # score = "1.0"
+                score: Optional[int] = None
             else:
                 # Vector Search
                 if self.embedding is None:
@@ -261,7 +260,7 @@ class ArangoGraphQAChain(Chain):
                         SORT score DESC
                         LIMIT 1
                         FILTER score > @score_threshold
-                        RETURN q.aql        
+                        RETURN {aql: q.aql, score: score}        
                 """
 
                 vector_result = list(
@@ -273,7 +272,10 @@ class ArangoGraphQAChain(Chain):
                         },
                     ),
                 )
-                cached_query = vector_result[0] if vector_result else None
+                if vector_result:
+                    result = vector_result[0] if vector_result else None
+                    cached_query = result["aql"]  # type: ignore
+                    score = f"{result['score']:.2f}"  # type: ignore
 
         ######################
         # Generate AQL Query #
@@ -410,7 +412,12 @@ class ArangoGraphQAChain(Chain):
             aql_query = cached_query
             aql_result = aql_execution_func(aql_query, params)
 
-            _run_manager.on_text("AQL Query (used cached query):", verbose=self.verbose)
+            score_string = score if score is not None else "1.0"
+
+            _run_manager.on_text(
+                f"AQL Query (used cached query, score: {score_string})",
+                verbose=self.verbose,
+            )
             _run_manager.on_text(
                 aql_query, color="green", end="\n", verbose=self.verbose
             )
