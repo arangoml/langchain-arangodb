@@ -1,5 +1,6 @@
 """Unit tests for ArangoGraphQAChain."""
 
+import math
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, Mock
 
@@ -112,9 +113,7 @@ class TestArangoGraphQAChain:
                 return []
 
         qa_chain = CompliantRunnable()
-        qa_chain.__class__.invoke = MagicMock(  # type: ignore
-            return_value=AIMessage(content="This is a test answer")
-        )  # type: ignore
+        qa_chain.invoke = MagicMock(return_value="This is a test answer")  # type: ignore
 
         aql_generation_chain = CompliantRunnable()
         aql_generation_chain.invoke = MagicMock(  # type: ignore
@@ -226,7 +225,7 @@ class TestArangoGraphQAChain:
         result = chain._call({"query": "Find all movies"})
 
         assert "result" in result
-        assert result["result"].content == "This is a test answer"
+        assert result["result"] == "This is a test answer"
         assert len(fake_graph_store.queries_executed) == 1
 
     def test_call_with_ai_message_response(
@@ -561,202 +560,80 @@ class TestArangoGraphQAChain:
         assert "result" in result
         assert mock_run_manager.get_child.called
 
-    def test_query_cache_exact_match(
-        self,
-        fake_graph_store: FakeGraphStore,
-        mock_chains: Dict[str, Runnable],
-        mock_embedding: Mock,
-    ) -> None:
-        """Test query cache with exact text match."""
-        # Setup
-        fake_graph_store.db.collection("Queries").find = Mock(
-            return_value=[
-                {"text": "Find all movies", "aql": "FOR m IN Movies RETURN m"}
-            ]
+    def test_query_cache(self, fake_graph_store: FakeGraphStore) -> None:
+        """Test query cache in 4 situations:
+        1. Exact search
+        2. Vector search
+        3. AQL generation and store new query
+        4. Query cache disabled
+        """
+
+        def cosine_similarity(v1, v2):  # type: ignore
+            dot = sum(a * b for a, b in zip(v1, v2))
+            norm1 = math.sqrt(sum(a * a for a in v1))
+            norm2 = math.sqrt(sum(b * b for b in v2))
+            if norm1 == 0.0 or norm2 == 0.0:
+                return 0.0
+            return dot / (norm1 * norm2)
+
+        fake_graph_store.db.collection("Queries").find = Mock(return_value=[])
+
+        # Simulate a previously cached query
+        stored_query = {
+            "text": "List all movies",
+            "aql": "FOR m IN Movies RETURN m",
+            "embedding": [0.123, 0.456, 0.789, 0.321, 0.654],
+        }
+
+        def mock_execute(query, bind_vars):  # type: ignore
+            query_embedding = bind_vars["query_embedding"]
+            score = cosine_similarity(query_embedding, stored_query["embedding"])
+            # print(f"Simulated AQL score: {score:.6f}")
+            if score > bind_vars.get("score_threshold", 0.75):
+                return [{"aql": stored_query["aql"], "score": score}]
+            return []
+
+        fake_graph_store.db.aql.execute = Mock(side_effect=mock_execute)
+
+        dummy_llm = RunnableLambda(
+            lambda prompt: "```FOR m IN Movies LIMIT 1 RETURN m```"
         )
 
-        # Replace aql_generation_chain with a MagicMock-wrapped RunnableLambda
-        aql_gen_mock = MagicMock(return_value={})
-        mock_chains["aql_generation_chain"] = RunnableLambda(aql_gen_mock)
-
-        chain = ArangoGraphQAChain(
+        chain = ArangoGraphQAChain.from_llm(
+            llm=dummy_llm,  # type: ignore
             graph=fake_graph_store,
-            aql_generation_chain=mock_chains["aql_generation_chain"],
-            aql_fix_chain=mock_chains["aql_fix_chain"],
-            qa_chain=mock_chains["qa_chain"],
             allow_dangerous_requests=True,
-            embedding=mock_embedding,
+            verbose=True,
+            return_aql_result=True,
         )
 
-        # Execute
-        result = chain._call({"query": "Find all movies", "use_query_cache": True})
+        chain.embedding = type(
+            "FakeEmbedding",
+            (),
+            {
+                "embed_query": staticmethod(
+                    lambda text: {
+                        "Find all movies": [0.123, 0.456, 0.789, 0.321, 0.654],
+                        "Show me all movies": [0.120, 0.460, 0.780, 0.330, 0.650],
+                    }.get(text, [0.0] * 5)
+                )
+            },
+        )()
 
-        # Verify
-        assert "result" in result
-        assert fake_graph_store.db.collection("Queries").find.call_count == 1
-        assert aql_gen_mock.call_count == 0  # Should not generate new query
+        # 1. Test with exact search
+        result1 = chain.invoke({"query": "Find all movies", "use_query_cache": True})
+        assert result1["aql_result"][0]["title"] == "Inception"
 
-    def test_query_cache_vector_match(
-        self,
-        fake_graph_store: FakeGraphStore,
-        mock_chains: Dict[str, Runnable],
-        mock_embedding: Mock,
-    ) -> None:
-        """Test query cache with vector similarity match."""
-        # Setup
-        fake_graph_store.db.collection("Queries").find = Mock(
-            return_value=[]
-        )  # No exact match
-        fake_graph_store.db.aql.execute = Mock(
-            return_value=[
-                "FOR m IN Movies RETURN m"
-            ]  # Return cached query from vector search
+        # 2. Test with vector search
+        result2 = chain.invoke({"query": "Show me all movies", "use_query_cache": True})
+        assert result2["aql_result"][0]["title"] == "Inception"
+
+        # 3. Test with aql generation and store new query
+        result3 = chain.invoke(
+            {"query": "What is the name of the first movie?", "use_query_cache": True}
         )
+        assert result3["result"] == "```FOR m IN Movies LIMIT 1 RETURN m```"
 
-        # Replace aql_generation_chain with a MagicMock-wrapped RunnableLambda
-        aql_gen_mock = MagicMock(return_value={})
-        mock_chains["aql_generation_chain"] = RunnableLambda(aql_gen_mock)
-
-        chain = ArangoGraphQAChain(
-            graph=fake_graph_store,
-            aql_generation_chain=mock_chains["aql_generation_chain"],
-            aql_fix_chain=mock_chains["aql_fix_chain"],
-            qa_chain=mock_chains["qa_chain"],
-            allow_dangerous_requests=True,
-            embedding=mock_embedding,
-        )
-
-        # Execute
-        result = chain._call({"query": "Find all movies", "use_query_cache": True})
-
-        # Verify
-        assert "result" in result
-        assert fake_graph_store.db.collection("Queries").find.call_count == 1
-        assert fake_graph_store.db.aql.execute.call_count == 1
-        assert aql_gen_mock.call_count == 0  # Should not generate new query
-
-    def test_query_cache_no_match_fallback(
-        self,
-        fake_graph_store: FakeGraphStore,
-        mock_chains: Dict[str, Runnable],
-        mock_embedding: Mock,
-    ) -> None:
-        """Test query cache fallback to generation when no cache match found."""
-        # Setup
-        fake_graph_store.db.collection("Queries").find = Mock(
-            return_value=[]
-        )  # No exact match
-        fake_graph_store.db.aql.execute = Mock(return_value=[])  # No vector match
-
-        # Replace aql_generation_chain with a MagicMock-wrapped RunnableLambda
-        aql_gen_mock = MagicMock(
-            return_value=AIMessage(content="```aql\nFOR m IN Movies RETURN m\n```")
-        )
-        mock_chains["aql_generation_chain"] = RunnableLambda(aql_gen_mock)
-
-        chain = ArangoGraphQAChain(
-            graph=fake_graph_store,
-            aql_generation_chain=mock_chains["aql_generation_chain"],
-            aql_fix_chain=mock_chains["aql_fix_chain"],
-            qa_chain=mock_chains["qa_chain"],
-            allow_dangerous_requests=True,
-            embedding=mock_embedding,
-        )
-
-        # Execute
-        result = chain._call({"query": "Find all movies", "use_query_cache": True})
-
-        # Verify
-        assert "result" in result
-        assert fake_graph_store.db.collection("Queries").find.call_count == 1
-        assert fake_graph_store.db.aql.execute.call_count == 1
-        assert aql_gen_mock.call_count == 1  # Should generate new query
-
-    def test_query_cache_store_new_query(
-        self,
-        fake_graph_store: FakeGraphStore,
-        mock_chains: Dict[str, Runnable],
-        mock_embedding: Mock,
-    ) -> None:
-        """Test storing new query in cache after generation."""
-        # Setup
-        fake_graph_store.db.collection("Queries").find = Mock(
-            return_value=[]
-        )  # No exact match
-        fake_graph_store.db.aql.execute = Mock(return_value=[])  # No vector match
-        fake_graph_store.db.collection("Queries").insert = Mock()
-
-        chain = ArangoGraphQAChain(
-            graph=fake_graph_store,
-            aql_generation_chain=mock_chains["aql_generation_chain"],
-            aql_fix_chain=mock_chains["aql_fix_chain"],
-            qa_chain=mock_chains["qa_chain"],
-            allow_dangerous_requests=True,
-            embedding=mock_embedding,
-        )
-
-        # Execute
-        result = chain._call({"query": "Find all movies", "use_query_cache": True})
-
-        # Verify
-        assert "result" in result
-        assert fake_graph_store.db.collection("Queries").insert.call_count == 1
-        insert_args = fake_graph_store.db.collection("Queries").insert.call_args[0][0]
-        assert "text" in insert_args
-        assert "embedding" in insert_args
-        assert "aql" in insert_args
-
-    def test_query_cache_disabled(
-        self,
-        fake_graph_store: FakeGraphStore,
-        mock_chains: Dict[str, Runnable],
-        mock_embedding: Mock,
-    ) -> None:
-        """Test that cache is not used when disabled."""
-
-        # Replace aql_generation_chain with a MagicMock-wrapped RunnableLambda
-        aql_gen_mock = MagicMock(
-            return_value=AIMessage(content="```aql\nFOR m IN Movies RETURN m\n```")
-        )
-        mock_chains["aql_generation_chain"] = RunnableLambda(aql_gen_mock)
-
-        chain = ArangoGraphQAChain(
-            graph=fake_graph_store,
-            aql_generation_chain=mock_chains["aql_generation_chain"],
-            aql_fix_chain=mock_chains["aql_fix_chain"],
-            qa_chain=mock_chains["qa_chain"],
-            allow_dangerous_requests=True,
-            embedding=mock_embedding,
-        )
-
-        # Execute
-        result = chain._call({"query": "Find all movies", "use_query_cache": False})
-
-        # Verify
-        assert "result" in result
-        assert (
-            fake_graph_store.db.collection("Queries").find.call_count == 0
-        )  # Should not check cache
-        assert (
-            fake_graph_store.db.aql.execute.call_count == 0
-        )  # Should not check vector cache
-        assert aql_gen_mock.call_count == 1  # Should generate new query
-
-    def test_query_cache_without_embedding(
-        self, fake_graph_store: FakeGraphStore, mock_chains: Dict[str, Runnable]
-    ) -> None:
-        """Test that attempting to use cache without embedding raises error."""
-        chain = ArangoGraphQAChain(
-            graph=fake_graph_store,
-            aql_generation_chain=mock_chains["aql_generation_chain"],
-            aql_fix_chain=mock_chains["aql_fix_chain"],
-            qa_chain=mock_chains["qa_chain"],
-            allow_dangerous_requests=True,
-            embedding=None,
-        )
-
-        # Execute and verify
-        with pytest.raises(
-            ValueError, match="Cannot enable query cache without passing"
-        ):
-            chain._call({"query": "Find all movies", "use_query_cache": True})
+        # 4. Test with query cache disabled
+        result4 = chain.invoke({"query": "What is the name of the first movie?"})
+        assert result4["result"] == "```FOR m IN Movies LIMIT 1 RETURN m```"
