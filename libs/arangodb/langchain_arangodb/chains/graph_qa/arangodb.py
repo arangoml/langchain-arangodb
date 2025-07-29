@@ -12,7 +12,8 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
-from langchain_openai import OpenAIEmbeddings
+from langchain_core.embeddings import Embeddings
+
 from pydantic import Field
 
 from langchain_arangodb.chains.graph_qa.prompts import (
@@ -47,7 +48,7 @@ class ArangoGraphQAChain(Chain):
     """
 
     graph: GraphStore = Field(exclude=True)
-    embedding: Optional[OpenAIEmbeddings] = Field(default=None, exclude=True)
+    embedding: Optional[Embeddings] = Field(default=None, exclude=True)
     aql_generation_chain: Runnable[Dict[str, Any], Any]
     aql_fix_chain: Runnable[Dict[str, Any], Any]
     qa_chain: Runnable[Dict[str, Any], Any]
@@ -90,11 +91,10 @@ class ArangoGraphQAChain(Chain):
     """
 
     def __init__(
-        self, embedding: Optional[OpenAIEmbeddings] = None, **kwargs: Any
+        self, **kwargs: Any
     ) -> None:
         """Initialize the chain."""
         super().__init__(**kwargs)
-        self.embedding = embedding
         if self.allow_dangerous_requests is not True:
             raise ValueError(
                 "In order to use this chain, you must acknowledge that it can make "
@@ -127,8 +127,6 @@ class ArangoGraphQAChain(Chain):
     def from_llm(
         cls,
         llm: BaseLanguageModel,
-        embedding: Optional[OpenAIEmbeddings] = None,
-        enable_query_cache: bool = False,
         *,
         qa_prompt: Optional[BasePromptTemplate] = None,
         aql_generation_prompt: Optional[BasePromptTemplate] = None,
@@ -140,9 +138,7 @@ class ArangoGraphQAChain(Chain):
         :param llm: The language model to use.
         :type llm: BaseLanguageModel
         :param embedding: The embedding model to use.
-        :type embedding: OpenAIEmbeddings
-        :param enable_query_cache: Whether to enable query cache.
-        :type enable_query_cache: bool
+        :type embedding: Embeddings
         :param qa_prompt: The prompt to use for the QA chain.
         :type qa_prompt: BasePromptTemplate
         :param aql_generation_prompt: The prompt to use for the AQL generation chain.
@@ -162,13 +158,6 @@ class ArangoGraphQAChain(Chain):
         if aql_fix_prompt is None:
             aql_fix_prompt = AQL_FIX_PROMPT
 
-        if enable_query_cache and embedding is None:
-            raise ValueError("Cannot enable query cache without passing embedding.")
-        if embedding and not enable_query_cache:
-            raise ValueError(
-                "You passed an embedding, but you did not enable Query Cache usage."
-            )
-
         qa_chain = qa_prompt | llm
         aql_generation_chain = aql_generation_prompt | llm
         aql_fix_chain = aql_fix_prompt | llm
@@ -177,7 +166,6 @@ class ArangoGraphQAChain(Chain):
             qa_chain=qa_chain,
             aql_generation_chain=aql_generation_chain,
             aql_fix_chain=aql_fix_chain,
-            embedding=embedding,
             **kwargs,
         )
 
