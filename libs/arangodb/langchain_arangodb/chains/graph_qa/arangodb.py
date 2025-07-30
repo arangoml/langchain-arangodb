@@ -445,7 +445,7 @@ class ArangoGraphQAChain(Chain):
                 m = "Embedding must be provided when using query cache"
                 raise ValueError(m)
 
-            cache_result = self.__get_cached_query()
+            cache_result = self.__get_cached_query(query_cache_similarity_threshold)
 
             if cache_result is not None:
                 cached_query, score = cache_result
