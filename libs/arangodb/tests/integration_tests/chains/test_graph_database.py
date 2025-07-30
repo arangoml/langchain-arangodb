@@ -950,6 +950,7 @@ def test_query_cache(db: StandardDatabase) -> None:
     result3 = chain.invoke(
         {"query": "What is the name of the first movie?", "use_query_cache": True}
     )
+    chain.cache_query()
     assert result3["aql_result"][0]["title"] == "The Matrix"
     assert len(graph.db.collection("Queries").all()) == 2  # type: ignore
 
