@@ -20,6 +20,22 @@ from langchain_arangodb.graphs.graph_document import (
 )
 from langchain_arangodb.graphs.graph_store import GraphStore
 
+DEFAULT_ANALYZERS = {
+    "text_fr",
+    "text_pt",
+    "identity",
+    "text_de",
+    "text_zh",
+    "text_fi",
+    "text_it",
+    "text_no",
+    "text_nl",
+    "text_es",
+    "text_ru",
+    "text_en",
+    "text_sv",
+}
+
 
 def get_arangodb_client(
     url: Optional[str] = None,
@@ -85,7 +101,9 @@ class ArangoGraph(GraphStore):
         in a string. If the string is longer than this limit, a string
         describing the string will be used in the schema instead. Default is 256.
     :type schema_string_limit: int
-
+    :param schema_include_views: Whether to include ArangoDB Views and Analyzers as
+        part of the schema passed to the AQL Generation prompt. Default is False.
+    :type schema_include_views: bool
         :return: None
         :rtype: None
         :raises ArangoClientError: If the ArangoDB client cannot be created.
@@ -116,6 +134,7 @@ class ArangoGraph(GraphStore):
         schema_include_examples: bool = True,
         schema_list_limit: int = 32,
         schema_string_limit: int = 256,
+        schema_include_views: bool = False,
     ) -> None:
         """
         Initializes the ArangoGraph instance.
@@ -132,6 +151,7 @@ class ArangoGraph(GraphStore):
                 schema_include_examples,
                 schema_list_limit,
                 schema_string_limit,
+                schema_include_views,
             )
 
     @property
@@ -224,6 +244,7 @@ class ArangoGraph(GraphStore):
         include_examples: bool = True,
         list_limit: int = 32,
         schema_string_limit: int = 256,
+        schema_include_views: bool = False,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Generates the schema of the ArangoDB Database and returns it
@@ -247,6 +268,9 @@ class ArangoGraph(GraphStore):
             in a string. If the string is longer than this limit, a string
             describing the string will be used in the schema instead. Default is 128.
         :type schema_string_limit: int
+        :param schema_include_views: Whether to include ArangoDB Views and Analyzers as
+            part of the schema passed to the AQL Generation prompt. Default is False.
+        :type schema_include_views: bool
         :return: A dictionary containing the graph schema and collection schema.
         :rtype: Dict[str, List[Dict[str, Any]]]
         :raises ValueError: If the sample ratio is not between 0 and 1.
@@ -256,6 +280,10 @@ class ArangoGraph(GraphStore):
         """
         if not 0 <= sample_ratio <= 1:
             raise ValueError("**sample_ratio** value must be in between 0 to 1")
+
+        #####
+        # Step 1: Generate Graph Schema
+        ####
 
         graph_schema: List[Dict[str, Any]] = []
         if graph_name:
@@ -282,6 +310,10 @@ class ArangoGraph(GraphStore):
                 collection["name"]
                 for collection in self.db.collections()  # type: ignore
             }
+
+        #####
+        # Step 2: Generate Collection Schema
+        ####
 
         # Stores the schema of every ArangoDB Document/Edge collection
         collection_schema: List[Dict[str, Any]] = []
@@ -324,7 +356,41 @@ class ArangoGraph(GraphStore):
 
             collection_schema.append(collection_schema_entry)
 
-        return {"graph_schema": graph_schema, "collection_schema": collection_schema}
+        if not schema_include_views:
+            return {
+                "graph_schema": graph_schema,
+                "collection_schema": collection_schema,
+            }
+
+        #####
+        # Step 3: Generate View Schema
+        #####
+
+        view_schema: List[Dict[str, Any]] = []
+        for view in self.db.views():  # type: ignore
+            view_name = view["name"]
+            view_type = view["type"]
+            view_info = self.db.view(view_name)
+            key = "links" if view_type == "arangosearch" else "indexes"
+            view_schema.append(
+                {"name": view_name, "type": view_type, key: view_info.get(key, [])}  # type: ignore
+            )
+
+        #####
+        # Step 4: Generate Analyzer Schema
+        #####
+
+        analyzer_schema: List[Dict[str, Any]] = []
+        for a in self.db.analyzers():  # type: ignore
+            if a["name"] not in DEFAULT_ANALYZERS:
+                analyzer_schema.append({a["name"]: a["properties"]})
+
+        return {
+            "graph_schema": graph_schema,
+            "collection_schema": collection_schema,
+            "view_schema": view_schema,
+            "analyzer_schema": analyzer_schema,
+        }
 
     def query(
         self,
