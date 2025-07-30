@@ -674,6 +674,74 @@ def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
+def test_generate_schema_views_and_analyzers(db: StandardDatabase) -> None:
+    # Step 1: Create the Actor collection and insert sample data
+    if not db.has_collection("Actor"):
+        db.create_collection("Actor")
+    actor_collection = db.collection("Actor")
+    actor_collection.insert({"_key": "1", "name": "Robert Downey Jr."}, overwrite=True)
+
+    # Step 2: Create an ArangoSearch view on the Actor collection
+    db.delete_view("ActorView", ignore_missing=True)
+    db.create_view(
+        "ActorView",
+        "arangosearch",
+        {
+            "links": {
+                "Actor": {
+                    "analyzers": ["text_en"],
+                    "fields": {
+                        "name": {
+                            "analyzers": ["text_en"],
+                        },
+                    },
+                    "includeAllFields": True,
+                    "storeValues": "none",
+                    "trackListPositions": False,
+                },
+            }
+        },
+    )
+
+    # Step 3: Create a custom analyzer
+    db.delete_analyzer("custom_analyzer", ignore_missing=True)
+    db.create_analyzer(
+        name="custom_analyzer",
+        analyzer_type="text",
+        properties={
+            "locale": "en.UTF-8",
+            "stopwords": ["the", "a", "an"],
+            "stemming": True,
+            "case": "lower",
+            "accent": False,
+        },
+        features=["frequency", "norm", "position"],
+    )
+
+    # Step 4: Generate schema
+    graph = ArangoGraph(db, generate_schema_on_init=False, schema_include_views=True)
+    schema = graph.generate_schema(schema_include_views=True)
+
+    # Step 5: Validate ActorView is present in view_schema
+    view_schema = schema["view_schema"]
+    actor_view = next((v for v in view_schema if v["name"] == "ActorView"), None)
+    assert actor_view is not None
+    assert actor_view["type"] == "arangosearch"
+
+    links = actor_view["links"]
+    assert "Actor" in links
+    assert "fields" in links["Actor"]
+    assert "name" in links["Actor"]["fields"]
+    assert "analyzers" in links["Actor"]
+    assert "text_en" in links["Actor"]["analyzers"]
+
+    # Step 6: Validate analyzer is present in analyzer_schema
+    analyzer_schema = schema["analyzer_schema"]
+    assert "_system::custom_analyzer" in analyzer_schema[0]
+    assert analyzer_schema[0]["_system::custom_analyzer"]["case"] == "lower"
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
 def test_add_graph_documents_requires_embedding(db: StandardDatabase) -> None:
     graph = ArangoGraph(db, generate_schema_on_init=False)
 
@@ -686,7 +754,8 @@ def test_add_graph_documents_requires_embedding(db: StandardDatabase) -> None:
     with pytest.raises(ValueError, match="embedding.*required"):
         graph.add_graph_documents(
             [doc],
-            embed_source=True,  # requires embedding, but embeddings=None
+            embed_source=True,
+            # requires embedding, but embeddings=None
         )
 
 
