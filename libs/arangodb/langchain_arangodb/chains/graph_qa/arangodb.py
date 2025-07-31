@@ -571,7 +571,7 @@ class ArangoGraphQAChain(Chain):
             )
         else:
             _run_manager.on_text(
-                f"AQL Query ({aql_generation_attempt}):", verbose=self.verbose
+                f"AQL Query ({aql_generation_attempt}):\n", verbose=self.verbose
             )
             _run_manager.on_text(
                 aql_query, color="green", end="\n", verbose=self.verbose
