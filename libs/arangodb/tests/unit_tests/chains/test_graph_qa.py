@@ -586,12 +586,15 @@ class TestArangoGraphQAChain:
         }
 
         def mock_execute(query, bind_vars):  # type: ignore
-            query_embedding = bind_vars["query_embedding"]
-            score = cosine_similarity(query_embedding, stored_query["embedding"])
-            # print(f"Simulated AQL score: {score:.6f}")
-            if score > bind_vars.get("score_threshold", 0.75):
-                return [{"aql": stored_query["aql"], "score": score}]
-            return []
+            # Handle vector search query
+            if "query_embedding" in bind_vars:
+                query_embedding = bind_vars["query_embedding"]
+                score = cosine_similarity(query_embedding, stored_query["embedding"])
+                if score > bind_vars.get("score_threshold", 0.75):
+                    return [{"aql": stored_query["aql"], "score": score}]
+                return []
+            # Handle regular query execution
+            return [{"title": "Inception"}]
 
         fake_graph_store.db.aql.execute = Mock(side_effect=mock_execute)
 
