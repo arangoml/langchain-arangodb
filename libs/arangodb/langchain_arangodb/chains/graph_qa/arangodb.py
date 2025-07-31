@@ -171,6 +171,14 @@ class ArangoGraphQAChain(Chain):
             **kwargs,
         )
 
+    def _format_aql(self, aql: str) -> str:
+        keywords = [
+            "WITH", "FOR", "FILTER", "LET", "RETURN", "SORT", "LIMIT", "COLLECT", "INSERT", "UPDATE", "REMOVE", "REPLACE"
+        ]
+        for kw in keywords:
+            # Add newline before keyword if it's not already preceded by one
+            aql = re.sub(rf'\b{kw}\b', f'\n{kw}', aql, flags=re.IGNORECASE)
+        return aql.strip()
 
     def cache_query(
         self,
@@ -215,12 +223,14 @@ class ArangoGraphQAChain(Chain):
             text = q.get("text", "").strip().lower()
             aql = q.get("aql", "")
 
-            existing = list(collection.find({"text": text, "aql": aql}, limit=1))
+            existing = list(collection.find({"text": text}, limit=1))
             if existing:
                 results.append(f"Skipped (already cached): {text}")
                 continue
 
             embedding = self.embedding.embed_query(text)  # type: ignore
+            aql = self._format_aql(aql)
+            
             collection.insert({
                 "text": text,
                 "embedding": embedding,
@@ -229,7 +239,6 @@ class ArangoGraphQAChain(Chain):
             results.append(f"Cached: {text}")
 
         return results
-
 
     def clear_query_cache(self, queries_to_remove: Optional[List[str]] = None) -> None:
         """
@@ -240,12 +249,16 @@ class ArangoGraphQAChain(Chain):
         :return: True if the cache (or entry) was successfully cleared.
         """
         collection = self.graph.db.collection(self.query_cache_collection_name)
+
+        queries_to_remove = [q.strip().lower() for q in queries_to_remove] if queries_to_remove is not None else None
+
         if queries_to_remove is not None:
             for q in queries_to_remove:
                 cursor = collection.find({"text": q}, limit=1)
                 docs = list(cursor)
                 if docs:
                     collection.delete(docs[0])
+
             # Verify all requested entries are gone
             remaining = list(
                 collection.find({"text": {"$in": queries_to_remove}})
@@ -255,7 +268,7 @@ class ArangoGraphQAChain(Chain):
             collection.truncate()
             return len(collection) == 0
 
-    def __get_cached_query(self, query_cache_similarity_threshold: float) -> Optional[Tuple[str, float]]:
+    def __get_cached_query(self, query_cache_similarity_threshold: float) -> Optional[Tuple[str, str]]:
         """Get the cached query for the user input. Only used if embedding
         is provided and **use_query_cache** is True.
 
@@ -271,6 +284,8 @@ class ArangoGraphQAChain(Chain):
         if self.graph.db.collection(self.query_cache_collection_name).count() == 0:  # type: ignore
             return None
 
+        query_text = self._last_user_input.strip().lower()
+
         # 1. Exact Search
 
         query = f"""
@@ -283,16 +298,16 @@ class ArangoGraphQAChain(Chain):
         result = list(
             self.graph.db.aql.execute(  # type: ignore
                 query,
-                bind_vars={"user_input": self._last_user_input},
+                bind_vars={"user_input": query_text},
             )  # type: ignore
         )
 
         if result:
-            return result[0], 1.0
+            return result[0], "1.0"
 
         # 2. Vector Search
 
-        embedding = self.embedding.embed_query(self._last_user_input)  # type: ignore
+        embedding = self.embedding.embed_query(query_text)  # type: ignore
         query = f"""
             FOR q IN {self.query_cache_collection_name}
                 LET score = COSINE_SIMILARITY(q.embedding, @embedding)
@@ -362,15 +377,15 @@ class ArangoGraphQAChain(Chain):
         """
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
-        self._last_user_input = inputs[self.input_key]
+        self._last_user_input = inputs[self.input_key].strip().lower()
         use_query_cache = inputs.get("use_query_cache", False)
         query_cache_similarity_threshold = inputs.get("query_cache_similarity_threshold", 0.80)
 
         if use_query_cache and self.embedding is None:
             raise ValueError("Cannot enable query cache without passing embedding")
 
-        if not self.graph.db.has_collection(self._query_cache_collection_name):  # type: ignore
-            self.graph.db.create_collection(self._query_cache_collection_name)  # type: ignore
+        if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
+            self.graph.db.create_collection(self.query_cache_collection_name)  # type: ignore
 
         params = {
             "top_k": self.top_k,
@@ -502,13 +517,10 @@ class ArangoGraphQAChain(Chain):
             raise ValueError(m)
 
         if use_query_cache and cached_query:
-            aql_query = cached_query
-            aql_result = aql_execution_func(aql_query, params)
-
             score_string = score if score is not None else "1.0"
 
             _run_manager.on_text(
-                f"AQL Query (used cached query, score: {score_string})",
+                f"AQL Query (used cached query, score: {score_string})\n",
                 verbose=self.verbose,
             )
             _run_manager.on_text(
@@ -516,7 +528,7 @@ class ArangoGraphQAChain(Chain):
             )
         else:
             _run_manager.on_text(
-                f"AQL Query ({aql_generation_attempt}):", verbose=self.verbose
+                f"AQL Query ({aql_generation_attempt}):\n", verbose=self.verbose
             )
             _run_manager.on_text(
                 aql_query, color="green", end="\n", verbose=self.verbose
