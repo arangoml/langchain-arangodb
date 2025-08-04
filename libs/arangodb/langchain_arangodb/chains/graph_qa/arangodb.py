@@ -504,6 +504,15 @@ class ArangoGraphQAChain(Chain):
                     """
                     raise ValueError(error_msg)
 
+            query_message = f"AQL Query ({aql_generation_attempt})"
+            if cached_query:
+                query_message += f" (used cached query, score: {score})"
+
+            _run_manager.on_text(query_message, verbose=self.verbose)
+            _run_manager.on_text(
+                aql_query, color="green", end="\n", verbose=self.verbose
+            )
+
             #############################
             # Execute/Explain AQL Query #
             #############################
@@ -542,24 +551,6 @@ class ArangoGraphQAChain(Chain):
                 {aql_error}
             """
             raise ValueError(m)
-
-        if use_query_cache and cached_query:
-            score_string = score if score is not None else "1.0"
-
-            _run_manager.on_text(
-                f"AQL Query (used cached query, score: {score_string})\n",
-                verbose=self.verbose,
-            )
-            _run_manager.on_text(
-                aql_query, color="green", end="\n", verbose=self.verbose
-            )
-        else:
-            _run_manager.on_text(
-                f"AQL Query ({aql_generation_attempt}):\n", verbose=self.verbose
-            )
-            _run_manager.on_text(
-                aql_query, color="green", end="\n", verbose=self.verbose
-            )
 
         text = "AQL Result:" if self.execute_aql_query else "AQL Explain:"
         _run_manager.on_text(text, end="\n", verbose=self.verbose)
