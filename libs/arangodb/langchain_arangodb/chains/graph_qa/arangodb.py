@@ -383,6 +383,9 @@ class ArangoGraphQAChain(Chain):
             Defaults to 256.
         :type output_string_limit: int
         """
+        if not isinstance(self.graph, ArangoGraph):
+            raise ValueError("Graph must be an ArangoGraph instance")
+
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
         user_input = inputs[self.input_key].strip().lower()
@@ -444,6 +447,9 @@ class ArangoGraphQAChain(Chain):
             if self.embedding is None:
                 m = "Embedding must be provided when using query cache"
                 raise ValueError(m)
+
+            if not self.graph.db.has_collection(self.query_cache_collection_name):
+                self.graph.db.create_collection(self.query_cache_collection_name)
 
             cache_result = self.__get_cached_query(query_cache_similarity_threshold)
 
@@ -648,14 +654,14 @@ class ArangoGraphQAChain(Chain):
         result = self.qa_chain.invoke(  # type: ignore
             {
                 "adb_schema": self.graph.schema_yaml,
-                "user_input": self._last_user_input,
+                "user_input": user_input,
                 "aql_query": aql_query,
                 "aql_result": aql_result,
             },
             callbacks=callbacks,
         )
+
         results: Dict[str, Any] = {self.output_key: result}
-        self._last_aql_query = aql_query
 
         if self.return_aql_query:
             results["aql_query"] = aql_generation_output
