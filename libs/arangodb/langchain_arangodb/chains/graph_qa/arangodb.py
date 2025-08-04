@@ -515,6 +515,15 @@ class ArangoGraphQAChain(Chain):
                     """
                     raise ValueError(error_msg)
 
+            query_message = f"AQL Query ({aql_generation_attempt})"
+            if cached_query:
+                query_message += f" (used cached query, score: {score})"
+
+            _run_manager.on_text(query_message, verbose=self.verbose)
+            _run_manager.on_text(
+                aql_query, color="green", end="\n", verbose=self.verbose
+            )
+
             #############################
             # Execute/Explain AQL Query #
             #############################
