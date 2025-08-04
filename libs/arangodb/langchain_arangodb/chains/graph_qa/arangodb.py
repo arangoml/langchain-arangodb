@@ -20,6 +20,7 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_GENERATION_PROMPT,
     AQL_QA_PROMPT,
 )
+from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from langchain_arangodb.graphs.graph_store import GraphStore
 
 AQL_WRITE_OPERATIONS: List[str] = [
@@ -210,7 +211,14 @@ class ArangoGraphQAChain(Chain):
         if self.embedding is None:
             raise ValueError("Cannot cache queries without an embedding model.")
 
-        collection = self.graph.db.collection(self.query_cache_collection_name)  # type: ignore
+        if not isinstance(self.graph, ArangoGraph):
+            raise ValueError("Graph must be an ArangoGraph instance")
+
+        if not self.graph.db.has_collection(self.query_cache_collection_name):
+            m = f"Collection {self.query_cache_collection_name} does not exist"  # noqa: E501
+            raise ValueError(m)
+
+        collection = self.graph.db.collection(self.query_cache_collection_name)
 
         if queries is None:
             # Fallback: cache the most recent query
@@ -224,6 +232,7 @@ class ArangoGraphQAChain(Chain):
             query_embedding = self.embedding.embed_query(text)  # type: ignore
             collection.insert(
                 {
+                    "_key": self.graph._hash(text),
                     "text": text,
                     "embedding": query_embedding,
                     "aql": aql,
@@ -248,6 +257,7 @@ class ArangoGraphQAChain(Chain):
 
             collection.insert(
                 {
+                    "_key": self.graph._hash(text),
                     "text": text,
                     "embedding": embedding,
                     "aql": aql,
@@ -265,7 +275,14 @@ class ArangoGraphQAChain(Chain):
                         If None, clears the entire cache.
         :return: True if the cache (or entry) was successfully cleared.
         """
-        collection = self.graph.db.collection(self.query_cache_collection_name)  # type: ignore
+        assert isinstance(self.graph, ArangoGraph)
+
+        if not self.graph.db.has_collection(self.query_cache_collection_name):
+            raise ValueError(
+                f"Collection {self.query_cache_collection_name} does not exist"
+            )
+
+        collection = self.graph.db.collection(self.query_cache_collection_name)
 
         queries_to_remove = (
             [q.strip().lower() for q in queries_to_remove]
@@ -400,9 +417,12 @@ class ArangoGraphQAChain(Chain):
             Defaults to 256.
         :type output_string_limit: int
         """
+        if not isinstance(self.graph, ArangoGraph):
+            raise ValueError("Graph must be an ArangoGraph instance")
+
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
-        self._last_user_input = inputs[self.input_key].strip().lower()
+        user_input = inputs[self.input_key].strip().lower()
         use_query_cache = inputs.get("use_query_cache", False)
         query_cache_similarity_threshold = inputs.get(
             "query_cache_similarity_threshold", 0.80
@@ -410,9 +430,6 @@ class ArangoGraphQAChain(Chain):
 
         if use_query_cache and self.embedding is None:
             raise ValueError("Cannot enable query cache without passing embedding")
-
-        if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
-            self.graph.db.create_collection(self.query_cache_collection_name)  # type: ignore
 
         params = {
             "top_k": self.top_k,
@@ -433,6 +450,9 @@ class ArangoGraphQAChain(Chain):
             if self.embedding is None:
                 m = "Embedding must be provided when using query cache"
                 raise ValueError(m)
+
+            if not self.graph.db.has_collection(self.query_cache_collection_name):
+                self.graph.db.create_collection(self.query_cache_collection_name)
 
             cache_result = self.__get_cached_query(query_cache_similarity_threshold)
 
@@ -570,20 +590,23 @@ class ArangoGraphQAChain(Chain):
         result = self.qa_chain.invoke(  # type: ignore
             {
                 "adb_schema": self.graph.schema_yaml,
-                "user_input": self._last_user_input,
+                "user_input": user_input,
                 "aql_query": aql_query,
                 "aql_result": aql_result,
             },
             callbacks=callbacks,
         )
+
         results: Dict[str, Any] = {self.output_key: result}
-        self._last_aql_query = aql_query
 
         if self.return_aql_query:
             results["aql_query"] = aql_generation_output
 
         if self.return_aql_result:
             results["aql_result"] = aql_result
+
+        self._last_user_input = user_input
+        self._last_aql_query = aql_query
 
         return results
 
