@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import Field
+from langchain_core.messages import HumanMessage, AIMessage
 
 from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_FIX_PROMPT,
@@ -449,12 +450,11 @@ class ArangoGraphQAChain(Chain):
 
         chat_history = []
         if self.include_history and self.chat_history_store is not None:
-            chat_history = self.chat_history_store.messages[:self.max_history_messages]
-            chat_history = [
-                f"{'Human' if msg.type == 'human' else 'AI'}: {msg.content}"
-                for msg in chat_history
-            ]
-        formatted_history = " ".join(chat_history) if chat_history else ""
+            for msg in self.chat_history_store.messages[:self.max_history_messages]:
+                if msg.type == "human":
+                    chat_history.append(HumanMessage(content=msg.content))
+                else:
+                    chat_history.append(AIMessage(content=msg.content))
 
         ######################
         # Check Query Cache #
@@ -484,7 +484,7 @@ class ArangoGraphQAChain(Chain):
                     "adb_schema": self.graph.schema_yaml,
                     "aql_examples": self.aql_examples,
                     "user_input": user_input,
-                    "chat_history": formatted_history,
+                    "chat_history": chat_history,
                 },
                 callbacks=callbacks,
             )
@@ -665,9 +665,6 @@ class ArangoGraphQAChain(Chain):
         _run_manager.on_text(
             str(aql_result), color="green", end="\n", verbose=self.verbose
         )
-        _run_manager.on_text(
-            str(formatted_history), color="red", end="\n", verbose=self.verbose
-        )
 
 
         if not self.execute_aql_query:
@@ -685,9 +682,16 @@ class ArangoGraphQAChain(Chain):
                 "user_input": user_input,
                 "aql_query": aql_query,
                 "aql_result": aql_result,
-                "chat_history": formatted_history,
+                "chat_history": chat_history,
             },
             callbacks=callbacks,
+        )
+
+        # Add summary
+        text = "Summary:" if self.execute_aql_query else "AQL Explain:"
+        _run_manager.on_text(text, end="\n", verbose=self.verbose)
+        _run_manager.on_text(
+            str(result.content), color="green", end="\n", verbose=self.verbose
         )
 
         results: Dict[str, Any] = {self.output_key: result}
