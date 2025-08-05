@@ -11,6 +11,7 @@ from langchain_core.runnables import RunnableLambda
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 from tests.llms.fake_llm import FakeLLM
 
 
@@ -979,3 +980,66 @@ def test_query_cache(db: StandardDatabase) -> None:
         ValueError, match="Cannot enable query cache without passing embedding"
     ):
         chain.invoke({"query": "List all movies", "use_query_cache": True})
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_chat_history_with_movies(db: StandardDatabase) -> None:
+    """Test chat history resolution using 'it' in follow-up queries (movies domain)."""
+
+    # 1. Create required collections
+    graph = ArangoGraph(db)
+    db.create_collection("Movies")
+
+    db.collection("Movies").insert_many([
+        {"_key": "matrix", "title": "The Matrix", "year": 1999},
+        {"_key": "inception", "title": "Inception", "year": 2010},
+    ])
+
+    graph.refresh_schema()
+
+    # 2. Create chat history store
+    history = ArangoChatMessageHistory(
+        session_id="test",
+        collection_name="test_chat_sessions",
+        db=db,
+    )
+    history.clear()
+
+    # 3. Dummy LLM: simulate coreference to "The Matrix"
+    def dummy_llm(prompt):
+        if "when was it released" in prompt.lower():
+            return AIMessage(content="""```aql
+WITH Movies
+FOR m IN Movies
+  FILTER m.title == "The Matrix"
+  RETURN m.year
+```""")
+        return AIMessage(content="""```aql
+WITH Movies
+FOR m IN Movies
+  SORT m._key ASC
+  LIMIT 1
+  RETURN m.title
+```""")
+
+    dummy_chain = ArangoGraphQAChain.from_llm(
+        llm=RunnableLambda(dummy_llm),  # type: ignore
+        graph=graph,
+        include_history=True,
+        max_history_messages=5,
+        chat_history_store=chat_history,
+        return_aql_result=True,
+        return_aql_query=True,
+    )
+
+    # 4. Ask initial question
+    result1 = dummy_chain.invoke({"query": "What is the first movie?"})
+    assert "Matrix" in result1["result"].content
+
+    # 5. Ask follow-up question using pronoun "it"
+    result2 = dummy_chain.invoke({"query": "When was it released?"})
+    assert "1999" in result2["result"].content
+
+    # 6. Optional: Check AQL query correctness
+    assert "FOR m IN Movies" in result2["aql_query"]
+    assert "RETURN m.year" in result2["aql_query"]
