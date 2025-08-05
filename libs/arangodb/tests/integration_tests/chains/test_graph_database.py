@@ -929,6 +929,7 @@ def test_query_cache(db: StandardDatabase) -> None:
         verbose=True,
         allow_dangerous_requests=True,
         return_aql_result=True,
+        query_cache_collection_name="Queries",
     )
 
     chain.embedding = type(
@@ -944,7 +945,13 @@ def test_query_cache(db: StandardDatabase) -> None:
     ]
 
     # 2. Test with vector search
-    result2 = chain.invoke({"query": "Show me all movies", "use_query_cache": True})
+    result2 = chain.invoke(
+        {
+            "query": "Show me all movies",
+            "use_query_cache": True,
+            "query_cache_similarity_threshold": 0.80,
+        }
+    )
     assert [m["title"] for m in result2["aql_result"]] == [
         "The Matrix",
         "Inception",
