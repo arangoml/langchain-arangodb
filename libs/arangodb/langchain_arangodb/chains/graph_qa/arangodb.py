@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain.chains.base import Chain
@@ -215,7 +215,7 @@ class ArangoGraphQAChain(Chain):
         if self.embedding is None:
             raise ValueError("Cannot cache queries without an embedding model.")
 
-        if not self.graph.db.has_collection(self.query_cache_collection_name):
+        if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
             m = f"Collection {self.query_cache_collection_name} does not exist"  # noqa: E501
             raise ValueError(m)
 
@@ -254,7 +254,7 @@ class ArangoGraphQAChain(Chain):
             m = f"Collection {self.query_cache_collection_name} does not exist"
             raise ValueError(m)
 
-        collection = self.graph.db.collection(self.query_cache_collection_name)
+        collection = self.graph.db.collection(self.query_cache_collection_name)  # type: ignore
 
         if text is None:
             collection.truncate()
@@ -383,8 +383,8 @@ class ArangoGraphQAChain(Chain):
             Defaults to 256.
         :type output_string_limit: int
         """
-        if not isinstance(self.graph, ArangoGraph):
-            raise ValueError("Graph must be an ArangoGraph instance")
+        if not isinstance(self.graph, GraphStore):
+            raise ValueError("Graph must be an GraphStore instance")
 
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
@@ -448,10 +448,12 @@ class ArangoGraphQAChain(Chain):
                 m = "Embedding must be provided when using query cache"
                 raise ValueError(m)
 
-            if not self.graph.db.has_collection(self.query_cache_collection_name):
-                self.graph.db.create_collection(self.query_cache_collection_name)
+            if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
+                self.graph.db.create_collection(self.query_cache_collection_name)  # type: ignore
 
-            cache_result = self.__get_cached_query(query_cache_similarity_threshold)
+            cache_result = self.__get_cached_query(
+                user_input, query_cache_similarity_threshold
+            )
 
             if cache_result is not None:
                 cached_query, score = cache_result
@@ -463,7 +465,7 @@ class ArangoGraphQAChain(Chain):
                 {
                     "adb_schema": self.graph.schema_yaml,
                     "aql_examples": self.aql_examples,
-                    "user_input": self._last_user_input,
+                    "user_input": user_input,
                 },
                 callbacks=callbacks,
             )
@@ -471,11 +473,11 @@ class ArangoGraphQAChain(Chain):
         aql_query = ""
         aql_error = ""
         aql_result = None
-        aql_generation_attempt = 0
+        aql_generation_attempt = 1
 
         while (
             aql_result is None
-            and aql_generation_attempt < self.max_aql_generation_attempts
+            and aql_generation_attempt < self.max_aql_generation_attempts + 1
         ):
             if isinstance(aql_generation_output, str):
                 aql_generation_output_content = aql_generation_output
@@ -521,9 +523,12 @@ class ArangoGraphQAChain(Chain):
                     """
                     raise ValueError(error_msg)
 
-            query_message = f"AQL Query ({aql_generation_attempt})"
+            query_message = f"AQL Query ({aql_generation_attempt})\n"
             if cached_query:
-                query_message += f" (used cached query, score: {score})"
+                score_string = score if score is not None else "1.0"
+                query_message = (
+                    f"AQL Query (used cached query, score: {score_string})\n"  # noqa: E501
+                )
 
             _run_manager.on_text(query_message, verbose=self.verbose)
             _run_manager.on_text(
