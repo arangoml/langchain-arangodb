@@ -387,15 +387,15 @@ class ArangoGraphQAChain(Chain):
         if use_query_cache and self.embedding is None:
             raise ValueError("Cannot enable query cache without passing embedding")
 
-        params = {
-            "top_k": self.top_k,
-            "list_limit": self.output_list_limit,
-            "string_limit": self.output_string_limit,
-        }
+        # params = {
+        #     "top_k": self.top_k,
+        #     "list_limit": self.output_list_limit,
+        #     "string_limit": self.output_string_limit,
+        # }
 
-        aql_execution_func = (
-            self.graph.query if self.execute_aql_query else self.graph.explain
-        )
+        # aql_execution_func = (
+        #     self.graph.query if self.execute_aql_query else self.graph.explain
+        # )
 
         ######################
         # Check Query Cache #
@@ -433,6 +433,10 @@ class ArangoGraphQAChain(Chain):
         aql_error = ""
         aql_result = None
         aql_generation_attempt = 1
+
+        aql_execution_func = (
+            self.graph.query if self.execute_aql_query else self.graph.explain
+        )
 
         while (
             aql_result is None
@@ -499,6 +503,11 @@ class ArangoGraphQAChain(Chain):
             #############################
 
             try:
+                params = {
+                    "top_k": self.top_k,
+                    "list_limit": self.output_list_limit,
+                    "string_limit": self.output_string_limit,
+                } 
                 aql_result = aql_execution_func(aql_query, params)
             except (AQLQueryExecuteError, AQLQueryExplainError) as e:
                 aql_error = str(e.error_message)
