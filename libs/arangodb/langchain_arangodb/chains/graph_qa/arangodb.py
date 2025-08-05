@@ -21,6 +21,7 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_QA_PROMPT,
 )
 from langchain_arangodb.graphs.graph_store import GraphStore
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 
 AQL_WRITE_OPERATIONS: List[str] = [
     "INSERT",
@@ -54,6 +55,10 @@ class ArangoGraphQAChain(Chain):
     qa_chain: Runnable[Dict[str, Any], Any]
     input_key: str = "query"  #: :meta private:
     output_key: str = "result"  #: :meta private:
+    include_history: bool = Field(default=True)
+    max_history_messages: int = Field(default=5)
+    chat_history_store: Optional[ArangoChatMessageHistory] = Field(default=None)
+    
 
     top_k: int = 10
     """Number of results to return from the query"""
@@ -373,6 +378,7 @@ class ArangoGraphQAChain(Chain):
             Defaults to 256.
         :type output_string_limit: int
         """
+
         if not isinstance(self.graph, GraphStore):
             raise ValueError("Graph must be an GraphStore instance")
 
@@ -387,6 +393,7 @@ class ArangoGraphQAChain(Chain):
         if use_query_cache and self.embedding is None:
             raise ValueError("Cannot enable query cache without passing embedding")
 
+
         params = {
             "top_k": self.top_k,
             "list_limit": self.output_list_limit,
@@ -396,6 +403,19 @@ class ArangoGraphQAChain(Chain):
         aql_execution_func = (
             self.graph.query if self.execute_aql_query else self.graph.explain
         )
+
+        # ######################
+        # # Get Chat History #
+        # ######################
+
+        chat_history = []
+        if self.include_history and self.chat_history_store is not None:
+            chat_history = self.chat_history_store.messages[:self.max_history_messages]
+            chat_history = [
+                f"{'Human' if msg.type == 'human' else 'AI'}: {msg.content}"
+                for msg in chat_history
+            ]
+        formatted_history = " ".join(chat_history) if chat_history else ""
 
         ######################
         # Check Query Cache #
@@ -425,6 +445,7 @@ class ArangoGraphQAChain(Chain):
                     "adb_schema": self.graph.schema_yaml,
                     "aql_examples": self.aql_examples,
                     "user_input": user_input,
+                    "chat_history": formatted_history,
                 },
                 callbacks=callbacks,
             )
@@ -538,6 +559,10 @@ class ArangoGraphQAChain(Chain):
         _run_manager.on_text(
             str(aql_result), color="green", end="\n", verbose=self.verbose
         )
+        _run_manager.on_text(
+            str(formatted_history), color="red", end="\n", verbose=self.verbose
+        )
+
 
         if not self.execute_aql_query:
             result = {self.output_key: aql_query, "aql_result": aql_result}
@@ -554,6 +579,7 @@ class ArangoGraphQAChain(Chain):
                 "user_input": user_input,
                 "aql_query": aql_query,
                 "aql_result": aql_result,
+                "chat_history": formatted_history,
             },
             callbacks=callbacks,
         )
@@ -568,6 +594,15 @@ class ArangoGraphQAChain(Chain):
 
         self._last_user_input = user_input
         self._last_aql_query = aql_query
+
+        ########################
+        # Store Chat History #
+        ########################
+
+        if self.chat_history_store:
+            self.chat_history_store.add_user_message(user_input)
+            self.chat_history_store.add_ai_message(result)
+
 
         return results
 

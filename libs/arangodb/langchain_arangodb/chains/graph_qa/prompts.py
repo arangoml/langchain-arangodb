@@ -3,7 +3,7 @@ from langchain_core.prompts.prompt import PromptTemplate
 
 AQL_GENERATION_TEMPLATE = """Task: Generate an ArangoDB Query Language (AQL) query from a User Input.
 
-You are an ArangoDB Query Language (AQL) expert responsible for translating a `User Input` into an ArangoDB Query Language (AQL) query.
+You are an ArangoDB Query Language (AQL) expert responsible for translating a `User Input` into an ArangoDB Query Language (AQL) query. You may also be given a `Chat History` to help you create the `AQL Query`.
 
 You are given an `ArangoDB Schema`. It is a YAML Spec containing:
 1. `Graph Schema`: Lists all Graphs within the ArangoDB Database Instance, along with their Edge Relationships.
@@ -16,6 +16,7 @@ You may also be given a set of `AQL Query Examples` to help you create the `AQL 
 Things you should do:
 - Think step by step.
 - Rely on `ArangoDB Schema` and `AQL Query Examples` (if provided) to generate the query.
+- Rely on `Chat History` to help you create the `AQL Query`.
 - Begin the `AQL Query` by the `WITH` AQL keyword to specify all of the ArangoDB Collections required.
 - If a `View Schema` is defined and contains analyzers for specific fields, prefer using the View with the `SEARCH` and `ANALYZER` clauses instead of a direct collection scan.
 - Use `PHRASE(...)`, `TOKENS(...)`, or `IN TOKENS(...)` as appropriate when analyzers are available on a field.
@@ -41,11 +42,14 @@ AQL Query Examples (Optional):
 User Input:
 {user_input}
 
+Chat History (Optional):
+{chat_history}
+
 AQL Query: 
 """
 
 AQL_GENERATION_PROMPT = PromptTemplate(
-    input_variables=["adb_schema", "aql_examples", "user_input"],
+    input_variables=["adb_schema", "aql_examples", "user_input", "chat_history"],
     template=AQL_GENERATION_TEMPLATE,
 )
 
@@ -92,6 +96,8 @@ AQL_QA_TEMPLATE = """Task: Generate a natural language `Summary` from the result
 
 You are an ArangoDB Query Language (AQL) expert responsible for creating a well-written `Summary` from the `User Input` and associated `AQL Result`.
 
+You may also be given a `Chat History` to help you create the `Summary`.
+
 A user has executed an ArangoDB Query Language query, which has returned the AQL Result in JSON format.
 You are responsible for creating an `Summary` based on the AQL Result.
 
@@ -100,6 +106,7 @@ You are given the following information:
 - `User Input`: the original question/request of the user, which has been translated into an AQL Query.
 - `AQL Query`: the AQL equivalent of the `User Input`, translated by another AI Model. Should you deem it to be incorrect, suggest a different AQL Query.
 - `AQL Result`: the JSON output returned by executing the `AQL Query` within the ArangoDB Database.
+- `Chat History`: the chat history between the user and the AI model, which may contain information about the user's request and the AI model's response.
 
 Remember to think step by step.
 
@@ -112,6 +119,9 @@ ArangoDB Schema:
 User Input:
 {user_input}
 
+Chat History (Optional):
+{chat_history}
+
 AQL Query:
 {aql_query}
 
@@ -121,6 +131,6 @@ AQL Result:
 Summary:
 """
 AQL_QA_PROMPT = PromptTemplate(
-    input_variables=["adb_schema", "user_input", "aql_query", "aql_result"],
+    input_variables=["adb_schema", "user_input", "aql_query", "aql_result", "chat_history"],
     template=AQL_QA_TEMPLATE,
 )
