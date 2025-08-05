@@ -11,6 +11,7 @@ from langchain_core.runnables import RunnableLambda
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 from tests.llms.fake_llm import FakeLLM
 
 
