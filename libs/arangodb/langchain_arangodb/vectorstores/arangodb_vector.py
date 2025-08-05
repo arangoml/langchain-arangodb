@@ -1193,6 +1193,10 @@ class ArangoVector(VectorStore):
                     result["score"],
                     result["metadata"],
                 )
+
+                if not data:
+                    continue
+
                 _key = data.pop("_key")
                 page_content = data.pop(self.text_field)
                 doc = Document(
