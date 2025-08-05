@@ -13,6 +13,8 @@ You are given an `ArangoDB Schema`. It is a YAML Spec containing:
 
 You may also be given a set of `AQL Query Examples` to help you create the `AQL Query`. If provided, the `AQL Query Examples` should be used as a reference, similar to how `ArangoDB Schema` should be used.
 
+You may also be given a `Chat History` to help you create the `AQL Query`. If provided, the `Chat History` should be used as a reference, similar to how `ArangoDB Schema` should be used.
+
 Things you should do:
 - Think step by step.
 - Rely on `ArangoDB Schema` and `AQL Query Examples` (if provided) to generate the query.
@@ -96,7 +98,7 @@ AQL_QA_TEMPLATE = """Task: Generate a natural language `Summary` from the result
 
 You are an ArangoDB Query Language (AQL) expert responsible for creating a well-written `Summary` from the `User Input` and associated `AQL Result`.
 
-You may also be given a `Chat History` to help you create the `Summary`.
+You may also be given a `Chat History` to help you create the `Summary`. 
 
 A user has executed an ArangoDB Query Language query, which has returned the AQL Result in JSON format.
 You are responsible for creating an `Summary` based on the AQL Result.
