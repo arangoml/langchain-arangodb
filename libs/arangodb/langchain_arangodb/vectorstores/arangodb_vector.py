@@ -1194,7 +1194,7 @@ class ArangoVector(VectorStore):
                     result["metadata"],
                 )
 
-                if not result.get("data"):
+                if not data:
                     continue
 
                 _key = data.pop("_key")
