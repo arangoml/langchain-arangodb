@@ -482,7 +482,7 @@ class ArangoGraphQAChain(Chain):
             if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
                 self.graph.db.create_collection(self.query_cache_collection_name)  # type: ignore
 
-            cache_result = self.__get_cached_query(
+            cache_result = self._get_cached_query(
                 user_input, query_cache_similarity_threshold
             )
 
@@ -580,7 +580,7 @@ class ArangoGraphQAChain(Chain):
                     "top_k": self.top_k,
                     "list_limit": self.output_list_limit,
                     "string_limit": self.output_string_limit,
-                } 
+                }
                 aql_result = aql_execution_func(aql_query, params)
             except (AQLQueryExecuteError, AQLQueryExplainError) as e:
                 aql_error = str(e.error_message)
