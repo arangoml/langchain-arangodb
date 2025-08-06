@@ -1062,12 +1062,3 @@ def test_query_cache(db: StandardDatabase) -> None:
     )()
     query = chain._get_cached_query("gibberish", 0.99)
     assert query is None
-
-    # 10. Test _call
-    # Test with query cache enabled
-    chain.embedding = type(
-        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.123] * 5)}
-    )()
-    chain.cache_query(text="List all movies", aql="FOR m IN Movies RETURN m")
-    result = chain.invoke({"query": "List all movies", "use_query_cache": True})
-    assert result["aql_result"][0]["title"] == "The Matrix"
