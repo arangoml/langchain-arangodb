@@ -140,6 +140,12 @@ AQL Result:
 Summary:
 """
 AQL_QA_PROMPT = PromptTemplate(
-    input_variables=["adb_schema", "user_input", "aql_query", "aql_result", "chat_history"],
+    input_variables=[
+        "adb_schema",
+        "user_input",
+        "aql_query",
+        "aql_result",
+        "chat_history",
+    ],
     template=AQL_QA_TEMPLATE,
 )
