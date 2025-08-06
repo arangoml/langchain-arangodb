@@ -654,3 +654,67 @@ class TestArangoGraphQAChain:
         # 4. Test with query cache disabled
         result4 = chain.invoke({"query": "What is the name of the first movie?"})
         assert result4["result"] == "```FOR m IN Movies LIMIT 1 RETURN m```"
+
+    def test_call_chat_history_mocked(
+        self, fake_graph_store: FakeGraphStore, mock_chains: Dict[str, Runnable]
+    ) -> None:
+        """test _call with chat history"""
+
+        chat_history_store = Mock(spec=ArangoChatMessageHistory)
+
+        # Add fake message history (as objects, not dicts)
+        chat_history_store.messages = [
+            Mock(type="human", content="What is 1+1?"),
+            Mock(type="ai", content="2"),
+            Mock(type="human", content="What is 2+2?"),
+            Mock(type="ai", content="4"),
+        ]
+
+        # Mock LLM chains
+        mock_chains[  # type: ignore
+            "aql_generation_chain"
+        ].invoke.return_value = "```aql\nFOR m IN Movies RETURN m\n```"  # noqa: E501
+        mock_chains["qa_chain"].invoke.return_value = AIMessage(  # type: ignore
+            content="Here are the movies."
+        )  # noqa: E501
+
+        # Build the chain
+        chain = ArangoGraphQAChain(
+            graph=fake_graph_store,
+            aql_generation_chain=mock_chains["aql_generation_chain"],
+            aql_fix_chain=mock_chains["aql_fix_chain"],
+            qa_chain=mock_chains["qa_chain"],
+            allow_dangerous_requests=True,
+            include_history=True,
+            chat_history_store=chat_history_store,
+            max_history_messages=10,
+            return_aql_result=True,
+        )
+
+        # Run the call
+        result = chain.invoke({"query": "List all movies"})
+
+        # LLM received the latest 2 pairs (4 messages)
+        llm_input = mock_chains["aql_generation_chain"].invoke.call_args[0][0]  # type: ignore
+        chat_history = llm_input["chat_history"]
+        assert len(chat_history) == 4
+
+        # result has expected fields
+        assert result["result"].content == "Here are the movies."
+        assert result["aql_result"][0]["title"] == "Inception"
+
+        # Error: chat history enabled but store is missing
+        chain.chat_history_store = None
+        with pytest.raises(
+            ValueError,
+            match="Chat message history is required if include_history is True",
+        ):
+            chain.invoke({"query": "List again"})
+
+        # Error: invalid max_history_messages
+        chain.chat_history_store = chat_history_store
+        chain.max_history_messages = 0
+        with pytest.raises(
+            ValueError, match="max_history_messages must be greater than 0"
+        ):
+            chain.invoke({"query": "List again"})
