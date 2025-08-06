@@ -981,20 +981,110 @@ def test_query_cache(db: StandardDatabase) -> None:
     ):
         chain.invoke({"query": "List all movies", "use_query_cache": True})
 
+    # 6. Test _check_and_insert_query
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.111] * 5)}
+    )()
+
+    # Insert a new query
+    msg1 = chain._check_and_insert_query(
+        "Find sci-fi movies", "FOR m IN Movies FILTER m.genre == 'sci-fi' RETURN m"
+    )
+    assert msg1.startswith("Cached:")
+
+    # Re-insert the same query -> should detect duplicate
+    msg2 = chain._check_and_insert_query(
+        "Find sci-fi movies", "FOR m IN Movies FILTER m.genre == 'sci-fi' RETURN m"
+    )
+    assert msg2.startswith("This query is already in the cache")
+
+    # 7. Test cache_query
+
+    # Fallback to _last_user_input/_last_aql_query
+    chain._last_user_input = "List animated movies"
+    chain._last_aql_query = "FOR m IN Movies FILTER m.genre == 'animation' RETURN m"
+    msg = chain.cache_query()
+    assert msg == "Cached: list animated movies"
+
+    # Missing text, aql or embedding should raise
+    with pytest.raises(ValueError, match="Text is required to cache a query"):
+        chain.cache_query(aql="FOR m IN Movies RETURN m")
+
+    with pytest.raises(ValueError, match="AQL is required to cache a query"):
+        chain.cache_query(text="List movies")
+
+    # 8. Test clear_query_cache
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.111] * 5)}
+    )()
+
+    # Add a test query
+    chain.cache_query(text="Temp query", aql="FOR m IN Movies RETURN m")
+    assert graph.db.collection("Queries").has(graph._hash("temp query"))
+
+    # Delete specific query
+    msg = chain.clear_query_cache(text="Temp query")
+    assert msg == "Removed: temp query"
+    assert not graph.db.collection("Queries").has(graph._hash("temp query"))
+
+    # Clear all
+    msg = chain.clear_query_cache()
+    assert msg == "Cleared all queries from the cache"
+    assert graph.db.collection("Queries").count() == 0
+
+    # 9. Test _get_cached_query
+    # Insert two queries
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.123] * 5)}
+    )()
+    chain.cache_query(text="List all movies", aql="FOR m IN Movies RETURN m")
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.124] * 5)}
+    )()
+    chain.cache_query(text="Show all movies", aql="FOR m IN Movies RETURN m")
+
+    # Exact match
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.123] * 5)}
+    )()
+    query = chain._get_cached_query("list all movies", 0.8)
+    assert query[0].startswith("FOR m IN Movies RETURN")  # type: ignore
+
+    # Vector match
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.124] * 5)}
+    )()
+    query = chain._get_cached_query("show all movies", 0.8)
+    assert query[0].startswith("FOR m IN Movies RETURN")  # type: ignore
+
+    # No match
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.0] * 5)}
+    )()
+    query = chain._get_cached_query("gibberish", 0.99)
+    assert query is None
+
+    # 10. Test _call
+    # Test with query cache enabled
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.123] * 5)}
+    )()
+    chain.cache_query(text="List all movies", aql="FOR m IN Movies RETURN m")
+    result = chain.invoke({"query": "List all movies", "use_query_cache": True})
+    assert result["aql_result"][0]["title"] == "The Matrix"
 
 @pytest.mark.usefixtures("clear_arangodb_database")
-def test_chat_history_with_movies(db: StandardDatabase) -> None:
-    """Test chat history resolution using 'it' in follow-up queries (movies domain)."""
-
+def test_chat_history(db: StandardDatabase) -> None:
+    """
+    Test chat history that enables context-aware query generation.
+    """
     # 1. Create required collections
     graph = ArangoGraph(db)
     db.create_collection("Movies")
-
     db.collection("Movies").insert_many([
         {"_key": "matrix", "title": "The Matrix", "year": 1999},
         {"_key": "inception", "title": "Inception", "year": 2010},
     ])
-
     graph.refresh_schema()
 
     # 2. Create chat history store
@@ -1007,39 +1097,36 @@ def test_chat_history_with_movies(db: StandardDatabase) -> None:
 
     # 3. Dummy LLM: simulate coreference to "The Matrix"
     def dummy_llm(prompt):
-        if "when was it released" in prompt.lower():
+        if "when was it released" in str(prompt).lower():  # type: ignore
             return AIMessage(content="""```aql
-WITH Movies
-FOR m IN Movies
-  FILTER m.title == "The Matrix"
-  RETURN m.year
-```""")
+                WITH Movies
+                FOR m IN Movies
+                FILTER m.title == "The Matrix"
+                RETURN m.year
+                ```""")
         return AIMessage(content="""```aql
-WITH Movies
-FOR m IN Movies
-  SORT m._key ASC
-  LIMIT 1
-  RETURN m.title
-```""")
+            WITH Movies
+            FOR m IN Movies
+            SORT m._key ASC
+            LIMIT 1
+            RETURN m.title
+            ```""")
 
     dummy_chain = ArangoGraphQAChain.from_llm(
         llm=RunnableLambda(dummy_llm),  # type: ignore
         graph=graph,
+        allow_dangerous_requests=True,
         include_history=True,
         max_history_messages=5,
-        chat_history_store=chat_history,
+        chat_history_store=history,
         return_aql_result=True,
         return_aql_query=True,
     )
 
     # 4. Ask initial question
     result1 = dummy_chain.invoke({"query": "What is the first movie?"})
-    assert "Matrix" in result1["result"].content
+    assert "Inception" in result1["aql_result"]
 
     # 5. Ask follow-up question using pronoun "it"
     result2 = dummy_chain.invoke({"query": "When was it released?"})
-    assert "1999" in result2["result"].content
-
-    # 6. Optional: Check AQL query correctness
-    assert "FOR m IN Movies" in result2["aql_query"]
-    assert "RETURN m.year" in result2["aql_query"]
+    assert 1999 in result2["aql_result"]

@@ -56,7 +56,7 @@ class ArangoGraphQAChain(Chain):
     qa_chain: Runnable[Dict[str, Any], Any]
     input_key: str = "query"  #: :meta private:
     output_key: str = "result"  #: :meta private:
-    include_history: bool = Field(default=True)
+    include_history: bool = Field(default=False)
     max_history_messages: int = Field(default=10)
     chat_history_store: Optional[ArangoChatMessageHistory] = Field(default=None)
     
@@ -272,7 +272,7 @@ class ArangoGraphQAChain(Chain):
             return f"Removed: {text}"
         return f"Not found: {text}"
 
-    def __get_cached_query(
+    def _get_cached_query(
         self, user_input: str, query_cache_similarity_threshold: float
     ) -> Optional[Tuple[str, str]]:
         """Get the cached query for the user input. Only used if embedding
@@ -400,17 +400,6 @@ class ArangoGraphQAChain(Chain):
         if use_query_cache and self.embedding is None:
             raise ValueError("Cannot enable query cache without passing embedding")
 
-
-        params = {
-            "top_k": self.top_k,
-            "list_limit": self.output_list_limit,
-            "string_limit": self.output_string_limit,
-        }
-
-        aql_execution_func = (
-            self.graph.query if self.execute_aql_query else self.graph.explain
-        )
-
         # ######################
         # # Get Chat History #
         # ######################
@@ -429,7 +418,6 @@ class ArangoGraphQAChain(Chain):
                 else:
                     chat_history.append(AIMessage(content=msg.content))
 
-
         ######################
         # Check Query Cache #
         ######################
@@ -443,7 +431,7 @@ class ArangoGraphQAChain(Chain):
             if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
                 self.graph.db.create_collection(self.query_cache_collection_name)  # type: ignore
 
-            cache_result = self.__get_cached_query(
+            cache_result = self._get_cached_query(
                 user_input, query_cache_similarity_threshold
             )
 
@@ -467,6 +455,10 @@ class ArangoGraphQAChain(Chain):
         aql_error = ""
         aql_result = None
         aql_generation_attempt = 1
+
+        aql_execution_func = (
+            self.graph.query if self.execute_aql_query else self.graph.explain
+        )
 
         while (
             aql_result is None
@@ -533,6 +525,11 @@ class ArangoGraphQAChain(Chain):
             #############################
 
             try:
+                params = {
+                    "top_k": self.top_k,
+                    "list_limit": self.output_list_limit,
+                    "string_limit": self.output_string_limit,
+                }
                 aql_result = aql_execution_func(aql_query, params)
             except (AQLQueryExecuteError, AQLQueryExplainError) as e:
                 aql_error = str(e.error_message)
@@ -598,7 +595,7 @@ class ArangoGraphQAChain(Chain):
         text = "Summary:" if self.execute_aql_query else "AQL Explain:"
         _run_manager.on_text(text, end="\n", verbose=self.verbose)
         _run_manager.on_text(
-            str(result.content), color="green", end="\n", verbose=self.verbose
+            str(result.content) if isinstance(result, AIMessage) else result, color="green", end="\n", verbose=self.verbose
         )
 
         results: Dict[str, Any] = {self.output_key: result}
