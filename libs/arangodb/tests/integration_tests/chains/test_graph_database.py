@@ -10,8 +10,8 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
-from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
+from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from tests.llms.fake_llm import FakeLLM
 
 
@@ -1073,6 +1073,7 @@ def test_query_cache(db: StandardDatabase) -> None:
     result = chain.invoke({"query": "List all movies", "use_query_cache": True})
     assert result["aql_result"][0]["title"] == "The Matrix"
 
+
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_chat_history(db: StandardDatabase) -> None:
     """
@@ -1081,10 +1082,12 @@ def test_chat_history(db: StandardDatabase) -> None:
     # 1. Create required collections
     graph = ArangoGraph(db)
     db.create_collection("Movies")
-    db.collection("Movies").insert_many([
-        {"_key": "matrix", "title": "The Matrix", "year": 1999},
-        {"_key": "inception", "title": "Inception", "year": 2010},
-    ])
+    db.collection("Movies").insert_many(
+        [
+            {"_key": "matrix", "title": "The Matrix", "year": 1999},
+            {"_key": "inception", "title": "Inception", "year": 2010},
+        ]
+    )
     graph.refresh_schema()
 
     # 2. Create chat history store
@@ -1096,21 +1099,25 @@ def test_chat_history(db: StandardDatabase) -> None:
     history.clear()
 
     # 3. Dummy LLM: simulate coreference to "The Matrix"
-    def dummy_llm(prompt):
+    def dummy_llm(prompt):  # type: ignore
         if "when was it released" in str(prompt).lower():  # type: ignore
-            return AIMessage(content="""```aql
+            return AIMessage(
+                content="""```aql
                 WITH Movies
                 FOR m IN Movies
                 FILTER m.title == "The Matrix"
                 RETURN m.year
-                ```""")
-        return AIMessage(content="""```aql
+                ```"""
+            )
+        return AIMessage(
+            content="""```aql
             WITH Movies
             FOR m IN Movies
             SORT m._key ASC
             LIMIT 1
             RETURN m.title
-            ```""")
+            ```"""
+        )
 
     dummy_chain = ArangoGraphQAChain.from_llm(
         llm=RunnableLambda(dummy_llm),  # type: ignore
