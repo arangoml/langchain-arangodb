@@ -140,6 +140,8 @@ class ArangoGraph(GraphStore):
         Initializes the ArangoGraph instance.
 
         """
+        print("Hello World")
+
         self.__db: StandardDatabase = db
         self.__async_db = db.begin_async_execution()
 
