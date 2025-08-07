@@ -288,7 +288,7 @@ class ArangoGraph(GraphStore):
         graph_schema: List[Dict[str, Any]] = []
         if graph_name:
             # Fetch a single graph
-            graph: Graph = self.db.graph(graph_name)
+            graph: Graph = self.__db.graph(graph_name)
             edge_definitions = graph.edge_definitions()
 
             graph_schema = [{"name": graph_name, "edge_definitions": edge_definitions}]
@@ -302,13 +302,13 @@ class ArangoGraph(GraphStore):
             # Fetch all graphs
             graph_schema = [
                 {"graph_name": g["name"], "edge_definitions": g["edge_definitions"]}
-                for g in self.db.graphs()  # type: ignore
+                for g in self.__db.graphs()  # type: ignore
             ]
 
             # Fetch all collections
             collection_names = {
                 collection["name"]
-                for collection in self.db.collections()  # type: ignore
+                for collection in self.__db.collections()  # type: ignore
             }
 
         #####
@@ -317,14 +317,14 @@ class ArangoGraph(GraphStore):
 
         # Stores the schema of every ArangoDB Document/Edge collection
         collection_schema: List[Dict[str, Any]] = []
-        for collection in self.db.collections():  # type: ignore
+        for collection in self.__db.collections():  # type: ignore
             if collection["system"] or collection["name"] not in collection_names:
                 continue
 
             # Extract collection name, type, and size
             col_name: str = collection["name"]
             col_type: str = collection["type"]
-            col_size: int = self.db.collection(col_name).count()  # type: ignore
+            col_size: int = self.__db.collection(col_name).count()  # type: ignore
 
             # Set number of ArangoDB documents/edges to retrieve
             limit_amount = ceil(sample_ratio * col_size) or 1
@@ -337,7 +337,7 @@ class ArangoGraph(GraphStore):
 
             doc: Dict[str, Any]
             properties: List[Dict[str, str]] = []
-            cursor = self.db.aql.execute(aql, bind_vars={"@col_name": col_name})
+            cursor = self.__db.aql.execute(aql, bind_vars={"@col_name": col_name})
             for doc in cursor:  # type: ignore
                 for key, value in doc.items():
                     properties.append({key: type(value).__name__})
@@ -367,10 +367,10 @@ class ArangoGraph(GraphStore):
         #####
 
         view_schema: List[Dict[str, Any]] = []
-        for view in self.db.views():  # type: ignore
+        for view in self.__db.views():  # type: ignore
             view_name = view["name"]
             view_type = view["type"]
-            view_info = self.db.view(view_name)
+            view_info = self.__db.view(view_name)
             key = "links" if view_type == "arangosearch" else "indexes"
             view_schema.append(
                 {"name": view_name, "type": view_type, key: view_info.get(key, [])}  # type: ignore
@@ -381,7 +381,7 @@ class ArangoGraph(GraphStore):
         #####
 
         analyzer_schema: List[Dict[str, Any]] = []
-        for a in self.db.analyzers():  # type: ignore
+        for a in self.__db.analyzers():  # type: ignore
             if a["name"] not in DEFAULT_ANALYZERS:
                 analyzer_schema.append({a["name"]: a["properties"]})
 
@@ -739,11 +739,11 @@ class ArangoGraph(GraphStore):
                 for k, v in edge_definitions_dict.items()
             ]
 
-            if not self.db.has_graph(graph_name):
-                self.db.create_graph(graph_name, edge_definitions)
+            if not self.__db.has_graph(graph_name):
+                self.__db.create_graph(graph_name, edge_definitions)
 
             elif update_graph_definition_if_exists:
-                graph = self.db.graph(graph_name)
+                graph = self.__db.graph(graph_name)
 
                 for e_d in edge_definitions:
                     e_c = str(e_d["edge_collection"])
@@ -832,8 +832,8 @@ class ArangoGraph(GraphStore):
         :raises ArangoServerError: If the ArangoDB server cannot be reached.
         :raises ArangoCollectionError: If the collection cannot be created.
         """
-        if not self.db.has_collection(collection_name):
-            self.db.create_collection(collection_name, edge=is_edge, **kwargs)
+        if not self.__db.has_collection(collection_name):
+            self.__db.create_collection(collection_name, edge=is_edge, **kwargs)
 
     def _process_node_as_entity(
         self,

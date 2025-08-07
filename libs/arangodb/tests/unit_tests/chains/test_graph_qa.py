@@ -11,12 +11,12 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import Runnable, RunnableLambda
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
-from langchain_arangodb.graphs.graph_store import GraphStore
+from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from tests.llms.fake_llm import FakeLLM
 
 
-class FakeGraphStore(GraphStore):
-    """A fake GraphStore implementation for testing purposes."""
+class FakeGraphStore(ArangoGraph):
+    """A fake ArangoGraph implementation for testing purposes."""
 
     def __init__(self) -> None:
         self._schema_yaml = "node_props:\n Movie:\n - property: title\n   type: STRING"
@@ -29,18 +29,22 @@ class FakeGraphStore(GraphStore):
         self.graph_documents_added = []  # type: ignore
 
         # Mock the database interface
-        self.db = Mock()
-        self.db.collection = Mock()
+        self.__db = Mock()
+        self.__db.collection = Mock()
         mock_queries_collection = Mock()
         mock_queries_collection.find = Mock(return_value=[])
         mock_queries_collection.insert = Mock()
-        self.db.collection.return_value = mock_queries_collection
-        self.db.aql = Mock()
-        self.db.aql.execute = Mock(return_value=[])
+        self.__db.collection.return_value = mock_queries_collection
+        self.__db.aql = Mock()
+        self.__db.aql.execute = Mock(return_value=[])
 
     @property
     def schema_yaml(self) -> str:
         return self._schema_yaml
+
+    @property
+    def db(self) -> Mock:  # type: ignore
+        return self.__db  # type: ignore
 
     @property
     def schema_json(self) -> str:
@@ -54,7 +58,7 @@ class FakeGraphStore(GraphStore):
         self.explains_run.append((query, params))
         return [{"plan": "This is a fake AQL query plan."}]
 
-    def refresh_schema(self) -> None:
+    def refresh_schema(self) -> None:  # type: ignore
         self.refreshed = True
 
     def add_graph_documents(  # type: ignore

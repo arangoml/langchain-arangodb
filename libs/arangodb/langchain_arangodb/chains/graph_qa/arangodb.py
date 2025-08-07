@@ -21,7 +21,6 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_QA_PROMPT,
 )
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
-from langchain_arangodb.graphs.graph_store import GraphStore
 
 AQL_WRITE_OPERATIONS: List[str] = [
     "INSERT",
@@ -216,9 +215,6 @@ class ArangoGraphQAChain(Chain):
         if self.embedding is None:
             raise ValueError("Cannot cache queries without an embedding model.")
 
-        if not isinstance(self.graph, GraphStore):
-            raise ValueError("Graph must be an GraphStore instance")
-
         if not self.graph.db.has_collection(self.query_cache_collection_name):
             m = f"Collection {self.query_cache_collection_name} does not exist"  # noqa: E501
             raise ValueError(m)
@@ -387,9 +383,6 @@ class ArangoGraphQAChain(Chain):
             Defaults to 256.
         :type output_string_limit: int
         """
-        if not isinstance(self.graph, GraphStore):
-            raise ValueError("Graph must be an GraphStore instance")
-
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
         user_input = inputs[self.input_key].strip().lower()
