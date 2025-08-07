@@ -143,6 +143,8 @@ class ArangoGraph(GraphStore):
         self.__db: StandardDatabase = db
         self.__async_db = db.begin_async_execution()
 
+        print("Hello World")
+
         self.__schema = {}
         if generate_schema_on_init:
             self.__schema = self.generate_schema(
