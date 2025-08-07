@@ -424,7 +424,7 @@ class ArangoGraph(GraphStore):
         top_k = params.pop("top_k", None)
         list_limit = params.pop("list_limit", 32)
         string_limit = params.pop("string_limit", 256)
-        cursor = self.__db.aql.execute(query, **params)
+        cursor = self.db.aql.execute(query, **params)
 
         results = []
 
@@ -454,7 +454,7 @@ class ArangoGraph(GraphStore):
         :raises ArangoServerError: If the ArangoDB server cannot be reached.
         :raises ArangoCollectionError: If the collection cannot be created.
         """
-        return self.__db.aql.explain(query)  # type: ignore
+        return self.db.aql.explain(query)  # type: ignore
 
     def add_graph_documents(
         self,
