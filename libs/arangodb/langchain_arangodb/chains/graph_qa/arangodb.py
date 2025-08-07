@@ -20,6 +20,7 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_GENERATION_PROMPT,
     AQL_QA_PROMPT,
 )
+from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from langchain_arangodb.graphs.graph_store import GraphStore
 
 AQL_WRITE_OPERATIONS: List[str] = [
@@ -46,7 +47,7 @@ class ArangoGraphQAChain(Chain):
         See https://python.langchain.com/docs/security for more information.
     """
 
-    graph: GraphStore = Field(exclude=True)
+    graph: ArangoGraph = Field(exclude=True)
     embedding: Optional[Embeddings] = Field(default=None, exclude=True)
     query_cache_collection_name: str = Field(default="Queries")
     aql_generation_chain: Runnable[Dict[str, Any], Any]
@@ -177,17 +178,22 @@ class ArangoGraphQAChain(Chain):
         Check if a query is already in the cache and insert it if it's not.
 
         :param text: The text of the query to check.
+        :type text: str
         :param aql: The AQL query to check.
+        :type aql: str
         :return: A message indicating the result of the operation.
         """
         text = text.strip().lower()
-        text_hash = self.graph._hash(text)  # type: ignore
-        collection = self.graph.db.collection(self.query_cache_collection_name)  # type: ignore
+        text_hash = self.graph._hash(text)
+        collection = self.graph.db.collection(self.query_cache_collection_name)
 
         if collection.has(text_hash):
             return f"This query is already in the cache: {text}"
 
-        query_embedding = self.embedding.embed_query(text)  # type: ignore
+        if self.embedding is None:
+            raise ValueError("Cannot cache queries without an embedding model.")
+
+        query_embedding = self.embedding.embed_query(text)
         collection.insert(
             {
                 "_key": text_hash,
@@ -195,7 +201,7 @@ class ArangoGraphQAChain(Chain):
                 "embedding": query_embedding,
                 "aql": aql,
             }
-        )  # type: ignore
+        )
 
         return f"Cached: {text}"
 
@@ -213,51 +219,58 @@ class ArangoGraphQAChain(Chain):
         if not isinstance(self.graph, GraphStore):
             raise ValueError("Graph must be an GraphStore instance")
 
-        if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
+        if not self.graph.db.has_collection(self.query_cache_collection_name):
             m = f"Collection {self.query_cache_collection_name} does not exist"  # noqa: E501
             raise ValueError(m)
 
-        if text is None and aql is not None:
+        if not text and aql:
             raise ValueError("Text is required to cache a query")
 
-        if text is not None and aql is None:
+        if text and not aql:
             raise ValueError("AQL is required to cache a query")
 
-        if text is None and aql is None:
+        if not text and not aql:
+            if self._last_user_input is None or self._last_aql_query is None:
+                m = "No previous query to cache. Please provide **text** and **aql**."
+                raise ValueError(m)
+
             # Fallback: cache the most recent query
             return self._check_and_insert_query(
-                self._last_user_input,  # type: ignore
-                self._last_aql_query,  # type: ignore
+                self._last_user_input,
+                self._last_aql_query,
             )
 
-        return self._check_and_insert_query(text, aql)  # type: ignore
+        if not isinstance(text, str) or not isinstance(aql, str):
+            raise ValueError("Text and AQL must be strings")
+
+        return self._check_and_insert_query(text, aql)
 
     def clear_query_cache(self, text: Optional[str] = None) -> str:
         """
         Clear the query cache.
 
         :param text: The text of the query to delete from the cache.
+        :type text: str
         :return: A message indicating the result of the operation.
         """
-        assert isinstance(self.graph, GraphStore)
 
-        if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
-            raise ValueError(
-                f"Collection {self.query_cache_collection_name} does not exist"
-            )
+        if not self.graph.db.has_collection(self.query_cache_collection_name):
+            m = f"Collection {self.query_cache_collection_name} does not exist"
+            raise ValueError(m)
 
-        collection = self.graph.db.collection(self.query_cache_collection_name)  # type: ignore
+        collection = self.graph.db.collection(self.query_cache_collection_name)
 
         if text is None:
             collection.truncate()
             return "Cleared all queries from the cache"
 
         text = text.strip().lower()
-        text_hash = self.graph._hash(text)  # type: ignore
+        text_hash = self.graph._hash(text)
 
         if collection.has(text_hash):
             collection.delete(text_hash)
             return f"Removed: {text}"
+
         return f"Not found: {text}"
 
     def _get_cached_query(
@@ -275,10 +288,10 @@ class ArangoGraphQAChain(Chain):
         if self.embedding is None:
             raise ValueError("Cannot enable query cache without passing embedding")
 
-        if self.graph.db.collection(self.query_cache_collection_name).count() == 0:  # type: ignore
+        if self.graph.db.collection(self.query_cache_collection_name).count() == 0:
             return None
 
-        user_input = user_input.strip().lower()  # type: ignore
+        user_input = user_input.strip().lower()
 
         # 1. Exact Search
 
@@ -289,34 +302,35 @@ class ArangoGraphQAChain(Chain):
                 RETURN q.aql
         """
 
-        result = list(
-            self.graph.db.aql.execute(  # type: ignore
-                query,
-                bind_vars={"user_input": user_input},
-            )  # type: ignore
+        cursor = self.graph.db.aql.execute(
+            query,
+            bind_vars={"user_input": user_input},
         )
+
+        result = list(cursor)  # type: ignore
 
         if result:
             return result[0], "1.0"
 
         # 2. Vector Search
 
-        embedding = self.embedding.embed_query(user_input)  # type: ignore
-        query = f"""
-            FOR q IN {self.query_cache_collection_name}
+        embedding = self.embedding.embed_query(user_input)
+        query = """
+            FOR q IN @@col
                 LET score = COSINE_SIMILARITY(q.embedding, @embedding)
                 SORT score DESC
                 LIMIT 1
                 FILTER score > @score_threshold
-                RETURN {{aql: q.aql, score: score}}       
+                RETURN {aql: q.aql, score: score}   
         """
 
         result = list(
-            self.graph.db.aql.execute(  # type: ignore
+            self.graph.db.aql.execute(
                 query,
                 bind_vars={
-                    "embedding": embedding,
-                    "score_threshold": query_cache_similarity_threshold,
+                    "@col": self.query_cache_collection_name,
+                    "embedding": embedding,  # type: ignore
+                    "score_threshold": query_cache_similarity_threshold,  # type: ignore
                 },
             )
         )
@@ -397,8 +411,8 @@ class ArangoGraphQAChain(Chain):
                 m = "Embedding must be provided when using query cache"
                 raise ValueError(m)
 
-            if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
-                self.graph.db.create_collection(self.query_cache_collection_name)  # type: ignore
+            if not self.graph.db.has_collection(self.query_cache_collection_name):
+                self.graph.db.create_collection(self.query_cache_collection_name)
 
             cache_result = self._get_cached_query(
                 user_input, query_cache_similarity_threshold
