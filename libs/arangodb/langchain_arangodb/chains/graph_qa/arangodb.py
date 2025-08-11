@@ -20,6 +20,7 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_GENERATION_PROMPT,
     AQL_QA_PROMPT,
 )
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 
 AQL_WRITE_OPERATIONS: List[str] = [
@@ -54,7 +55,7 @@ class ArangoGraphQAChain(Chain):
     qa_chain: Runnable[Dict[str, Any], Any]
     input_key: str = "query"  #: :meta private:
     output_key: str = "result"  #: :meta private:
-    include_history: bool = Field(default=True)
+    include_history: bool = Field(default=False)
     max_history_messages: int = Field(default=10)
     chat_history_store: Optional[ArangoChatMessageHistory] = Field(default=None)
 
@@ -393,10 +394,6 @@ class ArangoGraphQAChain(Chain):
             Defaults to 256.
         :type output_string_limit: int
         """
-
-        if not isinstance(self.graph, GraphStore):
-            raise ValueError("Graph must be an GraphStore instance")
-
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
         user_input = inputs[self.input_key].strip().lower()
@@ -407,47 +404,6 @@ class ArangoGraphQAChain(Chain):
 
         if use_query_cache and self.embedding is None:
             raise ValueError("Cannot enable query cache without passing embedding")
-
-        ######################
-        # Check Query Cache #
-        ######################
-
-        cached_query, score = None, None
-        if use_query_cache:
-            if self.embedding is None:
-                m = "Embedding must be provided when using query cache"
-                raise ValueError(m)
-
-            if not self.graph.db.has_collection(self.query_cache_collection_name):
-                self.graph.db.create_collection(self.query_cache_collection_name)
-
-            cache_result = self._get_cached_query(
-                user_input, query_cache_similarity_threshold
-            )
-
-            if cache_result is not None:
-                cached_query, score = cache_result
-
-        if cached_query:
-            aql_generation_output = f"```aql{cached_query}```"
-        else:
-            aql_generation_output = self.aql_generation_chain.invoke(
-                {
-                    "adb_schema": self.graph.schema_yaml,
-                    "aql_examples": self.aql_examples,
-                    "user_input": user_input,
-                },
-                callbacks=callbacks,
-            )
-
-        aql_query = ""
-        aql_error = ""
-        aql_result = None
-        aql_generation_attempt = 1
-
-        # aql_execution_func = (
-        #     self.graph.query if self.execute_aql_query else self.graph.explain
-        # )
 
         # ######################
         # # Get Chat History #
@@ -468,7 +424,6 @@ class ArangoGraphQAChain(Chain):
                     chat_history.append(HumanMessage(content=msg.content))
                 else:
                     chat_history.append(AIMessage(content=msg.content))  # type: ignore
-
 
         ######################
         # Check Query Cache #
@@ -616,73 +571,6 @@ class ArangoGraphQAChain(Chain):
             """
             raise ValueError(m)
 
-        if use_query_cache and cached_query:
-            aql_query = cached_query
-            aql_result = aql_execution_func(aql_query, params)
-
-            query_message = f"AQL Query ({aql_generation_attempt})\n"
-            if cached_query:
-                score_string = score if score is not None else "1.0"
-                query_message = (
-                    f"AQL Query (used cached query, score: {score_string})\n"  # noqa: E501
-                )
-
-            _run_manager.on_text(query_message, verbose=self.verbose)
-            _run_manager.on_text(
-                aql_query, color="green", end="\n", verbose=self.verbose
-            )
-        else:
-            _run_manager.on_text(
-                f"AQL Query ({aql_generation_attempt}):\n", verbose=self.verbose
-            )
-            _run_manager.on_text(
-                aql_query, color="green", end="\n", verbose=self.verbose
-            )
-
-            #############################
-            # Execute/Explain AQL Query #
-            #############################
-
-            try:
-                params = {
-                    "top_k": self.top_k,
-                    "list_limit": self.output_list_limit,
-                    "string_limit": self.output_string_limit,
-                }
-                aql_result = aql_execution_func(aql_query, params)
-            except (AQLQueryExecuteError, AQLQueryExplainError) as e:
-                aql_error = str(e.error_message)
-
-                _run_manager.on_text(
-                    "AQL Query Execution Error: ", end="\n", verbose=self.verbose
-                )
-                _run_manager.on_text(
-                    aql_error, color="yellow", end="\n\n", verbose=self.verbose
-                )
-
-                ########################
-                # Retry AQL Generation #
-                ########################
-
-                aql_generation_output = self.aql_fix_chain.invoke(
-                    {
-                        "adb_schema": self.graph.schema_yaml,
-                        "aql_query": aql_query,
-                        "aql_error": aql_error,
-                    },
-                    callbacks=callbacks,
-                )
-
-            aql_generation_attempt += 1
-
-        if aql_result is None:
-            m = f"""
-                Maximum amount of AQL Query Generation attempts reached.
-                Unable to execute the AQL Query due to the following error:
-                {aql_error}
-            """
-            raise ValueError(m)
-
         text = "AQL Result:" if self.execute_aql_query else "AQL Explain:"
         _run_manager.on_text(text, end="\n", verbose=self.verbose)
         _run_manager.on_text(
@@ -713,7 +601,10 @@ class ArangoGraphQAChain(Chain):
         text = "Summary:" if self.execute_aql_query else "AQL Explain:"
         _run_manager.on_text(text, end="\n", verbose=self.verbose)
         _run_manager.on_text(
-            str(result.content), color="green", end="\n", verbose=self.verbose
+            str(result.content) if isinstance(result, AIMessage) else result,
+            color="green",
+            end="\n",
+            verbose=self.verbose,
         )
 
         results: Dict[str, Any] = {self.output_key: result}

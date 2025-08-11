@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import Runnable, RunnableLambda
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from tests.llms.fake_llm import FakeLLM
 
@@ -27,16 +28,6 @@ class FakeGraphStore(ArangoGraph):
         self.explains_run = []  # type: ignore
         self.refreshed = False
         self.graph_documents_added = []  # type: ignore
-
-        # Mock the database interface
-        self.db = Mock()
-        self.db.collection = Mock()
-        mock_queries_collection = Mock()
-        mock_queries_collection.find = Mock(return_value=[])
-        mock_queries_collection.insert = Mock()
-        self.db.collection.return_value = mock_queries_collection
-        self.db.aql = Mock()
-        self.db.aql.execute = Mock(return_value=[])
 
         # Mock the database interface
         self.__db = Mock()
@@ -655,7 +646,7 @@ class TestArangoGraphQAChain:
         result4 = chain.invoke({"query": "What is the name of the first movie?"})
         assert result4["result"] == "```FOR m IN Movies LIMIT 1 RETURN m```"
 
-    def test_call_chat_history_mocked(
+    def test_chat_history(
         self, fake_graph_store: FakeGraphStore, mock_chains: Dict[str, Runnable]
     ) -> None:
         """test _call with chat history"""

@@ -1063,3 +1063,68 @@ def test_query_cache(db: StandardDatabase) -> None:
     )()
     query = chain._get_cached_query("gibberish", 0.99)
     assert query is None
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_chat_history(db: StandardDatabase) -> None:
+    """
+    Test chat history that enables context-aware query generation.
+    """
+    # 1. Create required collections
+    graph = ArangoGraph(db)
+    db.create_collection("Movies")
+    db.collection("Movies").insert_many(
+        [
+            {"_key": "matrix", "title": "The Matrix", "year": 1999},
+            {"_key": "inception", "title": "Inception", "year": 2010},
+        ]
+    )
+    graph.refresh_schema()
+
+    # 2. Create chat history store
+    history = ArangoChatMessageHistory(
+        session_id="test",
+        collection_name="test_chat_sessions",
+        db=db,
+    )
+    history.clear()
+
+    # 3. Dummy LLM: simulate coreference to "The Matrix"
+    def dummy_llm(prompt):  # type: ignore
+        if "when was it released" in str(prompt).lower():  # type: ignore
+            return AIMessage(
+                content="""```aql
+                WITH Movies
+                FOR m IN Movies
+                FILTER m.title == "The Matrix"
+                RETURN m.year
+                ```"""
+            )
+        return AIMessage(
+            content="""```aql
+            WITH Movies
+            FOR m IN Movies
+            SORT m._key ASC
+            LIMIT 1
+            RETURN m.title
+            ```"""
+        )
+
+    dummy_chain = ArangoGraphQAChain.from_llm(
+        llm=RunnableLambda(dummy_llm),  # type: ignore
+        graph=graph,
+        allow_dangerous_requests=True,
+        include_history=True,
+        max_history_messages=5,
+        chat_history_store=history,
+        return_aql_result=True,
+        return_aql_query=True,
+    )
+
+    # 4. Ask initial question
+    result1 = dummy_chain.invoke({"query": "What is the first movie?"})
+    assert "Inception" in result1["aql_result"]
+
+    # 5. Ask follow-up question using pronoun "it"
+    result2 = dummy_chain.invoke({"query": "When was it released?"})
+    assert 1999 in result2["aql_result"]
