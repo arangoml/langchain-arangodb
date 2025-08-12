@@ -604,7 +604,7 @@ class ArangoGraphQAChain(Chain):
         )
 
         # Add summary
-        text = "Summary:" if self.execute_aql_query else "AQL Explain:"
+        text = "Summary:"
         _run_manager.on_text(text, end="\n", verbose=self.verbose)
         _run_manager.on_text(
             str(result.content) if isinstance(result, AIMessage) else result,
