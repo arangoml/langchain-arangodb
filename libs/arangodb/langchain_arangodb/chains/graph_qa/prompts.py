@@ -105,8 +105,6 @@ AQL_QA_TEMPLATE = """Task: Generate a natural language `Summary` from the result
 
 You are an ArangoDB Query Language (AQL) expert responsible for creating a well-written `Summary` from the `User Input` and associated `AQL Result`.
 
-You may also be given a `Chat History` to help you create the `Summary`. 
-
 A user has executed an ArangoDB Query Language query, which has returned the AQL Result in JSON format.
 You are responsible for creating an `Summary` based on the AQL Result.
 
@@ -115,15 +113,11 @@ You are given the following information:
 - `User Input`: the original question/request of the user, which has been translated into an AQL Query.
 - `AQL Query`: the AQL equivalent of the `User Input`, translated by another AI Model. Should you deem it to be incorrect, suggest a different AQL Query.
 - `AQL Result`: the JSON output returned by executing the `AQL Query` within the ArangoDB Database.
-- `Chat History`: the chat history between the user and the AI model, which may contain information about the user's request and the AI model's response.
 
 Remember to think step by step.
 
 Your `Summary` should sound like it is a response to the `User Input`.
 Your `Summary` should not include any mention of the `AQL Query` or the `AQL Result`.
-
-Chat History:
-{chat_history}
 
 ArangoDB Schema:
 {adb_schema}
