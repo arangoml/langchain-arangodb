@@ -55,6 +55,8 @@ class ArangoGraphQAChain(Chain):
     qa_chain: Runnable[Dict[str, Any], Any]
     input_key: str = "query"  #: :meta private:
     output_key: str = "result"  #: :meta private:
+    use_query_cache: bool = Field(default=False)
+    query_cache_similarity_threshold: float = Field(default=0.80)
     include_history: bool = Field(default=False)
     max_history_messages: int = Field(default=10)
     chat_history_store: Optional[ArangoChatMessageHistory] = Field(default=None)
@@ -397,10 +399,16 @@ class ArangoGraphQAChain(Chain):
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
         user_input = inputs[self.input_key].strip().lower()
-        use_query_cache = inputs.get("use_query_cache", False)
+
+        # Query Cache Parameters (can be overridden by inputs at runtime)
+        use_query_cache = inputs.get("use_query_cache", self.use_query_cache)
         query_cache_similarity_threshold = inputs.get(
-            "query_cache_similarity_threshold", 0.80
+            "query_cache_similarity_threshold", self.query_cache_similarity_threshold
         )
+
+        # Chat History Parameters (can be overridden by inputs at runtime)
+        include_history = inputs.get("include_history", self.include_history)
+        max_history_messages = inputs.get("max_history_messages", self.max_history_messages)
 
         if use_query_cache and self.embedding is None:
             raise ValueError("Cannot enable query cache without passing embedding")
@@ -409,16 +417,16 @@ class ArangoGraphQAChain(Chain):
         # # Get Chat History #
         # ######################
 
-        if self.include_history and self.chat_history_store is None:
+        if include_history and self.chat_history_store is None:
             raise ValueError(
                 "Chat message history is required if include_history is True"
             )
 
-        if self.max_history_messages <= 0:
+        if max_history_messages <= 0:
             raise ValueError("max_history_messages must be greater than 0")
 
         chat_history = []
-        if self.include_history and self.chat_history_store is not None:
+        if include_history and self.chat_history_store is not None:
             for msg in self.chat_history_store.messages[-self.max_history_messages :]:
                 if msg.type == "human":
                     chat_history.append(HumanMessage(content=msg.content))
