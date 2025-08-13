@@ -427,7 +427,7 @@ class ArangoGraphQAChain(Chain):
 
         chat_history = []
         if include_history and self.chat_history_store is not None:
-            for msg in self.chat_history_store.messages[-self.max_history_messages:]:
+            for msg in self.chat_history_store.messages[-max_history_messages:]:
                 cls = HumanMessage if msg.type == "human" else AIMessage
                 chat_history.append(cls(content=msg.content))
 

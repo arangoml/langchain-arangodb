@@ -13,7 +13,7 @@ You are given an `ArangoDB Schema`. It is a YAML Spec containing:
 
 You may also be given a set of `AQL Query Examples` to help you create the `AQL Query`. If provided, the `AQL Query Examples` should be used as a reference, similar to how `ArangoDB Schema` should be used.
 
-You may also be given a Chat History. If provided, use it only as a reference to help clarify the current User Input — for example, to resolve pronouns or implicit references.
+You may also be given a Chat History. If it is not empty, use it only as a reference to help clarify the current User Input — for example, to resolve pronouns or implicit references. If the Chat History is empty, do not use it or refer to it in any way. Treat the User Input as a fully self-contained and standalone question.
 
 Things you should do:
 - Think step by step.
@@ -22,7 +22,6 @@ Things you should do:
 - Pay close attention to descriptive references in the User Input — including gendered terms (e.g., father, she), attribute-based descriptions (e.g., young, active, French), and implicit types or categories 
   (e.g., products over $100, available items) — and, if these correspond to fields in the schema, include appropriate filters in the AQL query (e.g., gender == "male", status == "active", price > 100).
 - Rely on `ArangoDB Schema` and `AQL Query Examples` (if provided) to generate the query.
-- Use the Chat History only to resolve ambiguous references (e.g., pronouns like “he”, “she”, “they”, or “that”) in the current User Input. Generate an AQL query for the current User Input.
 - Chat History is ordered chronologically: earlier messages come first, more recent ones last. Prioritize later entries when resolving context or references.
 - Begin the `AQL Query` by the `WITH` AQL keyword to specify all of the ArangoDB Collections required.
 - If a `View Schema` is defined and contains analyzers for specific fields, prefer using the View with the `SEARCH` and `ANALYZER` clauses instead of a direct collection scan.
@@ -33,6 +32,8 @@ Things you should do:
 - If a request is unrelated to generating AQL Query, say that you cannot help the user.
 
 Things you should not do:
+- Do not use or refer to Chat History if it is empty. 
+- Do not assume any previously discussed context, or try to resolve pronouns or references to prior questions if the Chat History is empty.
 - Do not use any properties/relationships that can't be inferred from the `ArangoDB Schema` or the `AQL Query Examples`. 
 - Do not include any text except the generated AQL Query.
 - Do not provide explanations or apologies in your responses.
@@ -41,7 +42,7 @@ Things you should not do:
 
 Under no circumstance should you generate an AQL Query that deletes any data whatsoever.
 
-Chat History:
+Chat History (Optional):
 {chat_history}
 
 ArangoDB Schema:
@@ -138,7 +139,6 @@ AQL_QA_PROMPT = PromptTemplate(
         "user_input",
         "aql_query",
         "aql_result",
-        "chat_history",
     ],
     template=AQL_QA_TEMPLATE,
 )
