@@ -228,7 +228,7 @@ class ArangoGraphQAChain(Chain):
         if self.embedding is None:
             raise ValueError("Cannot cache queries without an embedding model.")
 
-        if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
+        if not self.graph.db.has_collection(self.query_cache_collection_name):
             m = f"Collection {self.query_cache_collection_name} does not exist"  # noqa: E501
             raise ValueError(m)
 
@@ -267,7 +267,7 @@ class ArangoGraphQAChain(Chain):
             m = f"Collection {self.query_cache_collection_name} does not exist"
             raise ValueError(m)
 
-        collection = self.graph.db.collection(self.query_cache_collection_name)  # type: ignore
+        collection = self.graph.db.collection(self.query_cache_collection_name)
 
         if text is None:
             collection.truncate()
@@ -408,7 +408,9 @@ class ArangoGraphQAChain(Chain):
 
         # Chat History Parameters (can be overridden by inputs at runtime)
         include_history = inputs.get("include_history", self.include_history)
-        max_history_messages = inputs.get("max_history_messages", self.max_history_messages)
+        max_history_messages = inputs.get(
+            "max_history_messages", self.max_history_messages
+        )
 
         if use_query_cache and self.embedding is None:
             raise ValueError("Cannot enable query cache without passing embedding")
@@ -441,8 +443,8 @@ class ArangoGraphQAChain(Chain):
                 m = "Embedding must be provided when using query cache"
                 raise ValueError(m)
 
-            if not self.graph.db.has_collection(self.query_cache_collection_name):  # type: ignore
-                self.graph.db.create_collection(self.query_cache_collection_name)  # type: ignore
+            if not self.graph.db.has_collection(self.query_cache_collection_name):
+                self.graph.db.create_collection(self.query_cache_collection_name)
 
             cache_result = self._get_cached_query(
                 user_input, query_cache_similarity_threshold
