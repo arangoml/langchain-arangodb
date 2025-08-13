@@ -629,6 +629,7 @@ class ArangoGraphQAChain(Chain):
 
         if self.chat_history_store:
             self.chat_history_store.add_user_message(user_input)
+            self.chat_history_store.add_ai_message(aql_query)
             self.chat_history_store.add_ai_message(result)
 
         return results
