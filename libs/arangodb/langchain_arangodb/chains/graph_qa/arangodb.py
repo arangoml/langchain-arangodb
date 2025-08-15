@@ -10,7 +10,7 @@ from langchain.chains.base import Chain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import Field
@@ -20,6 +20,7 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_GENERATION_PROMPT,
     AQL_QA_PROMPT,
 )
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 
 AQL_WRITE_OPERATIONS: List[str] = [
@@ -54,6 +55,11 @@ class ArangoGraphQAChain(Chain):
     qa_chain: Runnable[Dict[str, Any], Any]
     input_key: str = "query"  #: :meta private:
     output_key: str = "result"  #: :meta private:
+    use_query_cache: bool = Field(default=False)
+    query_cache_similarity_threshold: float = Field(default=0.80)
+    include_history: bool = Field(default=False)
+    max_history_messages: int = Field(default=10)
+    chat_history_store: Optional[ArangoChatMessageHistory] = Field(default=None)
 
     top_k: int = 10
     """Number of results to return from the query"""
@@ -142,6 +148,13 @@ class ArangoGraphQAChain(Chain):
         :param query_cache_collection_name: The name of the collection
             to use for the query cache.
         :type query_cache_collection_name: str
+        :param include_history: Whether to include the chat history in the prompt.
+        :type include_history: bool
+        :param max_history_messages: The maximum number of messages to
+            include in the chat history.
+        :type max_history_messages: int
+        :param chat_history_store: The chat history store to use.
+        :type chat_history_store: ArangoChatMessageHistory
         :param qa_prompt: The prompt to use for the QA chain.
         :type qa_prompt: BasePromptTemplate
         :param aql_generation_prompt: The prompt to use for the AQL generation chain.
@@ -386,13 +399,39 @@ class ArangoGraphQAChain(Chain):
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
         user_input = inputs[self.input_key].strip().lower()
-        use_query_cache = inputs.get("use_query_cache", False)
+
+        # Query Cache Parameters (can be overridden by inputs at runtime)
+        use_query_cache = inputs.get("use_query_cache", self.use_query_cache)
         query_cache_similarity_threshold = inputs.get(
-            "query_cache_similarity_threshold", 0.80
+            "query_cache_similarity_threshold", self.query_cache_similarity_threshold
+        )
+
+        # Chat History Parameters (can be overridden by inputs at runtime)
+        include_history = inputs.get("include_history", self.include_history)
+        max_history_messages = inputs.get(
+            "max_history_messages", self.max_history_messages
         )
 
         if use_query_cache and self.embedding is None:
             raise ValueError("Cannot enable query cache without passing embedding")
+
+        # ######################
+        # # Get Chat History #
+        # ######################
+
+        if include_history and self.chat_history_store is None:
+            raise ValueError(
+                "Chat message history is required if include_history is True"
+            )
+
+        if max_history_messages <= 0:
+            raise ValueError("max_history_messages must be greater than 0")
+
+        chat_history = []
+        if include_history and self.chat_history_store is not None:
+            for msg in self.chat_history_store.messages[-max_history_messages:]:
+                cls = HumanMessage if msg.type == "human" else AIMessage
+                chat_history.append(cls(content=msg.content))
 
         ######################
         # Check Query Cache #
@@ -422,6 +461,7 @@ class ArangoGraphQAChain(Chain):
                     "adb_schema": self.graph.schema_yaml,
                     "aql_examples": self.aql_examples,
                     "user_input": user_input,
+                    "chat_history": chat_history,
                 },
                 callbacks=callbacks,
             )
@@ -564,6 +604,16 @@ class ArangoGraphQAChain(Chain):
             callbacks=callbacks,
         )
 
+        # Add summary
+        text = "Summary:"
+        _run_manager.on_text(text, end="\n", verbose=self.verbose)
+        _run_manager.on_text(
+            str(result.content) if isinstance(result, AIMessage) else result,
+            color="green",
+            end="\n",
+            verbose=self.verbose,
+        )
+
         results: Dict[str, Any] = {self.output_key: result}
 
         if self.return_aql_query:
@@ -574,6 +624,15 @@ class ArangoGraphQAChain(Chain):
 
         self._last_user_input = user_input
         self._last_aql_query = aql_query
+
+        ########################
+        # Store Chat History #
+        ########################
+
+        if self.chat_history_store:
+            self.chat_history_store.add_user_message(user_input)
+            self.chat_history_store.add_ai_message(aql_query)
+            self.chat_history_store.add_ai_message(result)
 
         return results
 
