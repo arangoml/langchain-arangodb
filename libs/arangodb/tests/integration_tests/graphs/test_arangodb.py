@@ -665,12 +665,17 @@ def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
     edge_defs = graph_schema[0]["edge_definitions"]
     assert any(ed["edge_collection"] == edge_col for ed in edge_defs)
 
-    # Validate collection schema includes vertex and edge
+    # Validate collection schema includes vertex, edge, and indexes
     collection_schema = schema["collection_schema"]
     col_names = {col["name"] for col in collection_schema}
     assert vertex_col1 in col_names
     assert vertex_col2 in col_names
     assert edge_col in col_names
+    for col in collection_schema:
+        assert col["indexes"] != None
+        assert len(col["indexes"]) > 0
+        assert type(col["indexes"]) == list
+        assert type(col["indexes"][0]) == dict
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
