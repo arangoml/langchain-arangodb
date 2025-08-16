@@ -832,6 +832,7 @@ class TestArangoGraph:
         mock_graph.vertex_collections.return_value = ["vertices"]
         self.mock_db.graph.return_value = mock_graph
         self.mock_db.collection().count.return_value = 5
+        self.mock_db.collection().indexes.return_value = [{"id": "0", "name": "primary", "type": "primary", "fields": ["_key"], "unique": True, "sparse": False}]
         self.mock_db.aql.execute.return_value = DummyCursor()
         self.mock_db.collections.return_value = [
             {"name": "vertices", "system": False, "type": "document"},
@@ -843,6 +844,11 @@ class TestArangoGraph:
         assert result["graph_schema"][0]["name"] == "TestGraph"
         assert any(col["name"] == "vertices" for col in result["collection_schema"])
         assert any(col["name"] == "edges" for col in result["collection_schema"])
+        for col in result["collection_schema"]:
+            assert col["indexes"] != None
+            assert len(col["indexes"]) > 0
+            assert type(col["indexes"]) == list
+            assert type(col["indexes"][0]) == dict
 
     def test_generate_schema_no_graph_name(self) -> None:
         self.mock_db.graphs.return_value = [{"name": "G1", "edge_definitions": []}]
