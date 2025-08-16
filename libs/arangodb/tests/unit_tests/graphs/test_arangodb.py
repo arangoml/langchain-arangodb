@@ -839,7 +839,7 @@ class TestArangoGraph:
                 "type": "primary",
                 "fields": ["_key"],
                 "unique": True,
-                "sparse": False
+                "sparse": False,
             }
         ]
         self.mock_db.aql.execute.return_value = DummyCursor()
