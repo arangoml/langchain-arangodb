@@ -325,7 +325,7 @@ class ArangoGraph(GraphStore):
             col_name: str = collection["name"]
             col_type: str = collection["type"]
             col_size: int = self.db.collection(col_name).count()  # type: ignore
-            col_indexes: List[Dict[str, Any]] = self.db.collection(col_name).indexes()
+            col_indexes: List[Dict[str, Any]] = self.db.collection(col_name).indexes()  # type: ignore
 
             # Set number of ArangoDB documents/edges to retrieve
             limit_amount = ceil(sample_ratio * col_size) or 1
