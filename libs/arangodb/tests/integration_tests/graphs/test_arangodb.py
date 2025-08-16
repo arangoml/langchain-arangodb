@@ -2,6 +2,7 @@ import json
 import os
 import pprint
 from collections import defaultdict
+from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
 import pytest
@@ -666,7 +667,7 @@ def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
     assert any(ed["edge_collection"] == edge_col for ed in edge_defs)
 
     # Validate collection schema includes vertex, edge, and indexes
-    collection_schema = schema["collection_schema"]
+    collection_schema: List[Dict[str, Any]] = schema["collection_schema"]
     col_names = {col["name"] for col in collection_schema}
     assert vertex_col1 in col_names
     assert vertex_col2 in col_names
