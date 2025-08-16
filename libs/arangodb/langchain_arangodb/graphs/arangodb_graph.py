@@ -321,10 +321,11 @@ class ArangoGraph(GraphStore):
             if collection["system"] or collection["name"] not in collection_names:
                 continue
 
-            # Extract collection name, type, and size
+            # Extract collection name, type, size, and indexes
             col_name: str = collection["name"]
             col_type: str = collection["type"]
             col_size: int = self.db.collection(col_name).count()  # type: ignore
+            col_indexes: List[Dict[str, Any]] = self.db.collection(col_name).indexes()
 
             # Set number of ArangoDB documents/edges to retrieve
             limit_amount = ceil(sample_ratio * col_size) or 1
@@ -347,6 +348,7 @@ class ArangoGraph(GraphStore):
                 "type": col_type,
                 "size": col_size,
                 "properties": properties,
+                "indexes": col_indexes,
             }
 
             if include_examples and col_size > 0:
