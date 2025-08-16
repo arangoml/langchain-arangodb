@@ -833,7 +833,14 @@ class TestArangoGraph:
         self.mock_db.graph.return_value = mock_graph
         self.mock_db.collection().count.return_value = 5
         self.mock_db.collection().indexes.return_value = [
-            {"id": "0", "name": "primary", "type": "primary", "fields": ["_key"], "unique": True, "sparse": False}
+            {
+                "id": "0",
+                "name": "primary",
+                "type": "primary",
+                "fields": ["_key"],
+                "unique": True,
+                "sparse": False
+            }
         ]
         self.mock_db.aql.execute.return_value = DummyCursor()
         self.mock_db.collections.return_value = [
