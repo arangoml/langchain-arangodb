@@ -672,12 +672,11 @@ def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
     assert vertex_col1 in col_names
     assert vertex_col2 in col_names
     assert edge_col in col_names
-    for col in collection_schema:
-        col_dict: Dict[str, Any] = col
-        assert col_dict["indexes"] is not None
-        assert len(col_dict["indexes"]) > 0
-        assert isinstance(col_dict["indexes"], list)
-        assert isinstance(col_dict["indexes"][0], dict)
+    for collection in collection_schema:
+        assert collection["indexes"] is not None
+        assert len(collection["indexes"]) > 0
+        assert isinstance(collection["indexes"], list)
+        assert isinstance(collection["indexes"][0], dict)
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
