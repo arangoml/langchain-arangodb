@@ -20,6 +20,7 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_GENERATION_PROMPT,
     AQL_QA_PROMPT,
 )
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 
 AQL_WRITE_OPERATIONS: List[str] = [
@@ -58,7 +59,7 @@ class ArangoGraphQAChain(Chain):
     query_cache_similarity_threshold: float = Field(default=0.80)
     include_history: bool = Field(default=False)
     max_history_messages: int = Field(default=10)
-    chat_history_collection_name: str = Field(default="ChatHistory")
+    chat_history_store: Optional[ArangoChatMessageHistory] = Field(default=None)
 
     top_k: int = 10
     """Number of results to return from the query"""
@@ -418,16 +419,24 @@ class ArangoGraphQAChain(Chain):
         # # Get Chat History #
         # ######################
 
-        if not self.graph.db.has_collection(self.chat_history_collection_name):
-            self.graph.db.create_collection(self.chat_history_collection_name)
+        if include_history and self.chat_history_store is None:
+            raise ValueError(
+                "Chat message history is required if include_history is True"
+            )
 
         if max_history_messages <= 0:
             raise ValueError("max_history_messages must be greater than 0")
 
+        if (
+            self.chat_history_store is None
+            or self.chat_history_store._collection_name is None
+        ):
+            raise ValueError("Chat history store is not initialized")
+
         chat_history = []
         if include_history:
             aql = f"""
-                FOR doc IN {self.chat_history_collection_name}
+                FOR doc IN {self.chat_history_store._collection_name}
                 SORT doc._key DESC
                 LIMIT @n
                 RETURN {{
@@ -638,14 +647,16 @@ class ArangoGraphQAChain(Chain):
         # Store Chat History #
         ########################
 
-        self.graph.db.insert_document(
-            self.chat_history_collection_name,
-            {
-                "user_input": user_input,
-                "aql_query": aql_query,
-                "result": result.content if isinstance(result, AIMessage) else result,
-            },
-        )
+        if self.chat_history_store is not None:
+            self.chat_history_store.add_doc(
+                {
+                    "user_input": user_input,
+                    "aql_query": aql_query,
+                    "result": result.content
+                    if isinstance(result, AIMessage)
+                    else result,
+                }
+            )
 
         return results
 

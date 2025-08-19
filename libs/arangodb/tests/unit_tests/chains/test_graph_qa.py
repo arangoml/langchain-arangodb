@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import Runnable, RunnableLambda
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from tests.llms.fake_llm import FakeLLM
 
@@ -650,18 +651,41 @@ class TestArangoGraphQAChain:
     ) -> None:
         """test _call with chat history"""
 
-        chat_history = [
+        chat_history_store = Mock(spec=ArangoChatMessageHistory)
+
+        chat_history_store._collection_name = "ChatHistory"
+
+        # Add fake message history
+        chat_history_store.add_doc(
             {
                 "user_input": "What is 1+1?",
                 "aql_query": "RETURN 1+1",
                 "result": "2",
-            },
+            }
+        )
+
+        chat_history_store.add_doc(
             {
                 "user_input": "What is 2+2?",
                 "aql_query": "RETURN 2+2",
                 "result": "4",
-            },
-        ]
+            }
+        )
+
+        fake_graph_store.db.aql.execute.return_value = iter(
+            [
+                {
+                    "user_input": "What is 1+1?",
+                    "aql_query": "RETURN 1+1",
+                    "result": "2",
+                },
+                {
+                    "user_input": "What is 2+2?",
+                    "aql_query": "RETURN 2+2",
+                    "result": "4",
+                },
+            ]
+        )
 
         # Mock LLM chains
         mock_chains[  # type: ignore
@@ -671,8 +695,6 @@ class TestArangoGraphQAChain:
             content="Here are the movies."
         )  # noqa: E501
 
-        fake_graph_store.db.aql.execute.side_effect = [chat_history]
-
         # Build the chain
         chain = ArangoGraphQAChain(
             graph=fake_graph_store,
@@ -681,6 +703,7 @@ class TestArangoGraphQAChain:
             qa_chain=mock_chains["qa_chain"],
             allow_dangerous_requests=True,
             include_history=True,
+            chat_history_store=chat_history_store,
             max_history_messages=10,
             return_aql_result=True,
         )
@@ -697,7 +720,16 @@ class TestArangoGraphQAChain:
         assert result["result"].content == "Here are the movies."
         assert result["aql_result"][0]["title"] == "Inception"
 
+        # Error: chat history enabled but store is missing
+        chain.chat_history_store = None
+        with pytest.raises(
+            ValueError,
+            match="Chat message history is required if include_history is True",
+        ):
+            chain.invoke({"query": "List again"})
+
         # Error: invalid max_history_messages
+        chain.chat_history_store = chat_history_store
         chain.max_history_messages = 0
         with pytest.raises(
             ValueError, match="max_history_messages must be greater than 0"
