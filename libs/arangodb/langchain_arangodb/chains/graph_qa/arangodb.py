@@ -10,7 +10,7 @@ from langchain.chains.base import Chain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import Field
@@ -20,7 +20,6 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_GENERATION_PROMPT,
     AQL_QA_PROMPT,
 )
-from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 
 AQL_WRITE_OPERATIONS: List[str] = [
@@ -59,7 +58,7 @@ class ArangoGraphQAChain(Chain):
     query_cache_similarity_threshold: float = Field(default=0.80)
     include_history: bool = Field(default=False)
     max_history_messages: int = Field(default=10)
-    chat_history_store: Optional[ArangoChatMessageHistory] = Field(default=None)
+    chat_history_collection_name: str = Field(default="ChatHistory")
 
     top_k: int = 10
     """Number of results to return from the query"""
@@ -419,19 +418,29 @@ class ArangoGraphQAChain(Chain):
         # # Get Chat History #
         # ######################
 
-        if include_history and self.chat_history_store is None:
-            raise ValueError(
-                "Chat message history is required if include_history is True"
-            )
+        if not self.graph.db.has_collection(self.chat_history_collection_name):
+            self.graph.db.create_collection(self.chat_history_collection_name)
 
         if max_history_messages <= 0:
             raise ValueError("max_history_messages must be greater than 0")
 
         chat_history = []
-        if include_history and self.chat_history_store is not None:
-            for msg in self.chat_history_store.messages[-max_history_messages:]:
-                cls = HumanMessage if msg.type == "human" else AIMessage
-                chat_history.append(cls(content=msg.content))
+        if include_history:
+            aql = f"""
+                FOR doc IN {self.chat_history_collection_name}
+                SORT doc._key DESC
+                LIMIT @n
+                RETURN {{
+                    user_input: doc.user_input,
+                    aql_query: doc.aql_query,
+                    result: doc.result
+                }}
+            """
+            cursor = self.graph.db.aql.execute(
+                aql,
+                bind_vars={"n": self.max_history_messages},  # type: ignore
+            )
+            chat_history = [d for d in cursor][::-1]  # type: ignore
 
         ######################
         # Check Query Cache #
@@ -629,10 +638,14 @@ class ArangoGraphQAChain(Chain):
         # Store Chat History #
         ########################
 
-        if self.chat_history_store:
-            self.chat_history_store.add_user_message(user_input)
-            self.chat_history_store.add_ai_message(aql_query)
-            self.chat_history_store.add_ai_message(result)
+        self.graph.db.insert_document(
+            self.chat_history_collection_name,
+            {
+                "user_input": user_input,
+                "aql_query": aql_query,
+                "result": result.content if isinstance(result, AIMessage) else result,
+            },
+        )
 
         return results
 
