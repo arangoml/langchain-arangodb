@@ -678,6 +678,23 @@ def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
         assert isinstance(collection["indexes"], list)
         assert isinstance(collection["indexes"][0], dict)
 
+        # Test filtered index structure - only essential fields included
+        for index in collection["indexes"]:
+            assert "id" in index
+            assert "fields" in index
+            assert isinstance(index["fields"], list)
+            # Required fields should always be present
+            assert index["id"] is not None
+            assert index["fields"] is not None
+            # Optional fields (type, name) may or may not be present
+            if "type" in index:
+                assert index["type"] is not None
+            if "name" in index:
+                assert index["name"] is not None
+            # Verify that other fields are not present
+            assert "unique" not in index
+            assert "sparse" not in index
+
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_generate_schema_views_and_analyzers(db: StandardDatabase) -> None:
