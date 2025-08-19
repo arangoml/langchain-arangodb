@@ -1354,3 +1354,69 @@ class ArangoVector(VectorStore):
         }
 
         return aql_query, bind_vars
+
+    def find_entity_clusters(
+            self,
+            threshold: float = 0.8,
+            collection_name: Optional[str] = None,
+        ) -> List[dict]:
+            """
+            Find similar documents within the collection for entity resolution.
+
+            This method compares documents within the collection to each other and returns
+            pairs of documents that have similarity scores above the specified threshold.
+
+            :param threshold: Minimum similarity score for documents to be considered similar.
+                Defaults to 0.8.
+            :type threshold: float
+            :param collection_name: Optional collection name to search in. If not provided,
+                uses the default collection.
+            :type collection_name: Optional[str]
+            :return: List of dictionaries containing entity pairs with similarity scores.
+            :rtype: List[dict]
+            """
+            # Use provided collection name or default to instance collection
+            target_collection = collection_name or self.collection_name
+            
+            # AQL query to find similar document pairs
+            aql_query = f"""
+            FOR doc1 IN @@collection
+            FOR doc2 IN @@collection
+            FILTER doc1._key != doc2._key
+            LET score = COSINE_SIMILARITY(doc1.{self.embedding_field}, doc2.{self.embedding_field})
+            FILTER score >= @threshold
+            SORT score DESC
+            RETURN {{
+                entity1: doc1,
+                entity2: doc2,
+                similarity_score: score
+            }}
+            """
+
+            bind_vars = {
+                "@collection": target_collection,
+                "threshold": threshold,
+            }
+
+            cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
+            
+            results = []
+            seen_entity_keys = set()
+            for result in cursor:
+                entity1 = result["entity1"]
+                entity2 = result["entity2"]
+                similarity_score = result["similarity_score"]
+                if entity1["_key"] in seen_entity_keys and entity2["_key"] in seen_entity_keys:
+                    continue
+                seen_entity_keys.add(entity1["_key"])
+                seen_entity_keys.add(entity2["_key"])
+                results.append({
+                    "entity1": entity1,
+                    "entity2": entity2,
+                    "similarity_score": similarity_score
+                })
+            
+            if not results:
+                return []
+
+            return results
