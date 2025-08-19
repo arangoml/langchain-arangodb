@@ -326,7 +326,7 @@ class ArangoGraph(GraphStore):
             col_type: str = collection["type"]
             col_size: int = self.db.collection(col_name).count()  # type: ignore
             col_indexes: List[Dict[str, Any]] = self.db.collection(col_name).indexes()  # type: ignore
-            
+
             indexes = []
             for index in col_indexes:
                 # Add required fields
