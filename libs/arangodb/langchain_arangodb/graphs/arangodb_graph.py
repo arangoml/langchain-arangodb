@@ -326,6 +326,19 @@ class ArangoGraph(GraphStore):
             col_type: str = collection["type"]
             col_size: int = self.db.collection(col_name).count()  # type: ignore
             col_indexes: List[Dict[str, Any]] = self.db.collection(col_name).indexes()  # type: ignore
+            
+            indexes = []
+            for index in col_indexes:
+                # Add required fields
+                index_dict = {
+                    "id": index["id"],
+                    "fields": index["fields"],
+                }
+                # Add optional fields only if they exist
+                for field in ["type", "name"]:
+                    if value := index.get(field):
+                        index_dict[field] = value
+                indexes.append(index_dict)
 
             # Set number of ArangoDB documents/edges to retrieve
             limit_amount = ceil(sample_ratio * col_size) or 1
@@ -348,7 +361,7 @@ class ArangoGraph(GraphStore):
                 "type": col_type,
                 "size": col_size,
                 "properties": properties,
-                "indexes": col_indexes,
+                "indexes": indexes,
             }
 
             if include_examples and col_size > 0:
