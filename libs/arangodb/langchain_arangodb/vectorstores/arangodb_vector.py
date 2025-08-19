@@ -1358,65 +1358,75 @@ class ArangoVector(VectorStore):
     def find_entity_clusters(
             self,
             threshold: float = 0.8,
-            collection_name: Optional[str] = None,
+            k: int = 4,
+            similarity_function: str = "COSINE_SIMILARITY",
+
         ) -> List[dict]:
             """
             Find similar documents within the collection for entity resolution.
 
             This method compares documents within the collection to each other and returns
-            pairs of documents that have similarity scores above the specified threshold.
+            entities grouped with their most similar documents. Each entity is returned
+            with a list of the top k most similar entities based on the chosen similarity function.
 
             :param threshold: Minimum similarity score for documents to be considered similar.
                 Defaults to 0.8.
             :type threshold: float
-            :param collection_name: Optional collection name to search in. If not provided,
-                uses the default collection.
-            :type collection_name: Optional[str]
-            :return: List of dictionaries containing entity pairs with similarity scores.
+            :param k: Number of similar documents to return for each entity.
+                Defaults to 4.
+            :type k: int
+            :param similarity_function: Similarity function to use. Options: 
+                "COSINE_SIMILARITY" 
+                "L2_DISTANCE" 
+                Defaults to "COSINE_SIMILARITY".
+            :type similarity_function: str
+            :return: List of dictionaries containing entities and their similar entities.
+                Each dict has format: {'entity': entity_key, 'similar': [list_of_similar_keys]}
             :rtype: List[dict]
             """
             # Use provided collection name or default to instance collection
-            target_collection = collection_name or self.collection_name
+            target_collection =  self.collection_name
             
-            # AQL query to find similar document pairs
+            # Choose similarity function and sort order
+            similarity_upper = similarity_function.upper()
+            
+            
+            if similarity_upper in ["COSINE_SIMILARITY", "COSINE"]:
+                score_func = "COSINE_SIMILARITY"
+                sort_order = "DESC"
+                filter_condition = "score >= @threshold"
+
+            elif similarity_upper in ["L2_DISTANCE", "L2"]:
+                score_func = "L2_DISTANCE"
+                sort_order = "ASC"
+                filter_condition = "score <= @threshold"
+            else:
+                raise ValueError(f"Unsupported similarity function: {similarity_function}. "
+                               f"Use 'COSINE_SIMILARITY' or 'L2_DISTANCE'.")
+            
+            # AQL query to find entity clusters by grouping similar documents
             aql_query = f"""
             FOR doc1 IN @@collection
-            FOR doc2 IN @@collection
-            FILTER doc1._key != doc2._key
-            LET score = COSINE_SIMILARITY(doc1.{self.embedding_field}, doc2.{self.embedding_field})
-            FILTER score >= @threshold
-            SORT score DESC
-            RETURN {{
-                entity1: doc1,
-                entity2: doc2,
-                similarity_score: score
-            }}
+                LET similar = (
+                    FOR doc2 IN @@collection
+                    FILTER doc1._key < doc2._key
+                    LET score = {score_func}(doc1.{self.embedding_field}, doc2.{self.embedding_field})
+                    SORT score {sort_order}
+                    LIMIT @k
+                    FILTER {filter_condition}
+                    RETURN doc2._key
+                )
+                FILTER LENGTH(similar) > 0
+                RETURN {{entity: doc1._key, similar}}
             """
 
             bind_vars = {
                 "@collection": target_collection,
                 "threshold": threshold,
+                "k": k,
             }
 
             cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
             
-            results = []
-            seen_entity_keys = set()
-            for result in cursor:
-                entity1 = result["entity1"]
-                entity2 = result["entity2"]
-                similarity_score = result["similarity_score"]
-                if entity1["_key"] in seen_entity_keys and entity2["_key"] in seen_entity_keys:
-                    continue
-                seen_entity_keys.add(entity1["_key"])
-                seen_entity_keys.add(entity2["_key"])
-                results.append({
-                    "entity1": entity1,
-                    "entity2": entity2,
-                    "similarity_score": similarity_score
-                })
-            
-            if not results:
-                return []
-
-            return results
+            results = list(cursor)
+            return results if results else []

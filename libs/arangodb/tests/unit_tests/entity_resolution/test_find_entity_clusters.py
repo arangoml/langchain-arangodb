@@ -36,44 +36,48 @@ class TestFindEntityClusters:
     """Test cases for the find_entity_clusters method."""
 
     def test_find_entity_clusters_basic_functionality(self, mock_vector_store: ArangoVector) -> None:
-        """Test basic functionality of find_entity_clusters."""
-        # Mock the AQL execution with sample results
+        """Test basic functionality of find_entity_clusters with grouped results."""
+        # Mock the AQL execution with sample grouped results
         mock_cursor = MagicMock()
         mock_cursor.__iter__ = MagicMock(return_value=iter([
             {
-                "entity1": {"_key": "doc1", "text": "Apple Inc.", "embedding": [0.1] * 64},
-                "entity2": {"_key": "doc2", "text": "Apple Corporation", "embedding": [0.15] * 64},
-                "similarity_score": 0.85
+                "entity": "doc1",
+                "similar": ["doc2", "doc3", "doc4"]
             },
             {
-                "entity1": {"_key": "doc3", "text": "Microsoft Corp", "embedding": [0.2] * 64},
-                "entity2": {"_key": "doc4", "text": "Microsoft Corporation", "embedding": [0.25] * 64},
-                "similarity_score": 0.82
+                "entity": "doc5", 
+                "similar": ["doc6", "doc7"]
             }
         ]))
         
         mock_vector_store.db.aql.execute.return_value = mock_cursor
         
         # Call the method
-        results = mock_vector_store.find_entity_clusters(threshold=0.8)
+        results = mock_vector_store.find_entity_clusters(threshold=0.8, k=4)
         
         # Verify AQL query was executed with correct parameters
         mock_vector_store.db.aql.execute.assert_called_once()
         call_args = mock_vector_store.db.aql.execute.call_args
         
-        # Check the query contains expected elements
+        # Check the query contains expected elements for grouped approach
         query = call_args[0][0]
         assert "FOR doc1 IN @@collection" in query
+        assert "LET similar = (" in query
         assert "FOR doc2 IN @@collection" in query
-        assert "FILTER doc1._key != doc2._key" in query
+        assert "FILTER doc1._key < doc2._key" in query  # Duplicate elimination
         assert "COSINE_SIMILARITY(doc1.embedding, doc2.embedding)" in query
         assert "FILTER score >= @threshold" in query
         assert "SORT score DESC" in query
+        assert "LIMIT @k" in query
+        assert "RETURN doc2._key" in query
+        assert "FILTER LENGTH(similar) > 0" in query
+        assert "RETURN {entity: doc1._key, similar}" in query
         
         # Check bind variables
         bind_vars = call_args[1]["bind_vars"]
         assert bind_vars["@collection"] == "test_collection"
         assert bind_vars["threshold"] == 0.8
+        assert bind_vars["k"] == 4
         
         # Check stream parameter
         assert call_args[1]["stream"] is True
@@ -82,36 +86,126 @@ class TestFindEntityClusters:
         assert len(results) == 2
         
         # Check first result
-        assert results[0]["entity1"]["_key"] == "doc1"
-        assert results[0]["entity2"]["_key"] == "doc2"
-        assert results[0]["similarity_score"] == 0.85
+        assert results[0]["entity"] == "doc1"
+        assert results[0]["similar"] == ["doc2", "doc3", "doc4"]
         
         # Check second result
-        assert results[1]["entity1"]["_key"] == "doc3"
-        assert results[1]["entity2"]["_key"] == "doc4"
-        assert results[1]["similarity_score"] == 0.82
+        assert results[1]["entity"] == "doc5"
+        assert results[1]["similar"] == ["doc6", "doc7"]
 
-    def test_find_entity_clusters_custom_collection(self, mock_vector_store: ArangoVector) -> None:
-        """Test find_entity_clusters with custom collection name."""
-        # Mock empty cursor
+    def test_find_entity_clusters_default_parameters(self, mock_vector_store: ArangoVector) -> None:
+        """Test find_entity_clusters with default parameters."""
+        # Mock cursor with results
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([
+            {
+                "entity": "doc1",
+                "similar": ["doc2", "doc3"]
+            }
+        ]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        # Call with default parameters
+        results = mock_vector_store.find_entity_clusters()
+        
+        # Verify default values were used
+        call_args = mock_vector_store.db.aql.execute.call_args
+        bind_vars = call_args[1]["bind_vars"]
+        assert bind_vars["threshold"] == 0.8  # default threshold
+        assert bind_vars["k"] == 4  # default k
+        assert bind_vars["@collection"] == mock_vector_store.collection_name
+        
+        # Verify default similarity function (COSINE_SIMILARITY)
+        query = call_args[0][0]
+        assert "COSINE_SIMILARITY" in query
+        assert "SORT score DESC" in query
+        assert "FILTER score >= @threshold" in query
+        
+        assert len(results) == 1
+        assert results[0]["entity"] == "doc1"
+        assert results[0]["similar"] == ["doc2", "doc3"]
+
+    def test_find_entity_clusters_duplicate_elimination(self, mock_vector_store: ArangoVector) -> None:
+        """Test that duplicate pairs are eliminated using doc1._key < doc2._key."""
+        # Mock cursor
         mock_cursor = MagicMock()
         mock_cursor.__iter__ = MagicMock(return_value=iter([]))
         mock_vector_store.db.aql.execute.return_value = mock_cursor
         
-        # Call with custom collection name
-        custom_collection = "custom_entities"
-        results = mock_vector_store.find_entity_clusters(
-            threshold=0.9, 
-            collection_name=custom_collection
-        )
+        mock_vector_store.find_entity_clusters()
         
-        # Verify correct collection was used in bind vars
+        # Verify query uses < instead of != to eliminate duplicates
+        call_args = mock_vector_store.db.aql.execute.call_args
+        query = call_args[0][0]
+        assert "FILTER doc1._key < doc2._key" in query
+        assert "FILTER doc1._key != doc2._key" not in query
+
+    def test_find_entity_clusters_cosine_similarity_function(self, mock_vector_store: ArangoVector) -> None:
+        """Test find_entity_clusters with COSINE_SIMILARITY function."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([
+            {
+                "entity": "doc1",
+                "similar": ["doc2", "doc3"]
+            }
+        ]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        mock_vector_store.find_entity_clusters(similarity_function="COSINE_SIMILARITY")
+        
+        # Verify COSINE_SIMILARITY function is used in query
+        call_args = mock_vector_store.db.aql.execute.call_args
+        query = call_args[0][0]
+        assert "COSINE_SIMILARITY" in query
+        assert "SORT score DESC" in query
+        assert "FILTER score >= @threshold" in query
+
+    def test_find_entity_clusters_l2_distance_function(self, mock_vector_store: ArangoVector) -> None:
+        """Test find_entity_clusters with L2_DISTANCE similarity function."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([
+            {
+                "entity": "doc1", 
+                "similar": ["doc2"]
+            }
+        ]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        mock_vector_store.find_entity_clusters(similarity_function="L2_DISTANCE")
+        
+        # Verify L2_DISTANCE function is used in query
+        call_args = mock_vector_store.db.aql.execute.call_args
+        query = call_args[0][0]
+        assert "L2_DISTANCE" in query
+        assert "SORT score ASC" in query
+        assert "FILTER score <= @threshold" in query
+
+    def test_find_entity_clusters_custom_parameters(self, mock_vector_store: ArangoVector) -> None:
+        """Test find_entity_clusters with custom threshold and k values."""
+        # Mock cursor with results
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([
+            {
+                "entity": "doc1",
+                "similar": ["doc2"]
+            }
+        ]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        # Call with custom parameters
+        results = mock_vector_store.find_entity_clusters(threshold=0.9, k=1)
+        
+        # Verify custom values were used
         call_args = mock_vector_store.db.aql.execute.call_args
         bind_vars = call_args[1]["bind_vars"]
-        assert bind_vars["@collection"] == custom_collection
         assert bind_vars["threshold"] == 0.9
+        assert bind_vars["k"] == 1
         
-        assert results == []
+        assert len(results) == 1
+        assert results[0]["entity"] == "doc1"
+        assert results[0]["similar"] == ["doc2"]
 
     def test_find_entity_clusters_no_results(self, mock_vector_store: ArangoVector) -> None:
         """Test find_entity_clusters when no similar documents are found."""
@@ -120,63 +214,76 @@ class TestFindEntityClusters:
         mock_cursor.__iter__ = MagicMock(return_value=iter([]))
         mock_vector_store.db.aql.execute.return_value = mock_cursor
         
-        # Mock print to capture output
-        with patch('builtins.print') as mock_print:
-            results = mock_vector_store.find_entity_clusters(threshold=0.95)
+        results = mock_vector_store.find_entity_clusters(threshold=0.95)
         
-        # Verify empty results and print statement
+        # Verify empty results
         assert results == []
-        mock_print.assert_called_once_with(
-            f"No duplicate documents found in the collection '{mock_vector_store.collection_name}'"
-        )
 
-    def test_find_entity_clusters_different_thresholds(self, mock_vector_store: ArangoVector) -> None:
-        """Test find_entity_clusters with different threshold values."""
-        # Mock cursor with results
+    def test_find_entity_clusters_empty_cursor_returns_empty_list(self, mock_vector_store: ArangoVector) -> None:
+        """Test that empty cursor properly returns empty list."""
+        # Mock empty cursor
         mock_cursor = MagicMock()
-        mock_cursor.__iter__ = MagicMock(return_value=iter([
-            {
-                "entity1": {"_key": "doc1", "text": "test1"},
-                "entity2": {"_key": "doc2", "text": "test2"},
-                "similarity_score": 0.75
-            }
-        ]))
+        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
         mock_vector_store.db.aql.execute.return_value = mock_cursor
         
-        # Test with low threshold
-        results = mock_vector_store.find_entity_clusters(threshold=0.5)
-        
-        # Verify threshold was passed correctly
-        call_args = mock_vector_store.db.aql.execute.call_args
-        bind_vars = call_args[1]["bind_vars"]
-        assert bind_vars["threshold"] == 0.5
-        
-        assert len(results) == 1
-        assert results[0]["similarity_score"] == 0.75
-
-    def test_find_entity_clusters_default_parameters(self, mock_vector_store: ArangoVector) -> None:
-        """Test find_entity_clusters with default parameters."""
-        # Mock cursor with results
-        mock_cursor = MagicMock()
-        mock_cursor.__iter__ = MagicMock(return_value=iter([
-            {
-                "entity1": {"_key": "doc1", "text": "entity1"},
-                "entity2": {"_key": "doc2", "text": "entity2"},
-                "similarity_score": 0.85
-            }
-        ]))
-        mock_vector_store.db.aql.execute.return_value = mock_cursor
-        
-        # Call with default parameters
         results = mock_vector_store.find_entity_clusters()
         
-        # Verify default threshold was used
-        call_args = mock_vector_store.db.aql.execute.call_args
-        bind_vars = call_args[1]["bind_vars"]
-        assert bind_vars["threshold"] == 0.8  # default threshold
-        assert bind_vars["@collection"] == mock_vector_store.collection_name
+        # Should return empty list, not None
+        assert results == []
+        assert isinstance(results, list)
+
+    def test_find_entity_clusters_invalid_similarity_function(self, mock_vector_store: ArangoVector) -> None:
+        """Test find_entity_clusters with invalid similarity function raises error."""
+        with pytest.raises(ValueError, match="Unsupported similarity function: INVALID"):
+            mock_vector_store.find_entity_clusters(similarity_function="INVALID")
+
+    def test_find_entity_clusters_case_insensitive_similarity_function(self, mock_vector_store: ArangoVector) -> None:
+        """Test find_entity_clusters with case-insensitive similarity function names."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
         
-        assert len(results) == 1
+        # Test lowercase cosine
+        mock_vector_store.find_entity_clusters(similarity_function="cosine")
+        call_args = mock_vector_store.db.aql.execute.call_args
+        query = call_args[0][0]
+        assert "COSINE_SIMILARITY" in query
+        
+        # Reset mock
+        mock_vector_store.db.aql.execute.reset_mock()
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        # Test mixed case l2_distance
+        mock_vector_store.find_entity_clusters(similarity_function="l2_distance")
+        call_args = mock_vector_store.db.aql.execute.call_args
+        query = call_args[0][0]
+        assert "L2_DISTANCE" in query
+
+    def test_find_entity_clusters_all_similarity_functions(self, mock_vector_store: ArangoVector) -> None:
+        """Test find_entity_clusters with all supported similarity functions."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        similarity_functions = [
+            ("COSINE_SIMILARITY", "COSINE_SIMILARITY", "DESC", ">="),
+            ("L2_DISTANCE", "L2_DISTANCE", "ASC", "<="),
+        ]
+        
+        for func_name, expected_func, expected_sort, expected_filter in similarity_functions:
+            # Reset mock
+            mock_vector_store.db.aql.execute.reset_mock()
+            mock_vector_store.db.aql.execute.return_value = mock_cursor
+            
+            mock_vector_store.find_entity_clusters(similarity_function=func_name)
+            
+            call_args = mock_vector_store.db.aql.execute.call_args
+            query = call_args[0][0]
+            assert expected_func in query
+            assert f"SORT score {expected_sort}" in query
+            assert f"FILTER score {expected_filter} @threshold" in query
 
     def test_find_entity_clusters_embedding_field_usage(self, mock_vector_store: ArangoVector) -> None:
         """Test that find_entity_clusters uses the correct embedding field."""
@@ -195,120 +302,37 @@ class TestFindEntityClusters:
         query = call_args[0][0]
         assert "COSINE_SIMILARITY(doc1.custom_embedding, doc2.custom_embedding)" in query
 
-    def test_find_entity_clusters_query_structure(self, mock_vector_store: ArangoVector) -> None:
-        """Test that the AQL query has the correct structure."""
+    def test_find_entity_clusters_query_structure_components(self, mock_vector_store: ArangoVector) -> None:
+        """Test that the AQL query contains all required structural components."""
         # Mock cursor
         mock_cursor = MagicMock()
         mock_cursor.__iter__ = MagicMock(return_value=iter([]))
         mock_vector_store.db.aql.execute.return_value = mock_cursor
         
-        mock_vector_store.find_entity_clusters(threshold=0.7)
+        mock_vector_store.find_entity_clusters()
         
         # Get the executed query
         call_args = mock_vector_store.db.aql.execute.call_args
         query = call_args[0][0]
         
-        # Verify query structure
-        assert query.count("FOR doc1 IN @@collection") == 1
-        assert query.count("FOR doc2 IN @@collection") == 1
-        assert "FILTER doc1._key != doc2._key" in query
-        assert "LET score = COSINE_SIMILARITY" in query
-        assert "FILTER score >= @threshold" in query
-        assert "SORT score DESC" in query
-        assert "RETURN {" in query
-        assert "entity1: doc1" in query
-        assert "entity2: doc2" in query
-        assert "similarity_score: score" in query
-
-    def test_find_entity_clusters_result_processing(self, mock_vector_store: ArangoVector) -> None:
-        """Test that results are processed correctly."""
-        # Mock cursor with detailed results
-        mock_cursor = MagicMock()
-        mock_cursor.__iter__ = MagicMock(return_value=iter([
-            {
-                "entity1": {
-                    "_key": "company1", 
-                    "text": "Apple Inc.", 
-                    "industry": "technology",
-                    "embedding": [0.1] * 64
-                },
-                "entity2": {
-                    "_key": "company2", 
-                    "text": "Apple Corporation", 
-                    "industry": "technology",
-                    "embedding": [0.15] * 64
-                },
-                "similarity_score": 0.89
-            }
-        ]))
-        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        # Verify all essential AQL components are present
+        required_components = [
+            "FOR doc1 IN @@collection",
+            "LET similar = (",
+            "FOR doc2 IN @@collection",
+            "FILTER doc1._key < doc2._key",  # Duplicate elimination
+            "LET score = COSINE_SIMILARITY",
+            "SORT score DESC",
+            "LIMIT @k",
+            "FILTER score >= @threshold",
+            "RETURN doc2._key",
+            ")",  # End of subquery
+            "FILTER LENGTH(similar) > 0",
+            "RETURN {entity: doc1._key, similar}"
+        ]
         
-        results = mock_vector_store.find_entity_clusters(threshold=0.8)
-        
-        # Verify result structure and content
-        assert len(results) == 1
-        result = results[0]
-        
-        # Check that all original document fields are preserved
-        assert result["entity1"]["_key"] == "company1"
-        assert result["entity1"]["text"] == "Apple Inc."
-        assert result["entity1"]["industry"] == "technology"
-        assert result["entity1"]["embedding"] == [0.1] * 64
-        
-        assert result["entity2"]["_key"] == "company2"
-        assert result["entity2"]["text"] == "Apple Corporation"
-        assert result["entity2"]["industry"] == "technology"
-        assert result["entity2"]["embedding"] == [0.15] * 64
-        
-        assert result["similarity_score"] == 0.89
-
-    def test_find_entity_clusters_high_threshold_no_results(self, mock_vector_store: ArangoVector) -> None:
-        """Test find_entity_clusters with very high threshold that yields no results."""
-        # Mock cursor with no results
-        mock_cursor = MagicMock()
-        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
-        mock_vector_store.db.aql.execute.return_value = mock_cursor
-        
-        # Use very high threshold
-        with patch('builtins.print') as mock_print:
-            results = mock_vector_store.find_entity_clusters(threshold=0.99)
-        
-        # Verify no results and appropriate message
-        assert results == []
-        mock_print.assert_called_once_with(
-            f"No duplicate documents found in the collection '{mock_vector_store.collection_name}'"
-        )
-        
-        # Verify correct threshold was used
-        call_args = mock_vector_store.db.aql.execute.call_args
-        bind_vars = call_args[1]["bind_vars"]
-        assert bind_vars["threshold"] == 0.99
-
-    def test_find_entity_clusters_error_handling(self, mock_vector_store: ArangoVector) -> None:
-        """Test error handling in find_entity_clusters."""
-        # Mock database error
-        mock_vector_store.db.aql.execute.side_effect = Exception("Database error")
-        
-        # Verify that the exception is raised
-        with pytest.raises(Exception, match="Database error"):
-            mock_vector_store.find_entity_clusters()
-
-    def test_find_entity_clusters_empty_collection_name(self, mock_vector_store: ArangoVector) -> None:
-        """Test find_entity_clusters with empty string collection name falls back to default."""
-        # Mock cursor
-        mock_cursor = MagicMock()
-        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
-        mock_vector_store.db.aql.execute.return_value = mock_cursor
-        
-        # Call with empty string collection name
-        results = mock_vector_store.find_entity_clusters(collection_name="")
-        
-        # Should fall back to default collection name since empty string is falsy
-        call_args = mock_vector_store.db.aql.execute.call_args
-        bind_vars = call_args[1]["bind_vars"]
-        assert bind_vars["@collection"] == mock_vector_store.collection_name
-        
-        assert results == []
+        for component in required_components:
+            assert component in query, f"Missing component: {component}"
 
     def test_find_entity_clusters_stream_parameter(self, mock_vector_store: ArangoVector) -> None:
         """Test that find_entity_clusters uses stream=True for AQL execution."""
@@ -322,3 +346,204 @@ class TestFindEntityClusters:
         # Verify stream=True was passed
         call_args = mock_vector_store.db.aql.execute.call_args
         assert call_args[1]["stream"] is True
+
+    def test_find_entity_clusters_bind_vars_completeness(self, mock_vector_store: ArangoVector) -> None:
+        """Test that all required bind variables are present."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        mock_vector_store.find_entity_clusters(threshold=0.85, k=3)
+        
+        # Verify all required bind variables are present
+        call_args = mock_vector_store.db.aql.execute.call_args
+        bind_vars = call_args[1]["bind_vars"]
+        
+        # Check all required bind variables
+        assert "@collection" in bind_vars
+        assert "threshold" in bind_vars  
+        assert "k" in bind_vars
+        
+        # Check values
+        assert bind_vars["@collection"] == "test_collection"
+        assert bind_vars["threshold"] == 0.85
+        assert bind_vars["k"] == 3
+
+    def test_find_entity_clusters_threshold_edge_cases(self, mock_vector_store: ArangoVector) -> None:
+        """Test find_entity_clusters with edge case threshold values."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        # Test with threshold = 0.0
+        mock_vector_store.find_entity_clusters(threshold=0.0)
+        call_args = mock_vector_store.db.aql.execute.call_args
+        bind_vars = call_args[1]["bind_vars"]
+        assert bind_vars["threshold"] == 0.0
+        
+        # Reset mock
+        mock_vector_store.db.aql.execute.reset_mock()
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        # Test with threshold = 1.0
+        mock_vector_store.find_entity_clusters(threshold=1.0)
+        call_args = mock_vector_store.db.aql.execute.call_args
+        bind_vars = call_args[1]["bind_vars"]
+        assert bind_vars["threshold"] == 1.0
+
+    def test_find_entity_clusters_k_edge_cases(self, mock_vector_store: ArangoVector) -> None:
+        """Test find_entity_clusters with edge case k values."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        # Test with k = 1
+        mock_vector_store.find_entity_clusters(k=1)
+        call_args = mock_vector_store.db.aql.execute.call_args
+        bind_vars = call_args[1]["bind_vars"]
+        assert bind_vars["k"] == 1
+        
+        # Reset mock
+        mock_vector_store.db.aql.execute.reset_mock()
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        # Test with k = 1000
+        mock_vector_store.find_entity_clusters(k=1000)
+        call_args = mock_vector_store.db.aql.execute.call_args
+        bind_vars = call_args[1]["bind_vars"]
+        assert bind_vars["k"] == 1000
+
+    def test_find_entity_clusters_return_format_validation(self, mock_vector_store: ArangoVector) -> None:
+        """Test that returned results have the correct format."""
+        # Mock cursor with specific result format
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([
+            {
+                "entity": "entity_001",
+                "similar": ["entity_002", "entity_003", "entity_004"]
+            },
+            {
+                "entity": "entity_005",
+                "similar": ["entity_006"]
+            }
+        ]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        results = mock_vector_store.find_entity_clusters()
+        
+        # Verify return format
+        assert isinstance(results, list)
+        assert len(results) == 2
+        
+        for result in results:
+            assert isinstance(result, dict)
+            assert "entity" in result
+            assert "similar" in result
+            assert isinstance(result["entity"], str)
+            assert isinstance(result["similar"], list)
+            
+            # All similar entities should be strings
+            for similar_entity in result["similar"]:
+                assert isinstance(similar_entity, str)
+
+    def test_find_entity_clusters_large_k_value(self, mock_vector_store: ArangoVector) -> None:
+        """Test find_entity_clusters with very large k value."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([
+            {
+                "entity": "doc1",
+                "similar": ["doc" + str(i) for i in range(2, 102)]  # 100 similar entities
+            }
+        ]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        results = mock_vector_store.find_entity_clusters(k=100)
+        
+        # Verify large k is handled correctly
+        call_args = mock_vector_store.db.aql.execute.call_args
+        bind_vars = call_args[1]["bind_vars"]
+        assert bind_vars["k"] == 100
+        
+        # Should return all similar entities up to k limit
+        assert len(results) == 1
+        assert len(results[0]["similar"]) == 100
+
+    def test_find_entity_clusters_error_handling(self, mock_vector_store: ArangoVector) -> None:
+        """Test error handling in find_entity_clusters."""
+        # Mock database error
+        mock_vector_store.db.aql.execute.side_effect = Exception("Database error")
+        
+        # Verify that the exception is raised
+        with pytest.raises(Exception, match="Database error"):
+            mock_vector_store.find_entity_clusters()
+
+    def test_find_entity_clusters_collection_name_usage(self, mock_vector_store: ArangoVector) -> None:
+        """Test that find_entity_clusters uses the instance collection name."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        # Set custom collection name
+        mock_vector_store.collection_name = "custom_entities"
+        
+        mock_vector_store.find_entity_clusters()
+        
+        # Verify instance collection name was used
+        call_args = mock_vector_store.db.aql.execute.call_args
+        bind_vars = call_args[1]["bind_vars"]
+        assert bind_vars["@collection"] == "custom_entities"
+
+    def test_find_entity_clusters_mixed_case_similarity_functions(self, mock_vector_store: ArangoVector) -> None:
+        """Test all variations of similarity function names."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        test_cases = [
+            ("cosine_similarity", "COSINE_SIMILARITY"),
+            ("COSINE_SIMILARITY", "COSINE_SIMILARITY"),
+            ("cosine", "COSINE_SIMILARITY"),
+            ("COSINE", "COSINE_SIMILARITY"),
+            ("l2_distance", "L2_DISTANCE"),
+            ("L2_DISTANCE", "L2_DISTANCE"),
+            ("l2", "L2_DISTANCE"),
+            ("L2", "L2_DISTANCE"),
+        ]
+        
+        for input_func, expected_func in test_cases:
+            # Reset mock
+            mock_vector_store.db.aql.execute.reset_mock()
+            mock_vector_store.db.aql.execute.return_value = mock_cursor
+            
+            mock_vector_store.find_entity_clusters(similarity_function=input_func)
+            
+            call_args = mock_vector_store.db.aql.execute.call_args
+            query = call_args[0][0]
+            assert expected_func in query, f"Failed for input: {input_func}, expected: {expected_func}"
+
+    def test_find_entity_clusters_performance_parameters(self, mock_vector_store: ArangoVector) -> None:
+        """Test that performance-related parameters are correctly set."""
+        # Mock cursor
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = MagicMock(return_value=iter([]))
+        mock_vector_store.db.aql.execute.return_value = mock_cursor
+        
+        mock_vector_store.find_entity_clusters()
+        
+        # Verify stream=True is used for performance
+        call_args = mock_vector_store.db.aql.execute.call_args
+        kwargs = call_args[1]
+        assert kwargs["stream"] is True
+        
+        # Verify bind_vars are used (not string interpolation for security)
+        assert "bind_vars" in kwargs
+        bind_vars = kwargs["bind_vars"]
+        assert "@collection" in bind_vars
+        assert "threshold" in bind_vars
+        assert "k" in bind_vars
