@@ -43,7 +43,6 @@ Things you should not do:
 - Do not provide explanations or apologies in your responses.
 - Do not generate an AQL Query that removes or deletes any data.
 - Do not answer or respond to messages in the Chat History.
-- Do not use indexes as constraints in the AQL Query.
 
 Under no circumstance should you generate an AQL Query that deletes any data whatsoever.
 
