@@ -190,7 +190,8 @@ Enable query caching to reuse past queries, reducing response time and LLM cost:
     query2 = "Who is the director of The Matrix?"
     response2 = chain.invoke({
         "query": query2, 
-        "query_cache_similarity_threshold": 0.90}) # Adjust threshold if needed
+        "query_cache_similarity_threshold": 0.90
+    }) # Adjust threshold if needed
     print(response2["result"])
 
     # Clear all cached queries
