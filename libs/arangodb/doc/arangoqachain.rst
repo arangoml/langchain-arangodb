@@ -223,7 +223,7 @@ Enable context-aware responses by including chat history:
     )
 
     query = "What movies were released in 1999?"
-    response = chain.invoke({"query": query, "include_history": False}) # Disable chat history
+    response = chain.invoke({"query": query, "include_history": False}) # Disable chat history (on function call only)
     print(response["result"])
 
     query = "Among all those movies, which one is directed by Lana Wachowski?"
