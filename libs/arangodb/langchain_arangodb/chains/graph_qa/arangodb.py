@@ -427,8 +427,10 @@ class ArangoGraphQAChain(Chain):
         if max_history_messages <= 0:
             raise ValueError("max_history_messages must be greater than 0")
 
+        if self.chat_history_store is not None:
+            collection_name = self.chat_history_store._collection_name  # type: ignore
+
         chat_history = []
-        collection_name = self.chat_history_store._collection_name  # type: ignore
         if include_history:
             aql = f"""
                 FOR doc IN {collection_name}
