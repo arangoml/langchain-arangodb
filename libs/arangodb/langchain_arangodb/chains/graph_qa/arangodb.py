@@ -427,24 +427,25 @@ class ArangoGraphQAChain(Chain):
         if max_history_messages <= 0:
             raise ValueError("max_history_messages must be greater than 0")
 
-        if (
-            self.chat_history_store is None
-            or self.chat_history_store._collection_name is None
-        ):
-            raise ValueError("Chat history store is not initialized")
-
         chat_history = []
+        collection_name = self.chat_history_store._collection_name  # type: ignore
         if include_history:
             aql = f"""
-                FOR doc IN {self.chat_history_store._collection_name}
+                FOR doc IN {collection_name}
                 SORT doc._key DESC
                 LIMIT @n
-                RETURN {{
-                    user_input: doc.user_input,
-                    aql_query: doc.aql_query,
-                    result: doc.result
-                }}
-            """
+                RETURN
+                    HAS(doc, "role") ? {{
+                        type: "feedback",
+                        content: doc.content
+                    }} :
+                    {{
+                        type: "query-response pair",
+                        user_input: doc.user_input,
+                        aql_query: doc.aql_query,
+                        result: doc.result
+                    }}
+                """
             cursor = self.graph.db.aql.execute(
                 aql,
                 bind_vars={"n": self.max_history_messages},  # type: ignore

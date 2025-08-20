@@ -174,7 +174,7 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
         )
 
     def add_doc(self, doc: dict[str, Any]) -> None:
-        """Add a list of documents to the chat history."""
+        """Add a dict of message to the chat history."""
         self._db.insert_document(self._collection_name, doc)
 
     def clear(self) -> None:
