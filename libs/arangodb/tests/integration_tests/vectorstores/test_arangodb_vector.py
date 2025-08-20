@@ -383,9 +383,8 @@ def test_arangovector_delete_documents(
     assert deleted_docs_check_raw is not None, (
         "collection.get_many() returned None for deleted_docs_check"
     )
-    assert isinstance(deleted_docs_check_raw, list), (
-        f"collection.get_many() expected list for deleted_docs_check,\
-              got {type(deleted_docs_check_raw)}"
+    m = f"collection.get_many() expected list for deleted_docs_check, got {type(deleted_docs_check_raw)}"  # noqa: E501
+    assert isinstance(deleted_docs_check_raw, list), m
     deleted_docs_check: List[Dict[str, Any]] = deleted_docs_check_raw
     assert len(deleted_docs_check) == 0
 
@@ -408,7 +407,6 @@ def test_arangovector_delete_documents(
     assert retrieved_contents == sorted(
         [texts_to_embed[0], texts_to_embed[2]]
     )  # doc_to_keep1, doc_to_keep2
-
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
