@@ -394,9 +394,8 @@ def test_arangovector_delete_documents(
     assert remaining_docs_check_raw is not None, (
         "collection.get_many() returned None for remaining_docs_check"
     )
-    assert isinstance(remaining_docs_check_raw, list), (
-        f"collection.get_many() expected list for remaining_docs_check,\
-              got {type(remaining_docs_check_raw)}"
+    m = f"collection.get_many() expected list for remaining_docs_check, got {type(remaining_docs_check_raw)}"  # noqa: E501
+    assert isinstance(remaining_docs_check_raw, list), m
     remaining_docs_check: List[Dict[str, Any]] = remaining_docs_check_raw
     assert len(remaining_docs_check) == 2
 

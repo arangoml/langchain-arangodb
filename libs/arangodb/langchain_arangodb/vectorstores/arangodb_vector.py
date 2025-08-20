@@ -924,7 +924,8 @@ class ArangoVector(VectorStore):
         :type embedding_field: str
         :param text_field: The field name to store text content. Defaults to "text".
         :type text_field: str
-        :param vector_index_name: The name of the vector index. Defaults to "vector_index".
+        :param vector_index_name: The name of the vector index.
+            Defaults to "vector_index".
         :type vector_index_name: str
         :param distance_strategy: The distance metric to use. Can be
             DistanceStrategy.COSINE or DistanceStrategy.EUCLIDEAN_DISTANCE.
@@ -1069,7 +1070,8 @@ class ArangoVector(VectorStore):
         :param text_field: The field name to store text content. Defaults to "text".
             Only used if `insert_text` is True.
         :type text_field: str
-        :param vector_index_name: The name of the vector index. Defaults to "vector_index".
+        :param vector_index_name: The name of the vector index.
+            Defaults to "vector_index".
         :type vector_index_name: str
         :param batch_size: Number of documents to process in each batch.
             Defaults to 1000.
