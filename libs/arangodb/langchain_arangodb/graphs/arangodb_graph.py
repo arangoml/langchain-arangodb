@@ -103,7 +103,11 @@ class ArangoGraph(GraphStore):
     :type schema_string_limit: int
     :param schema_include_views: Whether to include ArangoDB Views and Analyzers as
         part of the schema passed to the AQL Generation prompt. Default is False.
+    :param schema_include_indexes: Whether to include ArangoDB Indexes as
+        part of the collection schema passed to the AQL Generation prompt.
+        Default is False.
     :type schema_include_views: bool
+    :type schema_include_indexes: bool
         :return: None
         :rtype: None
         :raises ArangoClientError: If the ArangoDB client cannot be created.
@@ -135,6 +139,7 @@ class ArangoGraph(GraphStore):
         schema_list_limit: int = 32,
         schema_string_limit: int = 256,
         schema_include_views: bool = False,
+        schema_include_indexes: bool = False,
     ) -> None:
         """
         Initializes the ArangoGraph instance.
@@ -152,6 +157,7 @@ class ArangoGraph(GraphStore):
                 schema_list_limit,
                 schema_string_limit,
                 schema_include_views,
+                schema_include_indexes,
             )
 
     @property
@@ -245,6 +251,7 @@ class ArangoGraph(GraphStore):
         list_limit: int = 32,
         schema_string_limit: int = 256,
         schema_include_views: bool = False,
+        schema_include_indexes: bool = False,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Generates the schema of the ArangoDB Database and returns it
@@ -270,7 +277,11 @@ class ArangoGraph(GraphStore):
         :type schema_string_limit: int
         :param schema_include_views: Whether to include ArangoDB Views and Analyzers as
             part of the schema passed to the AQL Generation prompt. Default is False.
+        :param schema_include_indexes: Whether to include ArangoDB Indexes as
+            part of the collection schema passed to the AQL Generation prompt.
+            Default is False.
         :type schema_include_views: bool
+        :type schema_include_indexes: bool
         :return: A dictionary containing the graph schema and collection schema.
         :rtype: Dict[str, List[Dict[str, Any]]]
         :raises ValueError: If the sample ratio is not between 0 and 1.
@@ -321,24 +332,27 @@ class ArangoGraph(GraphStore):
             if collection["system"] or collection["name"] not in collection_names:
                 continue
 
-            # Extract collection name, type, size, and indexes
+            # Extract collection name, type, and size
             col_name: str = collection["name"]
             col_type: str = collection["type"]
             col_size: int = self.db.collection(col_name).count()  # type: ignore
-            col_indexes: List[Dict[str, Any]] = self.db.collection(col_name).indexes()  # type: ignore
 
-            indexes = []
-            for index in col_indexes:
-                # Add required fields
-                index_dict = {
-                    "id": index["id"],
-                    "fields": index["fields"],
-                }
-                # Add optional fields only if they exist
-                for field in ["type", "name"]:
-                    if value := index.get(field):
-                        index_dict[field] = value
-                indexes.append(index_dict)
+            # Extract collection indexes if schema_include_indexes is True
+            if schema_include_indexes:
+                col_indexes: List[Dict[str, Any]] = self.db.collection(col_name).indexes()  # type: ignore
+
+                indexes = []
+                for index in col_indexes:
+                    # Add required fields
+                    index_dict = {
+                        "id": index["id"],
+                        "fields": index["fields"],
+                    }
+                    # Add optional fields only if they exist
+                    for field in ["type", "name"]:
+                        if value := index.get(field):
+                            index_dict[field] = value
+                    indexes.append(index_dict)
 
             # Set number of ArangoDB documents/edges to retrieve
             limit_amount = ceil(sample_ratio * col_size) or 1
@@ -361,7 +375,6 @@ class ArangoGraph(GraphStore):
                 "type": col_type,
                 "size": col_size,
                 "properties": properties,
-                "indexes": indexes,
             }
 
             if include_examples and col_size > 0:
@@ -370,6 +383,9 @@ class ArangoGraph(GraphStore):
                 )
 
             collection_schema.append(collection_schema_entry)
+
+            if schema_include_indexes:
+                collection_schema_entry["indexes"] = indexes
 
         if not schema_include_views:
             return {
