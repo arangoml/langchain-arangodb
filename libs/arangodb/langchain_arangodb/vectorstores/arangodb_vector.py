@@ -1359,8 +1359,7 @@ class ArangoVector(VectorStore):
             self,
             threshold: float = 0.8,
             k: int = 4,
-            similarity_function: str = "COSINE_SIMILARITY",
-
+            use_approx: bool = True,
         ) -> List[dict]:
             """
             Find similar documents within the collection for entity resolution.
@@ -1375,11 +1374,9 @@ class ArangoVector(VectorStore):
             :param k: Number of similar documents to return for each entity.
                 Defaults to 4.
             :type k: int
-            :param similarity_function: Similarity function to use. Options: 
-                "COSINE_SIMILARITY" 
-                "L2_DISTANCE" 
-                Defaults to "COSINE_SIMILARITY".
-            :type similarity_function: str
+            :param use_approx: Whether to use approximate nearest neighbor search.
+                Defaults to True.
+            :type use_approx: bool
             :return: List of dictionaries containing entities and their similar entities.
                 Each dict has format: {'entity': entity_key, 'similar': [list_of_similar_keys]}
             :rtype: List[dict]
@@ -1387,38 +1384,42 @@ class ArangoVector(VectorStore):
             # Use provided collection name or default to instance collection
             target_collection =  self.collection_name
             
-            # Choose similarity function and sort order
-            similarity_upper = similarity_function.upper()
-            
-            
-            if similarity_upper in ["COSINE_SIMILARITY", "COSINE"]:
-                score_func = "COSINE_SIMILARITY"
+            if self._distance_strategy == DistanceStrategy.COSINE:
+                score_func = "APPROX_NEAR_COSINE" if use_approx else "COSINE_SIMILARITY"
                 sort_order = "DESC"
-                filter_condition = "score >= @threshold"
-
-            elif similarity_upper in ["L2_DISTANCE", "L2"]:
-                score_func = "L2_DISTANCE"
+            elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
+                score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
                 sort_order = "ASC"
-                filter_condition = "score <= @threshold"
             else:
-                raise ValueError(f"Unsupported similarity function: {similarity_function}. "
-                               f"Use 'COSINE_SIMILARITY' or 'L2_DISTANCE'.")
-            
-            # AQL query to find entity clusters by grouping similar documents
+                raise ValueError(f"Unsupported metric: {self._distance_strategy}")
+
+            if use_approx:
+                if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
+                    m = "Approximate Nearest Neighbor search requires ArangoDB >= 3.12.4."
+                    raise ValueError(m)
+
+                if not self.retrieve_vector_index():
+                    self.create_vector_index()
+
+            filter_key_clause = "FILTER doc1._key < doc2._key"
+        
+
             aql_query = f"""
-            FOR doc1 IN @@collection
-                LET similar = (
-                    FOR doc2 IN @@collection
-                    FILTER doc1._key < doc2._key
-                    LET score = {score_func}(doc1.{self.embedding_field}, doc2.{self.embedding_field})
-                    SORT score {sort_order}
-                    LIMIT @k
-                    FILTER {filter_condition}
-                    RETURN doc2._key
-                )
-                FILTER LENGTH(similar) > 0
-                RETURN {{entity: doc1._key, similar}}
+                FOR doc1 IN @@collection
+                    LET similar = (
+                        FOR doc2 IN @@collection
+                            {"" if use_approx else filter_key_clause}
+                            LET score = {score_func}(doc1.{self.embedding_field}, doc2.{self.embedding_field})
+                            SORT score {sort_order}
+                            LIMIT @k
+                            {filter_key_clause if use_approx else ""}
+                            FILTER score >= @threshold
+                            RETURN doc2._key
+                    )
+                    FILTER LENGTH(similar) > 0
+                    RETURN {{entity: doc1._key, similar}}
             """
+
 
             bind_vars = {
                 "@collection": target_collection,
@@ -1429,4 +1430,4 @@ class ArangoVector(VectorStore):
             cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
             
             results = list(cursor)
-            return results if results else []
+            return results if results else [] 
