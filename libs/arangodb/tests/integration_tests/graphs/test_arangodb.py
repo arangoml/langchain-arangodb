@@ -656,7 +656,10 @@ def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
 
     # Call generate_schema with indexes included
     schema = graph.generate_schema(
-        sample_ratio=1.0, graph_name=graph_name, include_examples=True, schema_include_indexes=True
+        sample_ratio=1.0,
+        graph_name=graph_name,
+        include_examples=True,
+        schema_include_indexes=True
     )
 
     # Validate graph schema
