@@ -856,9 +856,7 @@ class TestArangoGraph:
         ]
 
         result = self.graph.generate_schema(
-            sample_ratio=0.2, 
-            graph_name="TestGraph", 
-            schema_include_indexes=True
+            sample_ratio=0.2, graph_name="TestGraph", schema_include_indexes=True
         )
 
         assert result["graph_schema"][0]["name"] == "TestGraph"

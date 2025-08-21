@@ -339,7 +339,9 @@ class ArangoGraph(GraphStore):
 
             # Extract collection indexes if schema_include_indexes is True
             if schema_include_indexes:
-                col_indexes: List[Dict[str, Any]] = self.db.collection(col_name).indexes()  # type: ignore
+                col_indexes: List[Dict[str, Any]] = self.db.collection(
+                    col_name
+                ).indexes()  # type: ignore
 
                 indexes = []
                 for index in col_indexes:

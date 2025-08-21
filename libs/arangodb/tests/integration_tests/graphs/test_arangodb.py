@@ -659,7 +659,7 @@ def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
         sample_ratio=1.0,
         graph_name=graph_name,
         include_examples=True,
-        schema_include_indexes=True
+        schema_include_indexes=True,
     )
 
     # Validate graph schema
