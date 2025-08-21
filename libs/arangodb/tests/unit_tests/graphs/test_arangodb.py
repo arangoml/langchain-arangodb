@@ -855,7 +855,11 @@ class TestArangoGraph:
             {"name": "edges", "system": False, "type": "edge"},
         ]
 
-        result = self.graph.generate_schema(sample_ratio=0.2, graph_name="TestGraph")
+        result = self.graph.generate_schema(
+            sample_ratio=0.2, 
+            graph_name="TestGraph", 
+            schema_include_indexes=True
+        )
 
         assert result["graph_schema"][0]["name"] == "TestGraph"
         assert any(col["name"] == "vertices" for col in result["collection_schema"])
