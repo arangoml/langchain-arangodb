@@ -1,7 +1,20 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 import farmhash
 import numpy as np
@@ -886,7 +899,7 @@ class ArangoVector(VectorStore):
         search_type: SearchType = DEFAULT_SEARCH_TYPE,
         embedding_field: str = "embedding",
         text_field: str = "text",
-        vector_index_name: str = "vector_index",
+        index_name: str = "vector_index",
         distance_strategy: DistanceStrategy = DEFAULT_DISTANCE_STRATEGY,
         num_centroids: int = 1,
         ids: Optional[List[str]] = None,
@@ -924,9 +937,8 @@ class ArangoVector(VectorStore):
         :type embedding_field: str
         :param text_field: The field name to store text content. Defaults to "text".
         :type text_field: str
-        :param vector_index_name: The name of the vector index.
-            Defaults to "vector_index".
-        :type vector_index_name: str
+        :param index_name: The name of the vector index. Defaults to "vector_index".
+        :type index_name: str
         :param distance_strategy: The distance metric to use. Can be
             DistanceStrategy.COSINE or DistanceStrategy.EUCLIDEAN_DISTANCE.
             Defaults to DistanceStrategy.COSINE.
@@ -998,6 +1010,10 @@ class ArangoVector(VectorStore):
 
         embedding_dimension = len(embeddings[0])
 
+        # Handle potential duplicate vector_index_name parameter
+        # If vector_index_name is passed in kwargs, use it instead of index_name
+        vector_index_name_value = kwargs.pop("vector_index_name", index_name)
+
         store = cls(
             embedding,
             embedding_dimension=embedding_dimension,
@@ -1006,7 +1022,7 @@ class ArangoVector(VectorStore):
             search_type=search_type,
             embedding_field=embedding_field,
             text_field=text_field,
-            vector_index_name=vector_index_name,
+            vector_index_name=vector_index_name_value,
             distance_strategy=distance_strategy,
             num_centroids=num_centroids,
             keyword_index_name=keyword_index_name,
@@ -1037,7 +1053,6 @@ class ArangoVector(VectorStore):
         database: StandardDatabase,
         embedding_field: str = "embedding",
         text_field: str = "text",
-        vector_index_name: str = "vector_index",
         batch_size: int = 1000,
         aql_return_text_query: str = "",
         insert_text: bool = False,
@@ -1068,11 +1083,7 @@ class ArangoVector(VectorStore):
             Defaults to "embedding".
         :type embedding_field: str
         :param text_field: The field name to store text content. Defaults to "text".
-            Only used if `insert_text` is True.
         :type text_field: str
-        :param vector_index_name: The name of the vector index.
-            Defaults to "vector_index".
-        :type vector_index_name: str
         :param batch_size: Number of documents to process in each batch.
             Defaults to 1000.
         :type batch_size: int
@@ -1167,7 +1178,6 @@ class ArangoVector(VectorStore):
                 collection_name=collection_name,
                 embedding_field=embedding_field,
                 text_field=text_field,
-                vector_index_name=vector_index_name,
                 ids=ids,
                 insert_text=insert_text,
                 search_type=search_type,
@@ -1361,3 +1371,123 @@ class ArangoVector(VectorStore):
         }
 
         return aql_query, bind_vars
+
+    def find_entity_clusters(
+        self,
+        threshold: float = 0.8,
+        k: int = 4,
+        use_approx: bool = True,
+        use_subset_relations: bool = False,
+    ) -> Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+        """
+        Find similar documents within the collection for entity resolution.
+
+        This method compares documents within the collection to each other and
+        returns entities grouped with their most similar documents. Each entity
+        is returned with a list of the top k most similar entities based on the
+        chosen similarity function.
+
+        :param threshold: Minimum similarity score for documents to be considered
+            similar. Defaults to 0.8.
+        :type threshold: float
+        :param k: Number of similar documents to return for each entity.
+            Defaults to 4.
+        :type k: int
+        :param use_approx: Whether to use approximate nearest neighbor search.
+            Defaults to True.
+        :type use_approx: bool
+        :param use_subset_relations: Whether to analyze subset relations.
+            Defaults to False.
+        :type use_subset_relations: bool
+        :return: List of dictionaries containing entities and their similar
+            entities.
+            Each dict has format: {'entity': entity_key, 'similar': [list_of_keys]}
+            If use_subset_relations=True, returns dict with 'clusters' and
+            'subset_relationships' keys.
+        :rtype: List[dict]
+        """
+        # Use provided collection name or default to instance collection
+        target_collection = self.collection_name
+
+        if self._distance_strategy == DistanceStrategy.COSINE:
+            score_func = "APPROX_NEAR_COSINE" if use_approx else "COSINE_SIMILARITY"
+            sort_order = "DESC"
+        elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
+            score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
+            sort_order = "ASC"
+        else:
+            raise ValueError(f"Unsupported metric: {self._distance_strategy}")
+
+        if use_approx:
+            if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
+                msg = "ANN search requires ArangoDB >= 3.12.4"
+                m = msg
+                raise ValueError(m)
+
+            if not self.retrieve_vector_index():
+                self.create_vector_index()
+
+        filter_key_clause = "FILTER doc1._key < doc2._key"
+
+        aql_query = f"""
+                FOR doc1 IN @@collection
+                    LET similar = (
+                        FOR doc2 IN @@collection
+                            {"" if use_approx else filter_key_clause}
+                            LET score = {score_func}(doc1.{self.embedding_field}, 
+                                doc2.{self.embedding_field})
+                            SORT score {sort_order}
+                            LIMIT @k
+                            {filter_key_clause if use_approx else ""}
+                            FILTER score >= @threshold
+                            RETURN doc2._key
+                    )
+                    FILTER LENGTH(similar) > 0
+                    RETURN {{entity: doc1._key, similar}}
+            """
+
+        bind_vars: MutableMapping[str, Any] = {
+            "@collection": target_collection,
+            "threshold": threshold,
+            "k": k,
+        }
+
+        cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
+
+        results = list(cast(Iterable[Dict[str, Any]], cursor))
+        if not results:
+            if not use_subset_relations:
+                return []
+            return {"clusters": [], "subset_relationships": []}
+
+        if not use_subset_relations:
+            return results
+
+        # SUBSET RELATIONS - only execute when use_subset_relations=True
+        subset_query = """
+                FOR group1 IN @results
+                    FOR group2 IN @results
+                        FILTER group1.entity != group2.entity
+                        AND LENGTH(group1.similar) < LENGTH(group2.similar)
+
+                        // Check if group1 is a subset of group2
+                        LET group1Keys = group1.similar
+                        LET group2Keys = group2.similar
+                        LET missingKeys = MINUS(group1Keys, group2Keys)
+
+                        FILTER LENGTH(missingKeys) == 0
+                        RETURN {
+                            subsetGroup: group1.entity,
+                            supersetGroup: group2.entity
+                        }
+            """
+        bind_vars_subset: MutableMapping[str, Any] = {
+            "results": results,
+        }
+        subsets_query = self.db.aql.execute(
+            subset_query, bind_vars=bind_vars_subset, stream=True
+        )
+        subsets = list(cast(Iterable[Dict[str, Any]], subsets_query))
+
+        # Return both clusters and subset relationships for analysis
+        return {"clusters": results, "subset_relationships": subsets}
