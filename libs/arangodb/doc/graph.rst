@@ -198,7 +198,8 @@ Generates a schema representation of the database.
        sample_ratio=0.1,
        graph_name="MyGraph",
        include_examples=True,
-       list_limit=32
+       list_limit=32,
+       schema_include_views=True
    )
 
 set_schema
@@ -450,7 +451,8 @@ Here's a complete example demonstrating a typical workflow using ArangoGraph to 
    schema = graph.generate_schema(
        sample_ratio=1.0,  # Use all documents for schema
        graph_name="CompanyGraph",
-       include_examples=True
+       include_examples=True,
+       schema_include_views=True
    )
 
    print("Schema:", schema)
