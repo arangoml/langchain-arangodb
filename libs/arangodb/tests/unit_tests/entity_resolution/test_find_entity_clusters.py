@@ -314,8 +314,8 @@ class TestFindEntityClusters:
         assert "FOR group2 IN @results" in subset_query
         assert "LENGTH(group1.similar) < LENGTH(group2.similar)" in subset_query
         assert "MINUS(group1Keys, group2Keys)" in subset_query
-        assert "subsetGroup: group1.entity._key" in subset_query
-        assert "supersetGroup: group2.entity._key" in subset_query
+        assert "subsetGroup: group1.entity" in subset_query
+        assert "supersetGroup: group2.entity" in subset_query
         
     def test_bind_variables_passed_correctly(self, mock_vector_store: ArangoVector) -> None:
         """Test that bind variables are passed correctly to AQL queries."""
