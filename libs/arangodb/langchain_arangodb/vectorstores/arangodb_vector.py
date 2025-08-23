@@ -886,7 +886,7 @@ class ArangoVector(VectorStore):
         search_type: SearchType = DEFAULT_SEARCH_TYPE,
         embedding_field: str = "embedding",
         text_field: str = "text",
-        vector_index_name: str = "vector_index",
+        index_name: str = "vector_index",
         distance_strategy: DistanceStrategy = DEFAULT_DISTANCE_STRATEGY,
         num_centroids: int = 1,
         ids: Optional[List[str]] = None,
@@ -924,9 +924,8 @@ class ArangoVector(VectorStore):
         :type embedding_field: str
         :param text_field: The field name to store text content. Defaults to "text".
         :type text_field: str
-        :param vector_index_name: The name of the vector index.
-            Defaults to "vector_index".
-        :type vector_index_name: str
+        :param index_name: The name of the vector index. Defaults to "vector_index".
+        :type index_name: str
         :param distance_strategy: The distance metric to use. Can be
             DistanceStrategy.COSINE or DistanceStrategy.EUCLIDEAN_DISTANCE.
             Defaults to DistanceStrategy.COSINE.
@@ -1006,7 +1005,7 @@ class ArangoVector(VectorStore):
             search_type=search_type,
             embedding_field=embedding_field,
             text_field=text_field,
-            vector_index_name=vector_index_name,
+            vector_index_name=index_name,
             distance_strategy=distance_strategy,
             num_centroids=num_centroids,
             keyword_index_name=keyword_index_name,
@@ -1037,7 +1036,6 @@ class ArangoVector(VectorStore):
         database: StandardDatabase,
         embedding_field: str = "embedding",
         text_field: str = "text",
-        vector_index_name: str = "vector_index",
         batch_size: int = 1000,
         aql_return_text_query: str = "",
         insert_text: bool = False,
@@ -1068,11 +1066,7 @@ class ArangoVector(VectorStore):
             Defaults to "embedding".
         :type embedding_field: str
         :param text_field: The field name to store text content. Defaults to "text".
-            Only used if `insert_text` is True.
         :type text_field: str
-        :param vector_index_name: The name of the vector index.
-            Defaults to "vector_index".
-        :type vector_index_name: str
         :param batch_size: Number of documents to process in each batch.
             Defaults to 1000.
         :type batch_size: int
@@ -1167,7 +1161,6 @@ class ArangoVector(VectorStore):
                 collection_name=collection_name,
                 embedding_field=embedding_field,
                 text_field=text_field,
-                vector_index_name=vector_index_name,
                 ids=ids,
                 insert_text=insert_text,
                 search_type=search_type,
@@ -1367,6 +1360,7 @@ class ArangoVector(VectorStore):
             threshold: float = 0.8,
             k: int = 4,
             use_approx: bool = True,
+            use_subset_relations: bool = False,
         ) -> List[dict]:
             """
             Find similar documents within the collection for entity resolution.
@@ -1384,8 +1378,12 @@ class ArangoVector(VectorStore):
             :param use_approx: Whether to use approximate nearest neighbor search.
                 Defaults to True.
             :type use_approx: bool
+            :param use_subset_relations: Whether to analyze subset relations.
+                Defaults to False.
+            :type use_subset_relations: bool
             :return: List of dictionaries containing entities and their similar entities.
                 Each dict has format: {'entity': entity_key, 'similar': [list_of_similar_keys]}
+                If use_subset_relations=True, returns dict with 'clusters' and 'subset_relationships' keys.
             :rtype: List[dict]
             """
             # Use provided collection name or default to instance collection
@@ -1437,4 +1435,38 @@ class ArangoVector(VectorStore):
             cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
             
             results = list(cursor)
-            return results if results else [] 
+            if not results:
+                return [] if not use_subset_relations else {"clusters": [], "subset_relationships": []}
+                
+            if not use_subset_relations:
+                return results
+            
+            # SUBSET RELATIONS - only execute when use_subset_relations=True
+            subset_query = """
+                FOR group1 IN @results
+                    FOR group2 IN @results
+                        FILTER group1.entity != group2.entity
+                        AND LENGTH(group1.similar) < LENGTH(group2.similar)
+
+                        // Check if group1 is a subset of group2
+                        LET group1Keys = group1.similar
+                        LET group2Keys = group2.similar
+                        LET missingKeys = MINUS(group1Keys, group2Keys)
+
+                        FILTER LENGTH(missingKeys) == 0
+                        RETURN {
+                            subsetGroup: group1.entity,
+                            supersetGroup: group2.entity
+                        }
+            """
+            bind_vars_subset = {    
+                "results": results,
+            }
+            subsets_query = self.db.aql.execute(subset_query, bind_vars=bind_vars_subset, stream=True)
+            subsets = list(subsets_query)
+            
+            # Return both clusters and subset relationships for analysis
+            return {
+                "clusters": results,
+                "subset_relationships": subsets
+            }     
