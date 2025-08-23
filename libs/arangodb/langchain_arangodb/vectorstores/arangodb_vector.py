@@ -1356,65 +1356,69 @@ class ArangoVector(VectorStore):
         return aql_query, bind_vars
 
     def find_entity_clusters(
-            self,
-            threshold: float = 0.8,
-            k: int = 4,
-            use_approx: bool = True,
-            use_subset_relations: bool = False,
-        ) -> List[dict]:
-            """
-            Find similar documents within the collection for entity resolution.
+        self,
+        threshold: float = 0.8,
+        k: int = 4,
+        use_approx: bool = True,
+        use_subset_relations: bool = False,
+    ) -> List[dict]:
+        """
+        Find similar documents within the collection for entity resolution.
 
-            This method compares documents within the collection to each other and returns
-            entities grouped with their most similar documents. Each entity is returned
-            with a list of the top k most similar entities based on the chosen similarity function.
+        This method compares documents within the collection to each other and
+        returns entities grouped with their most similar documents. Each entity
+        is returned with a list of the top k most similar entities based on the
+        chosen similarity function.
 
-            :param threshold: Minimum similarity score for documents to be considered similar.
-                Defaults to 0.8.
-            :type threshold: float
-            :param k: Number of similar documents to return for each entity.
-                Defaults to 4.
-            :type k: int
-            :param use_approx: Whether to use approximate nearest neighbor search.
-                Defaults to True.
-            :type use_approx: bool
-            :param use_subset_relations: Whether to analyze subset relations.
-                Defaults to False.
-            :type use_subset_relations: bool
-            :return: List of dictionaries containing entities and their similar entities.
-                Each dict has format: {'entity': entity_key, 'similar': [list_of_similar_keys]}
-                If use_subset_relations=True, returns dict with 'clusters' and 'subset_relationships' keys.
-            :rtype: List[dict]
-            """
-            # Use provided collection name or default to instance collection
-            target_collection =  self.collection_name
-            
-            if self._distance_strategy == DistanceStrategy.COSINE:
-                score_func = "APPROX_NEAR_COSINE" if use_approx else "COSINE_SIMILARITY"
-                sort_order = "DESC"
-            elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
-                score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
-                sort_order = "ASC"
-            else:
-                raise ValueError(f"Unsupported metric: {self._distance_strategy}")
+        :param threshold: Minimum similarity score for documents to be considered
+            similar. Defaults to 0.8.
+        :type threshold: float
+        :param k: Number of similar documents to return for each entity.
+            Defaults to 4.
+        :type k: int
+        :param use_approx: Whether to use approximate nearest neighbor search.
+            Defaults to True.
+        :type use_approx: bool
+        :param use_subset_relations: Whether to analyze subset relations.
+            Defaults to False.
+        :type use_subset_relations: bool
+        :return: List of dictionaries containing entities and their similar
+            entities.
+            Each dict has format: {'entity': entity_key, 'similar': [list_of_keys]}
+            If use_subset_relations=True, returns dict with 'clusters' and
+            'subset_relationships' keys.
+        :rtype: List[dict]
+        """
+        # Use provided collection name or default to instance collection
+        target_collection = self.collection_name
 
-            if use_approx:
-                if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
-                    m = "Approximate Nearest Neighbor search requires ArangoDB >= 3.12.4."
-                    raise ValueError(m)
+        if self._distance_strategy == DistanceStrategy.COSINE:
+            score_func = "APPROX_NEAR_COSINE" if use_approx else "COSINE_SIMILARITY"
+            sort_order = "DESC"
+        elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
+            score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
+            sort_order = "ASC"
+        else:
+            raise ValueError(f"Unsupported metric: {self._distance_strategy}")
 
-                if not self.retrieve_vector_index():
-                    self.create_vector_index()
+        if use_approx:
+            if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
+                msg = "ANN search requires ArangoDB >= 3.12.4"
+                m = msg
+                raise ValueError(m)
 
-            filter_key_clause = "FILTER doc1._key < doc2._key"
-        
+            if not self.retrieve_vector_index():
+                self.create_vector_index()
 
-            aql_query = f"""
+        filter_key_clause = "FILTER doc1._key < doc2._key"
+
+        aql_query = f"""
                 FOR doc1 IN @@collection
                     LET similar = (
                         FOR doc2 IN @@collection
                             {"" if use_approx else filter_key_clause}
-                            LET score = {score_func}(doc1.{self.embedding_field}, doc2.{self.embedding_field})
+                            LET score = {score_func}(doc1.{self.embedding_field}, 
+                                doc2.{self.embedding_field})
                             SORT score {sort_order}
                             LIMIT @k
                             {filter_key_clause if use_approx else ""}
@@ -1425,24 +1429,25 @@ class ArangoVector(VectorStore):
                     RETURN {{entity: doc1._key, similar}}
             """
 
+        bind_vars = {
+            "@collection": target_collection,
+            "threshold": threshold,
+            "k": k,
+        }
 
-            bind_vars = {
-                "@collection": target_collection,
-                "threshold": threshold,
-                "k": k,
-            }
+        cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
 
-            cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
-            
-            results = list(cursor)
-            if not results:
-                return [] if not use_subset_relations else {"clusters": [], "subset_relationships": []}
-                
+        results = list(cursor)
+        if not results:
             if not use_subset_relations:
-                return results
-            
-            # SUBSET RELATIONS - only execute when use_subset_relations=True
-            subset_query = """
+                return []
+            return {"clusters": [], "subset_relationships": []}
+
+        if not use_subset_relations:
+            return results
+
+        # SUBSET RELATIONS - only execute when use_subset_relations=True
+        subset_query = """
                 FOR group1 IN @results
                     FOR group2 IN @results
                         FILTER group1.entity != group2.entity
@@ -1459,14 +1464,13 @@ class ArangoVector(VectorStore):
                             supersetGroup: group2.entity
                         }
             """
-            bind_vars_subset = {    
-                "results": results,
-            }
-            subsets_query = self.db.aql.execute(subset_query, bind_vars=bind_vars_subset, stream=True)
-            subsets = list(subsets_query)
-            
-            # Return both clusters and subset relationships for analysis
-            return {
-                "clusters": results,
-                "subset_relationships": subsets
-            }     
+        bind_vars_subset = {
+            "results": results,
+        }
+        subsets_query = self.db.aql.execute(
+            subset_query, bind_vars=bind_vars_subset, stream=True
+        )
+        subsets = list(subsets_query)
+
+        # Return both clusters and subset relationships for analysis
+        return {"clusters": results, "subset_relationships": subsets}
