@@ -642,9 +642,9 @@ class ArangoGraphQAChain(Chain):
 
         if self.chat_history_store is not None:
             self.chat_history_store.add_qa_message(
-                user_input, aql_query, result.content
-                if isinstance(result, AIMessage)
-                else result
+                user_input,
+                aql_query,
+                result.content if isinstance(result, AIMessage) else result,  # type: ignore
             )
 
         return results
