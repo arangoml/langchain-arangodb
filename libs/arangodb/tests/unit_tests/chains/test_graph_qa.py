@@ -656,20 +656,10 @@ class TestArangoGraphQAChain:
         chat_history_store._collection_name = "ChatHistory"
 
         # Add fake message history
-        chat_history_store.add_doc(
-            {
-                "user_input": "What is 1+1?",
-                "aql_query": "RETURN 1+1",
-                "result": "2",
-            }
-        )
-
-        chat_history_store.add_doc(
-            {
-                "user_input": "What is 2+2?",
-                "aql_query": "RETURN 2+2",
-                "result": "4",
-            }
+        chat_history_store.add_qa_message(
+            user_input="What is 1+1?",
+            aql_query="RETURN 1+1",
+            result="2",
         )
 
         fake_graph_store.db.aql.execute.return_value = iter(

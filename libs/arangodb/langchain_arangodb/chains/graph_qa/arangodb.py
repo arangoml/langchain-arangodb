@@ -436,17 +436,7 @@ class ArangoGraphQAChain(Chain):
                 FOR doc IN {collection_name}
                 SORT doc._key DESC
                 LIMIT @n
-                RETURN
-                    HAS(doc, "role") ? {{
-                        type: "feedback",
-                        content: doc.content
-                    }} :
-                    {{
-                        type: "query-response pair",
-                        user_input: doc.user_input,
-                        aql_query: doc.aql_query,
-                        result: doc.result
-                    }}
+                RETURN UNSET(doc, ["_id", "_key", "_rev", "session_id"])
                 """
             cursor = self.graph.db.aql.execute(
                 aql,
@@ -651,14 +641,10 @@ class ArangoGraphQAChain(Chain):
         ########################
 
         if self.chat_history_store is not None:
-            self.chat_history_store.add_doc(
-                {
-                    "user_input": user_input,
-                    "aql_query": aql_query,
-                    "result": result.content
-                    if isinstance(result, AIMessage)
-                    else result,
-                }
+            self.chat_history_store.add_qa_message(
+                user_input, aql_query, result.content
+                if isinstance(result, AIMessage)
+                else result
             )
 
         return results
