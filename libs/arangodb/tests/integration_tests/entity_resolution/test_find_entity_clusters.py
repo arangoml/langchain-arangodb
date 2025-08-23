@@ -7,7 +7,7 @@ These tests require:
 - Comprehensive testing of clustering behavior
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 import pytest
 from arango.database import StandardDatabase
@@ -151,7 +151,7 @@ class TestFindEntityClustersIntegration:
     @pytest.fixture
     def vector_store_with_data(
         self, character_documents: List[Dict[str, Any]], db: StandardDatabase
-    ) -> ArangoVector:
+    ) -> Any:
         """Create vector store with character data for testing."""
         collection_name = "GameOfThrones"
 
@@ -302,11 +302,12 @@ class TestFindEntityClustersIntegration:
             result = vector_store_with_data.find_entity_clusters(
                 threshold=0.1, k=k, use_approx=False, use_subset_relations=True
             )
+            result_dict = cast(Dict[str, Any], result)
             results[k] = {
-                "clusters": len(result["clusters"]),
+                "clusters": len(result_dict["clusters"]),
                 "max_similar": (
-                    max(len(cluster["similar"]) for cluster in result["clusters"])
-                    if result["clusters"]
+                    max(len(cluster["similar"]) for cluster in result_dict["clusters"])
+                    if result_dict["clusters"]
                     else 0
                 ),
             }
@@ -375,12 +376,17 @@ class TestFindEntityClustersIntegration:
         self, vector_store_with_data: ArangoVector
     ) -> None:
         """Test performance comparison between exact and approximate search."""
-        test_params = {"threshold": 0.7, "k": 4, "use_subset_relations": True}
+        threshold_val: float = 0.7
+        k_val: int = 4
+        use_subset_relations_val: bool = True
 
         # Test exact search
         # start_time = time.time()  # Timing removed
         exact_result = vector_store_with_data.find_entity_clusters(
-            use_approx=False, **test_params
+            threshold=threshold_val,
+            k=k_val,
+            use_subset_relations=use_subset_relations_val,
+            use_approx=False,
         )
         # exact_time = time.time() - start_time  # Timing removed
 
@@ -388,7 +394,10 @@ class TestFindEntityClustersIntegration:
         try:
             # start_time = time.time()  # Timing removed
             approx_result = vector_store_with_data.find_entity_clusters(
-                use_approx=True, **test_params
+                threshold=threshold_val,
+                k=k_val,
+                use_subset_relations=use_subset_relations_val,
+                use_approx=True,
             )
             # approx_time = time.time() - start_time  # Timing removed
 
@@ -455,8 +464,9 @@ class TestFindEntityClustersIntegration:
             threshold=0.1, k=6, use_approx=False, use_subset_relations=True
         )
 
-        clusters = result["clusters"]
-        subset_relations = result["subset_relationships"]
+        result_dict = cast(Dict[str, Any], result)
+        clusters = result_dict["clusters"]
+        subset_relations = result_dict["subset_relationships"]
 
         # Detailed cluster analysis completed
 
@@ -562,7 +572,8 @@ class TestFindEntityClustersIntegration:
             # Real-world clustering analysis completed
 
             # Should find some meaningful clusters
-            assert len(result["clusters"]) > 0
+            result_dict = cast(Dict[str, Any], result)
+            assert len(result_dict["clusters"]) > 0
 
         finally:
             # Cleanup
