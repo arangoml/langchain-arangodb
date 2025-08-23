@@ -10,9 +10,8 @@ First, let's set up the necessary imports and create a basic instance:
 
 .. code-block:: python
 
-    from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
-    from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
-    from langchain.chat_models import ChatOpenAI
+    from langchain_arangodb import ArangoGraphQAChain, ArangoGraph, ArangoChatMessageHistory
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
     from arango import ArangoClient
 
     # Initialize ArangoDB connection
@@ -154,6 +153,85 @@ Get more detailed output including AQL query and results:
     print("Raw Results:", response["aql_result"])
     print("Final Answer:", response["result"])
 
+8. Query Cache
+~~~~~~~~~~~~~~
+
+Enable query caching to reuse past queries, reducing response time and LLM cost:
+
+.. code-block:: python
+
+    # Initialize Embedding Model (required for query cache)
+    embedding = OpenAIEmbeddings(model="text-embedding-3-large")
+
+    chain = ArangoGraphQAChain.from_llm(
+        llm=llm,
+        graph=graph,
+        allow_dangerous_requests=True,
+        use_query_cache=True, # Enables query caching (default: False)
+        embedding=embedding, # Required if use_query_cache is True
+        query_cache_collection_name="Queries", # Optional (default: "Queries")
+        query_cache_similarity_threshold=0.80, # Only fetch cached queries with similarity >= 0.80 (default: 0.80)
+    )
+    
+    query1 = "Who directed The Matrix?"
+    response1 = chain.invoke({"query": query1, "use_query_cache": False}) # Disable query cache to force fresh LLM generation
+    print(response1["result"])
+
+    # Cache the query and its result if you are satisfied
+    chain.cache_query() # Caches the most recent query by default
+
+    # Alternatively, you can cache a query-AQL pair manually
+    chain.cache_query(
+        text="Who directed The Matrix?", 
+        aql="FOR m IN Movies FILTER m.title == 'The Matrix' RETURN m.director"
+    )
+
+    # Similar query: uses exact match or vector similarity to fetch a cached AQL query and its result
+    query2 = "Who is the director of The Matrix?"
+    response2 = chain.invoke({
+        "query": query2, 
+        "query_cache_similarity_threshold": 0.90
+    }) # Adjust threshold if needed
+    print(response2["result"])
+
+    # Clear all cached queries
+    chain.clear_query_cache()
+
+    # Or, clear a specific cached query
+    chain.clear_query_cache(text="Who directed The Matrix?")
+
+9. Chat History
+~~~~~~~~~~~~~~~
+
+Enable context-aware responses by including chat history:
+
+.. code-block:: python
+
+    # Initialize chat message history (required for chat history)
+    history = ArangoChatMessageHistory(
+        session_id="user_123",
+        db=db,
+        collection_name="chat_sessions"
+    )
+
+    chain = ArangoGraphQAChain.from_llm(
+        llm=llm, 
+        graph=graph, 
+        allow_dangerous_requests=True, 
+        include_history=True, # Enables chat history (default: False)
+        chat_history_store=history, # Instance of ArangoChatMessageHistory. Required if include_history is True
+        max_history_messages=10  # Optional: maximum number of messages to include (default: 10)
+    )
+
+    query = "What movies were released in 1999?"
+    response = chain.invoke({"query": query, "include_history": False}) # Disable chat history (on function call only)
+    print(response["result"])
+
+    query = "Among all those movies, which one is directed by Lana Wachowski?"
+    response = chain.invoke({"query": query}) # include_history already set to True in the chain, enabling the LLM to understand what "those movies" refer to
+    print(response["result"])
+
+
 Complete Workflow Example
 -------------------------
 
@@ -161,9 +239,8 @@ Here's a complete workflow showing how to use multiple features together:
 
 .. code-block:: python
 
-    from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
-    from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
-    from langchain.chat_models import ChatOpenAI
+    from langchain_arangodb import ArangoGraphQAChain, ArangoGraph, ArangoChatMessageHistory
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
     from arango import ArangoClient
 
     # 1. Setup Database Connection
@@ -194,6 +271,18 @@ Here's a complete workflow showing how to use multiple features together:
     
     # 5. Initialize Chain with Advanced Features
     llm = ChatOpenAI(temperature=0)
+
+    # 6. Initialize Embedding Model (required for query cache)
+    embedding = OpenAIEmbeddings(model="text-embedding-3-large")
+
+    # 7. Initialize chat message history (required for chat history)
+    history = ArangoChatMessageHistory(
+        session_id="user_123",
+        db=db,
+        collection_name="chat_sessions"
+    )
+
+    # 8. Initialize Chain with Advanced Features
     chain = ArangoGraphQAChain.from_llm(
         llm=llm,
         graph=graph,
@@ -203,12 +292,21 @@ Here's a complete workflow showing how to use multiple features together:
         return_aql_query=True,
         return_aql_result=True,
         output_list_limit=20,
-        output_string_limit=200
+        output_string_limit=200,
+        use_query_cache=True,
+        embedding=embedding,
+        query_cache_collection_name="Queries",
+        query_cache_similarity_threshold=0.80,
+        include_history=True,
+        chat_history_store=history,
+        max_history_messages=10
     )
     
-    # 6. Run Multiple Queries
+    # 9. Run Multiple Queries
     queries = [
         "Who acted in The Matrix?",
+        "Who starred in The Matrix?",
+        "What is the last name of this actor?"
         "What movies were released in 1999?",
         "List all actors in the database"
     ]
@@ -220,6 +318,7 @@ Here's a complete workflow showing how to use multiple features together:
         print("AQL Query:", response["aql_query"])
         print("Raw Results:", response["aql_result"])
         print("Final Answer:", response["result"])
+        chain.cache_query()
         print("-" * 50)
 
 Security Considerations

@@ -615,11 +615,13 @@ class ArangoGraphQAChain(Chain):
             callbacks=callbacks,
         )
 
+        content = str(result.content if isinstance(result, AIMessage) else result)
+
         # Add summary
         text = "Summary:"
         _run_manager.on_text(text, end="\n", verbose=self.verbose)
         _run_manager.on_text(
-            str(result.content) if isinstance(result, AIMessage) else result,
+            content,
             color="green",
             end="\n",
             verbose=self.verbose,

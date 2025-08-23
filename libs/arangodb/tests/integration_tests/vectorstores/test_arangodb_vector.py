@@ -50,7 +50,7 @@ def test_arangovector_from_texts_and_similarity_search(
         metadatas=metadatas,
         database=db,
         collection_name="test_collection",
-        index_name="test_index",
+        vector_index_name="test_index",
         overwrite_index=True,  # Ensure clean state for the index
     )
 
@@ -107,7 +107,7 @@ def test_arangovector_euclidean_distance(
         embedding=fake_embedding_function,
         database=db,
         collection_name="test_collection",
-        index_name="test_index",
+        vector_index_name="test_index",
         distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE,
         overwrite_index=True,
     )
@@ -160,7 +160,7 @@ def test_arangovector_similarity_search_with_score(
         metadatas=metadatas,
         database=db,
         collection_name="test_collection",
-        index_name="test_index",
+        vector_index_name="test_index",
         overwrite_index=True,
     )
 
@@ -194,7 +194,7 @@ def test_arangovector_similarity_search_with_score(
         database=db,  # db is managed by fixture, collection will be overwritten
         collection_name="test_collection"
         + "_l2",  # Use a different collection or ensure overwrite
-        index_name="test_index" + "_l2",
+        vector_index_name="test_index" + "_l2",
         distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE,
         overwrite_index=True,
     )
@@ -284,7 +284,7 @@ def test_arangovector_retriever_search_threshold(
         metadatas=metadatas,
         database=db,
         collection_name="test_collection",
-        index_name="test_index",
+        vector_index_name="test_index",
         overwrite_index=True,
     )
 
@@ -357,7 +357,7 @@ def test_arangovector_delete_documents(
         ids=doc_ids,  # Pass our custom IDs
         database=db,
         collection_name="test_collection",
-        index_name="test_index",
+        vector_index_name="test_index",
         overwrite_index=True,
     )
 
@@ -383,10 +383,8 @@ def test_arangovector_delete_documents(
     assert deleted_docs_check_raw is not None, (
         "collection.get_many() returned None for deleted_docs_check"
     )
-    assert isinstance(deleted_docs_check_raw, list), (
-        f"collection.get_many() expected list for deleted_docs_check,\
-              got {type(deleted_docs_check_raw)}"
-    )
+    m = f"collection.get_many() expected list for deleted_docs_check, got {type(deleted_docs_check_raw)}"  # noqa: E501
+    assert isinstance(deleted_docs_check_raw, list), m
     deleted_docs_check: List[Dict[str, Any]] = deleted_docs_check_raw
     assert len(deleted_docs_check) == 0
 
@@ -396,10 +394,8 @@ def test_arangovector_delete_documents(
     assert remaining_docs_check_raw is not None, (
         "collection.get_many() returned None for remaining_docs_check"
     )
-    assert isinstance(remaining_docs_check_raw, list), (
-        f"collection.get_many() expected list for remaining_docs_check,\
-              got {type(remaining_docs_check_raw)}"
-    )
+    m = f"collection.get_many() expected list for remaining_docs_check, got {type(remaining_docs_check_raw)}"  # noqa: E501
+    assert isinstance(remaining_docs_check_raw, list), m
     remaining_docs_check: List[Dict[str, Any]] = remaining_docs_check_raw
     assert len(remaining_docs_check) == 2
 
@@ -412,7 +408,6 @@ def test_arangovector_delete_documents(
     )  # doc_to_keep1, doc_to_keep2
 
 
-# NEW TEST
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangovector_similarity_search_with_return_fields(
     arangodb_credentials: ArangoCredentials,
@@ -439,7 +434,7 @@ def test_arangovector_similarity_search_with_return_fields(
         ids=doc_ids,
         database=db,
         collection_name="test_collection",
-        index_name="test_index",
+        vector_index_name="test_index",
         overwrite_index=True,
     )
 
@@ -519,7 +514,7 @@ def test_arangovector_max_marginal_relevance_search(
         ids=doc_ids,
         database=db,
         collection_name="test_collection",
-        index_name="test_index",
+        vector_index_name="test_index",
         overwrite_index=True,
     )
 
@@ -574,7 +569,7 @@ def test_arangovector_delete_vector_index(
         embedding=fake_embedding_function,
         database=db,
         collection_name="test_collection",
-        index_name="test_index",
+        vector_index_name="test_index",
         overwrite_index=False,
     )
 
@@ -980,7 +975,7 @@ def test_arangovector_from_existing_collection(
         database=db,
         embedding_field="custom_embedding",
         text_field="custom_text",
-        index_name="custom_vector_index",
+        vector_index_name="custom_vector_index",
         aql_return_text_query=custom_aql_query,
         insert_text=True,
     )
@@ -1011,7 +1006,7 @@ def test_arangovector_from_existing_collection(
         database=db,
         embedding_field="embedding",
         text_field="combined_text",
-        index_name="skip_vector_index",  # Use a different index name
+        vector_index_name="skip_vector_index",  # Use a different index name
         skip_existing_embeddings=True,
         insert_text=True,  # Important for search to work
     )
@@ -1027,7 +1022,7 @@ def test_arangovector_from_existing_collection(
         database=db,
         embedding_field="content_embedding",
         text_field="combined_title_content",
-        index_name="content_vector_index",  # Use a different index name
+        vector_index_name="content_vector_index",  # Use a different index name
         insert_text=True,  # Already set to True, but kept for clarity
     )
 

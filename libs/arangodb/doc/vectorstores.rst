@@ -415,7 +415,7 @@ Custom Collection Setup
         embedding_dimension=1536,
         database=db,
         collection_name="custom_vectors",
-        index_name="my_vector_index",
+        vector_index_name="my_vector_index",
         num_centroids=10,     # More centroids for larger datasets
         search_type=SearchType.VECTOR,  # or SearchType.HYBRID
     )

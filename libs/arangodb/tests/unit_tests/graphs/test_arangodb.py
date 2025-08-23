@@ -832,17 +832,55 @@ class TestArangoGraph:
         mock_graph.vertex_collections.return_value = ["vertices"]
         self.mock_db.graph.return_value = mock_graph
         self.mock_db.collection().count.return_value = 5
+        self.mock_db.collection().indexes.return_value = [
+            {
+                "id": "0",
+                "name": "primary",
+                "type": "primary",
+                "fields": ["_key"],
+                "unique": True,
+                "sparse": False,
+            },
+            {
+                "id": "1",
+                "type": "hash",
+                "fields": ["name"],
+                "unique": False,
+                "sparse": False,
+            },
+        ]
         self.mock_db.aql.execute.return_value = DummyCursor()
         self.mock_db.collections.return_value = [
             {"name": "vertices", "system": False, "type": "document"},
             {"name": "edges", "system": False, "type": "edge"},
         ]
 
-        result = self.graph.generate_schema(sample_ratio=0.2, graph_name="TestGraph")
+        result = self.graph.generate_schema(
+            sample_ratio=0.2, graph_name="TestGraph", schema_include_indexes=True
+        )
 
         assert result["graph_schema"][0]["name"] == "TestGraph"
         assert any(col["name"] == "vertices" for col in result["collection_schema"])
         assert any(col["name"] == "edges" for col in result["collection_schema"])
+        for col in result["collection_schema"]:
+            assert col["indexes"] is not None
+            assert len(col["indexes"]) > 0
+            assert isinstance(col["indexes"], list)
+            assert isinstance(col["indexes"][0], dict)
+
+            # Test filtered index structure - only essential fields
+            for index in col["indexes"]:
+                assert "id" in index
+                assert "fields" in index
+                assert isinstance(index["fields"], list)
+                # Optional fields should only exist if they have values
+                if "type" in index:
+                    assert index["type"] is not None
+                if "name" in index:
+                    assert index["name"] is not None
+                # Filtered fields should not be present
+                assert "unique" not in index
+                assert "sparse" not in index
 
     def test_generate_schema_no_graph_name(self) -> None:
         self.mock_db.graphs.return_value = [{"name": "G1", "edge_definitions": []}]
