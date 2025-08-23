@@ -1,7 +1,20 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 import farmhash
 import numpy as np
@@ -997,6 +1010,10 @@ class ArangoVector(VectorStore):
 
         embedding_dimension = len(embeddings[0])
 
+        # Handle potential duplicate vector_index_name parameter
+        # If vector_index_name is passed in kwargs, use it instead of index_name
+        vector_index_name_value = kwargs.pop("vector_index_name", index_name)
+
         store = cls(
             embedding,
             embedding_dimension=embedding_dimension,
@@ -1005,7 +1022,7 @@ class ArangoVector(VectorStore):
             search_type=search_type,
             embedding_field=embedding_field,
             text_field=text_field,
-            vector_index_name=index_name,
+            vector_index_name=vector_index_name_value,
             distance_strategy=distance_strategy,
             num_centroids=num_centroids,
             keyword_index_name=keyword_index_name,
@@ -1361,7 +1378,7 @@ class ArangoVector(VectorStore):
         k: int = 4,
         use_approx: bool = True,
         use_subset_relations: bool = False,
-    ) -> List[dict]:
+    ) -> Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
         """
         Find similar documents within the collection for entity resolution.
 
@@ -1429,7 +1446,7 @@ class ArangoVector(VectorStore):
                     RETURN {{entity: doc1._key, similar}}
             """
 
-        bind_vars = {
+        bind_vars: MutableMapping[str, Any] = {
             "@collection": target_collection,
             "threshold": threshold,
             "k": k,
@@ -1437,7 +1454,7 @@ class ArangoVector(VectorStore):
 
         cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
 
-        results = list(cursor)
+        results = list(cast(Iterable[Dict[str, Any]], cursor))
         if not results:
             if not use_subset_relations:
                 return []
@@ -1464,13 +1481,13 @@ class ArangoVector(VectorStore):
                             supersetGroup: group2.entity
                         }
             """
-        bind_vars_subset = {
+        bind_vars_subset: MutableMapping[str, Any] = {
             "results": results,
         }
         subsets_query = self.db.aql.execute(
             subset_query, bind_vars=bind_vars_subset, stream=True
         )
-        subsets = list(subsets_query)
+        subsets = list(cast(Iterable[Dict[str, Any]], subsets_query))
 
         # Return both clusters and subset relationships for analysis
         return {"clusters": results, "subset_relationships": subsets}
