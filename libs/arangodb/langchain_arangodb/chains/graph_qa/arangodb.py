@@ -10,7 +10,7 @@ from langchain.chains.base import Chain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import Field
@@ -427,11 +427,22 @@ class ArangoGraphQAChain(Chain):
         if max_history_messages <= 0:
             raise ValueError("max_history_messages must be greater than 0")
 
+        if self.chat_history_store is not None:
+            collection_name = self.chat_history_store._collection_name  # type: ignore
+
         chat_history = []
-        if include_history and self.chat_history_store is not None:
-            for msg in self.chat_history_store.messages[-max_history_messages:]:
-                cls = HumanMessage if msg.type == "human" else AIMessage
-                chat_history.append(cls(content=msg.content))
+        if include_history:
+            aql = f"""
+                FOR doc IN {collection_name}
+                SORT doc._key DESC
+                LIMIT @n
+                RETURN UNSET(doc, ["_id", "_key", "_rev", "session_id"])
+                """
+            cursor = self.graph.db.aql.execute(
+                aql,
+                bind_vars={"n": self.max_history_messages},  # type: ignore
+            )
+            chat_history = [d for d in cursor][::-1]  # type: ignore
 
         ######################
         # Check Query Cache #
@@ -631,10 +642,12 @@ class ArangoGraphQAChain(Chain):
         # Store Chat History #
         ########################
 
-        if self.chat_history_store:
-            self.chat_history_store.add_user_message(user_input)
-            self.chat_history_store.add_ai_message(aql_query)
-            self.chat_history_store.add_ai_message(content)
+        if self.chat_history_store is not None:
+            self.chat_history_store.add_qa_message(
+                user_input,
+                aql_query,
+                result.content if isinstance(result, AIMessage) else result,  # type: ignore
+            )
 
         return results
 

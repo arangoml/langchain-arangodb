@@ -173,6 +173,17 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
             },
         )
 
+    def add_qa_message(self, user_input: str, aql_query: str, result: str) -> None:
+        """Add a QA message to the chat history."""
+        self._db.collection(self._collection_name).insert(
+            {
+                "role": "qa",
+                "user_input": user_input,
+                "aql_query": aql_query,
+                "result": result,
+            },
+        )
+
     def clear(self) -> None:
         """Clear session memory from ArangoDB.
 
