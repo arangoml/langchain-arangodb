@@ -145,10 +145,17 @@ class ArangoGraphQAChain(Chain):
         :type llm: BaseLanguageModel
         :param embedding: The embedding model to use.
         :type embedding: Embeddings
+        :param use_query_cache: If True, enables reuse of similar
+            past queries from cache.
+        :type use_query_cache: bool
+        :param query_cache_similarity_threshold: The similarity threshold
+            to consider a query as a match in the cache.
+        :type query_cache_similarity_threshold: float
         :param query_cache_collection_name: The name of the collection
             to use for the query cache.
         :type query_cache_collection_name: str
-        :param include_history: Whether to include the chat history in the prompt.
+        :param include_history: If True, includes recent chat history in the prompt
+            to provide context for query generation.
         :type include_history: bool
         :param max_history_messages: The maximum number of messages to
             include in the chat history.
