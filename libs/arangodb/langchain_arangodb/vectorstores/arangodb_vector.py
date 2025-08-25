@@ -1378,6 +1378,7 @@ class ArangoVector(VectorStore):
         k: int = 4,
         use_approx: bool = True,
         use_subset_relations: bool = False,
+        merge_similar_entities: bool = False,
     ) -> Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
         """
         Find similar documents within the collection for entity resolution.
@@ -1399,12 +1400,26 @@ class ArangoVector(VectorStore):
         :param use_subset_relations: Whether to analyze subset relations.
             Defaults to False.
         :type use_subset_relations: bool
-        :return: List of dictionaries containing entities and their similar
-            entities.
-            Each dict has format: {'entity': entity_key, 'similar': [list_of_keys]}
-            If use_subset_relations=True, returns dict with 'clusters' and
-            'subset_relationships' keys.
-        :rtype: List[dict]
+        :param merge_similar_entities: Whether to merge similar entities based on 
+            subset relationships. Only effective when use_subset_relations=True.
+            When True, merges subset groups into their superset groups to create
+            consolidated, non-overlapping clusters. Defaults to False.
+        :type merge_similar_entities: bool
+        :return: Return format depends on parameters:
+            
+            - Basic clustering (use_subset_relations=False and 
+              merge_similar_entities=False): 
+              List[Dict] with format: {'entity': entity_key, 'similar': [list_of_keys]}
+            
+            - With subset analysis (use_subset_relations=True, 
+              merge_similar_entities=False):
+              Dict with keys: 'similar_entities', 'subset_relationships'
+            
+            - With merging (use_subset_relations=True, merge_similar_entities=True):
+              Dict with keys: 'similar_entities', 'subset_relationships', 
+              'merged_entities'
+              
+        :rtype: Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]
         """
         # Use provided collection name or default to instance collection
         target_collection = self.collection_name
@@ -1458,9 +1473,16 @@ class ArangoVector(VectorStore):
         if not results:
             if not use_subset_relations:
                 return []
-            return {"clusters": [], "subset_relationships": []}
+            return {"similar_entities": [], "subset_relationships": []}
 
         if not use_subset_relations:
+            if merge_similar_entities:
+                import warnings
+                warnings.warn(
+                    "merge_similar_entities=True requires use_subset_relations=True. "
+                    "Ignoring merge_similar_entities parameter.",
+                    UserWarning
+                ) 
             return results
 
         # SUBSET RELATIONS - only execute when use_subset_relations=True
@@ -1489,5 +1511,59 @@ class ArangoVector(VectorStore):
         )
         subsets = list(cast(Iterable[Dict[str, Any]], subsets_query))
 
-        # Return both clusters and subset relationships for analysis
-        return {"clusters": results, "subset_relationships": subsets}
+        if use_subset_relations and not merge_similar_entities:
+            return {"similar_entities": results, "subset_relationships": subsets}
+
+        # MERGE ENTITIES - only execute when merge_similar_entities=True 
+        # and use_subset_relations=True
+        if merge_similar_entities and use_subset_relations:
+            if not subsets:
+                # No subset relationships found, no merging possible
+                return {
+                    "similar_entities": results,
+                    "subset_relationships": subsets,
+                    "merged_entities": [],
+                }
+                
+            # Perform merging when subset relationships exist
+            merge_query = """
+                FOR group IN @results
+                    LET isSubset = LENGTH(
+                        FOR rel IN @subsets 
+                        FILTER rel.subsetGroup == group.entity 
+                        RETURN 1
+                    ) > 0
+
+                    FILTER NOT isSubset
+
+                    LET entitiesToMerge = (
+                        FOR rel IN @subsets
+                            FILTER rel.supersetGroup == group.entity
+                            LET subsetGroup = FIRST(
+                                FOR sg IN @results 
+                                FILTER sg.entity == rel.subsetGroup 
+                                RETURN sg
+                            )
+                            RETURN subsetGroup.entity
+                    )
+
+                    LET mergedSimilar = UNION_DISTINCT(group.similar, entitiesToMerge)
+
+                    RETURN { entity: group.entity, merged_entities: mergedSimilar }
+            """
+            
+            bind_vars_merge: MutableMapping[str, Any] = {
+                "results": results,
+                "subsets": subsets,
+            }
+            
+            merge_query_result = self.db.aql.execute(
+                merge_query, bind_vars=bind_vars_merge, stream=True
+            )
+            merged_results = list(cast(Iterable[Dict[str, Any]], merge_query_result))
+            
+            return {
+                "similar_entities": results,
+                "subset_relationships": subsets,
+                "merged_entities": merged_results,
+            }

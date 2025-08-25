@@ -224,12 +224,12 @@ class TestFindEntityClustersIntegration:
             threshold=0.7, k=4, use_approx=False, use_subset_relations=True
         )
 
-        # Should return a dictionary with clusters and subset_relationships
+        # Should return a dictionary with similar_entities and subset_relationships
         assert isinstance(result, dict)
-        assert "clusters" in result
+        assert "similar_entities" in result
         assert "subset_relationships" in result
 
-        clusters = result["clusters"]
+        clusters = result["similar_entities"]
         subsets = result["subset_relationships"]
 
         assert isinstance(clusters, list)
@@ -304,10 +304,10 @@ class TestFindEntityClustersIntegration:
             )
             result_dict = cast(Dict[str, Any], result)
             results[k] = {
-                "clusters": len(result_dict["clusters"]),
+                "clusters": len(result_dict["similar_entities"]),
                 "max_similar": (
-                    max(len(cluster["similar"]) for cluster in result_dict["clusters"])
-                    if result_dict["clusters"]
+                    max(len(cluster["similar"]) for cluster in result_dict["similar_entities"])
+                    if result_dict["similar_entities"]
                     else 0
                 ),
             }
@@ -339,7 +339,7 @@ class TestFindEntityClustersIntegration:
             use_approx=False,
             use_subset_relations=True,
         )
-        assert result_with_subsets == {"clusters": [], "subset_relationships": []}
+        assert result_with_subsets == {"similar_entities": [], "subset_relationships": []}
 
     def test_single_document_collection(self, db: StandardDatabase) -> None:
         """Test entity clustering with single document collection."""
@@ -465,7 +465,7 @@ class TestFindEntityClustersIntegration:
         )
 
         result_dict = cast(Dict[str, Any], result)
-        clusters = result_dict["clusters"]
+        clusters = result_dict["similar_entities"]
         subset_relations = result_dict["subset_relationships"]
 
         # Detailed cluster analysis completed
@@ -573,7 +573,864 @@ class TestFindEntityClustersIntegration:
 
             # Should find some meaningful clusters
             result_dict = cast(Dict[str, Any], result)
-            assert len(result_dict["clusters"]) > 0
+            assert len(result_dict["similar_entities"]) > 0
+
+        finally:
+            # Cleanup
+            if db.has_collection(collection_name):
+                db.delete_collection(collection_name)
+
+    def test_entity_clustering_with_merging_enabled(
+        self, vector_store_with_data: ArangoVector
+    ) -> None:
+        """Test entity clustering with merge_similar_entities enabled."""
+        result = vector_store_with_data.find_entity_clusters(
+            threshold=0.6, 
+            k=4, 
+            use_approx=False, 
+            use_subset_relations=True,
+            merge_similar_entities=True
+        )
+
+        # Should return a dictionary with all three keys
+        assert isinstance(result, dict)
+        assert "similar_entities" in result
+        assert "subset_relationships" in result
+        assert "merged_entities" in result
+
+        similar_entities = result["similar_entities"]
+        subset_relationships = result["subset_relationships"]
+        merged_entities = result["merged_entities"]
+
+        assert isinstance(similar_entities, list)
+        assert isinstance(subset_relationships, list)
+        assert isinstance(merged_entities, list)
+        assert len(similar_entities) > 0
+
+        # Validate merged entities structure
+        for merged_cluster in merged_entities:
+            assert "entity" in merged_cluster
+            assert "merged_entities" in merged_cluster
+            assert isinstance(merged_cluster["entity"], str)
+            assert isinstance(merged_cluster["merged_entities"], list)
+
+        # If subset relationships exist, merged entities should be fewer or equal
+        if subset_relationships:
+            assert len(merged_entities) <= len(similar_entities)
+
+    def test_entity_clustering_merging_no_subset_relationships(
+        self, vector_store_with_data: ArangoVector
+    ) -> None:
+        """Test entity clustering with merging when no subset relationships exist."""
+        # Use very high threshold to avoid subset relationships
+        result = vector_store_with_data.find_entity_clusters(
+            threshold=0.95, 
+            k=2, 
+            use_approx=False, 
+            use_subset_relations=True,
+            merge_similar_entities=True
+        )
+
+        # Should handle case with no subset relationships gracefully
+        if isinstance(result, dict) and "subset_relationships" in result:
+            subset_relationships = result["subset_relationships"]
+            merged_entities = result["merged_entities"]
+            
+            # When no subset relationships exist, merged_entities should be empty
+            if not subset_relationships:
+                assert merged_entities == []
+
+    def test_entity_clustering_merging_warning_case(
+        self, vector_store_with_data: ArangoVector
+    ) -> None:
+        """Test warning when merge_similar_entities=True but use_subset_relations=False."""
+        import warnings
+        
+        # Capture warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            
+            result = vector_store_with_data.find_entity_clusters(
+                threshold=0.7,
+                k=3,
+                use_approx=False,
+                use_subset_relations=False,  # False
+                merge_similar_entities=True  # True - should trigger warning
+            )
+            
+            # Should return basic clusters and issue warning
+            assert isinstance(result, list)
+            assert len(w) == 1
+            expected_msg = ("merge_similar_entities=True requires "
+                           "use_subset_relations=True")
+            assert expected_msg in str(w[0].message)
+            assert issubclass(w[0].category, UserWarning)
+
+    def test_entity_clustering_merging_with_known_duplicates(
+        self, db: StandardDatabase
+    ) -> None:
+        """Test entity clustering with merging using known duplicate documents."""
+        collection_name = "test_merging_duplicates"
+
+        # Clean up any existing collection
+        if db.has_collection(collection_name):
+            db.delete_collection(collection_name)
+
+        try:
+            fake_embeddings = FakeEmbeddings(dimension=EMBEDDING_DIMENSION)
+
+            # Create vector store
+            vector_store = ArangoVector(
+                embedding=fake_embeddings,
+                embedding_dimension=EMBEDDING_DIMENSION,
+                database=db,
+                collection_name=collection_name,
+                text_field="text",
+                embedding_field="embedding",
+            )
+
+            # Add documents with clear duplicate patterns
+            documents = [
+                {
+                    "_key": "ned_stark_full",
+                    "name": "Eddard",
+                    "surname": "Stark",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": False,
+                    "age": 41,
+                    "titles": ["Lord of Winterfell", "Warden of the North"],
+                    "traits": ["honorable", "duty-bound", "just"],
+                    "text": "Ned Stark honorable lord Winterfell northern warden dutiful just",
+                    "profession": "lord",
+                },
+                {
+                    "_key": "ned_stark_short", 
+                    "name": "Ned",
+                    "surname": "Stark",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": False,
+                    "age": 41,
+                    "titles": ["Lord of Winterfell"],
+                    "traits": ["honorable", "duty-bound"],
+                    "text": "Ned Stark honorable lord Winterfell",
+                    "profession": "lord",
+                },
+                {
+                    "_key": "tyrion_full",
+                    "name": "Tyrion",
+                    "surname": "Lannister",
+                    "house": "Lannister",
+                    "region": "Westerlands",
+                    "alive": True,
+                    "age": 32,
+                    "titles": ["Hand of the King", "Imp"],
+                    "traits": ["clever", "witty", "dwarf"],
+                    "text": "Tyrion Lannister clever imp witty hand king dwarf intelligent wise",
+                    "profession": "advisor",
+                },
+                {
+                    "_key": "tyrion_short",
+                    "name": "Tyrion",
+                    "surname": "Lannister",
+                    "house": "Lannister",
+                    "region": "Westerlands",
+                    "alive": True,
+                    "age": 32,
+                    "titles": ["Imp"],
+                    "traits": ["clever", "witty"],
+                    "text": "Tyrion Lannister clever imp witty",
+                    "profession": "advisor",
+                },
+                {
+                    "_key": "bronn_independent",
+                    "name": "Bronn",
+                    "surname": "",
+                    "house": "None",
+                    "region": "Various",
+                    "alive": True,
+                    "age": 35,
+                    "titles": ["Ser"],
+                    "traits": ["mercenary", "pragmatic", "skilled"],
+                    "text": "Bronn independent sellsword mercenary pragmatic skilled fighter",
+                    "profession": "sellsword",
+                }
+            ]
+
+            texts = [doc["text"] for doc in documents]
+            metadatas = [
+                {k: v for k, v in doc.items() if k not in ["_key", "text"]}
+                for doc in documents
+            ]
+            ids = [doc["_key"] for doc in documents]
+
+            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+
+            # Test clustering with merging
+            result = vector_store.find_entity_clusters(
+                threshold=0.3, 
+                k=4, 
+                use_approx=False, 
+                use_subset_relations=True,
+                merge_similar_entities=True
+            )
+
+            # Should successfully merge similar entities
+            assert isinstance(result, dict)
+            assert "similar_entities" in result
+            assert "subset_relationships" in result
+            assert "merged_entities" in result
+
+            # Validate that merging logic worked
+            similar_entities = result["similar_entities"]
+            merged_entities = result["merged_entities"]
+            subset_relationships = result["subset_relationships"]
+
+            # Should have found some clusters
+            assert len(similar_entities) > 0
+
+            # If subset relationships were found, verify merging worked
+            if subset_relationships:
+                # Merged entities should be fewer than or equal to original
+                assert len(merged_entities) <= len(similar_entities)
+                
+                # Each merged entity should have proper structure
+                for merged in merged_entities:
+                    assert "entity" in merged
+                    assert "merged_entities" in merged
+                    assert len(merged["merged_entities"]) > 0
+
+        finally:
+            # Cleanup
+            if db.has_collection(collection_name):
+                db.delete_collection(collection_name)
+
+    def test_entity_clustering_merging_complex_hierarchy(
+        self, db: StandardDatabase  
+    ) -> None:
+        """Test entity clustering with merging in complex hierarchical scenarios."""
+        collection_name = "test_merging_hierarchy"
+
+        # Clean up any existing collection
+        if db.has_collection(collection_name):
+            db.delete_collection(collection_name)
+
+        try:
+            fake_embeddings = FakeEmbeddings(dimension=EMBEDDING_DIMENSION)
+
+            vector_store = ArangoVector(
+                embedding=fake_embeddings,
+                embedding_dimension=EMBEDDING_DIMENSION,
+                database=db,
+                collection_name=collection_name,
+            )
+
+            # Create documents with hierarchical similarity (A ⊂ B ⊂ C)
+            documents = [
+                {
+                    "_key": "stark_minimal",
+                    "name": "Stark",
+                    "surname": "",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": True,
+                    "age": 25,
+                    "titles": [],
+                    "traits": ["stark", "north", "honor"],
+                    "text": "stark north honor",
+                    "profession": "unknown",
+                    "detail_level": "minimal"
+                },
+                {
+                    "_key": "stark_basic",
+                    "name": "Stark",
+                    "surname": "Member",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": True,
+                    "age": 25,
+                    "titles": ["Family Member"],
+                    "traits": ["stark", "north", "honor", "duty", "family"],
+                    "text": "stark north honor duty family",
+                    "profession": "family_member",
+                    "detail_level": "basic"
+                },
+                {
+                    "_key": "stark_detailed", 
+                    "name": "Lord",
+                    "surname": "Stark",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": True,
+                    "age": 40,
+                    "titles": ["Lord of Winterfell", "Warden of the North"],
+                    "traits": ["stark", "north", "honor", "duty", "family", "lord"],
+                    "text": "stark north honor duty family winterfell lord warden",
+                    "profession": "lord",
+                    "detail_level": "detailed"
+                },
+                {
+                    "_key": "lannister_different",
+                    "name": "Lannister",
+                    "surname": "Member",
+                    "house": "Lannister",
+                    "region": "Westerlands",
+                    "alive": True,
+                    "age": 30,
+                    "titles": ["Rich"],
+                    "traits": ["lannister", "gold", "power", "wealth"],
+                    "text": "lannister gold power wealth different",
+                    "profession": "noble",
+                    "detail_level": "independent"
+                }
+            ]
+
+            texts = [doc["text"] for doc in documents]
+            metadatas = [
+                {k: v for k, v in doc.items() if k not in ["_key", "text"]}
+                for doc in documents
+            ]
+            ids = [doc["_key"] for doc in documents]
+
+            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+
+            # Test with low threshold to ensure hierarchy is detected
+            result = vector_store.find_entity_clusters(
+                threshold=0.1,
+                k=5,
+                use_approx=False,
+                use_subset_relations=True,
+                merge_similar_entities=True
+            )
+
+            # Should handle complex hierarchy properly
+            assert isinstance(result, dict)
+            
+            subset_relationships = result["subset_relationships"]
+            merged_entities = result["merged_entities"]
+
+            # If hierarchical relationships were detected
+            if subset_relationships and merged_entities:
+                # Should have consolidated the hierarchy
+                assert len(merged_entities) > 0
+                
+                # Verify that top-level entity contains merged content
+                for merged in merged_entities:
+                    if merged["entity"] == "stark_detailed":
+                        # Should contain entities from lower levels
+                        merged_list = merged["merged_entities"]
+                        assert len(merged_list) > 1
+
+        finally:
+            # Cleanup  
+            if db.has_collection(collection_name):
+                db.delete_collection(collection_name)
+
+    def test_entity_clustering_merging_with_different_thresholds(
+        self, db: StandardDatabase
+    ) -> None:
+        """Test entity clustering merging behavior with different threshold values."""
+        collection_name = "test_merging_thresholds"
+
+        # Clean up any existing collection
+        if db.has_collection(collection_name):
+            db.delete_collection(collection_name)
+
+        try:
+            fake_embeddings = FakeEmbeddings(dimension=EMBEDDING_DIMENSION)
+
+            vector_store = ArangoVector(
+                embedding=fake_embeddings,
+                embedding_dimension=EMBEDDING_DIMENSION,
+                database=db,
+                collection_name=collection_name,
+            )
+
+            # Add similar documents that should cluster differently at different thresholds
+            documents = [
+                {
+                    "_key": "stark_very_detailed",
+                    "name": "Brandon",
+                    "surname": "Stark",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": True,
+                    "age": 16,
+                    "titles": ["Three-Eyed Raven", "Lord of Winterfell"],
+                    "traits": ["stark", "family", "northern", "honor", "duty", "loyalty"],
+                    "text": "stark family northern honor duty loyalty winterfell",
+                    "profession": "lord",
+                    "similarity_type": "very_similar"
+                },
+                {
+                    "_key": "stark_detailed",
+                    "name": "Rickon",
+                    "surname": "Stark",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": False,
+                    "age": 11,
+                    "titles": ["Prince"],
+                    "traits": ["stark", "family", "northern", "honor", "duty", "loyalty"],
+                    "text": "stark family northern honor duty loyalty",
+                    "profession": "prince",
+                    "similarity_type": "very_similar"
+                },
+                {
+                    "_key": "stark_basic",
+                    "name": "Benjen",
+                    "surname": "Stark",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": False,
+                    "age": 45,
+                    "titles": ["First Ranger"],
+                    "traits": ["stark", "northern", "honor"],
+                    "text": "stark northern honor",
+                    "profession": "ranger",
+                    "similarity_type": "somewhat_similar"
+                },
+                {
+                    "_key": "lannister_different",
+                    "name": "Tywin",
+                    "surname": "Lannister",
+                    "house": "Lannister",
+                    "region": "Westerlands",
+                    "alive": False,
+                    "age": 67,
+                    "titles": ["Lord of Casterly Rock", "Hand of the King"],
+                    "traits": ["lannister", "gold", "rich", "powerful"],
+                    "text": "lannister gold rich powerful",
+                    "profession": "lord",
+                    "similarity_type": "different"
+                }
+            ]
+
+            texts = [doc["text"] for doc in documents]
+            metadatas = [
+                {k: v for k, v in doc.items() if k not in ["_key", "text"]}
+                for doc in documents
+            ]
+            ids = [doc["_key"] for doc in documents]
+
+            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+
+            # Test with different thresholds
+            thresholds = [0.1, 0.5, 0.8]
+            results = {}
+
+            for threshold in thresholds:
+                result = vector_store.find_entity_clusters(
+                    threshold=threshold,
+                    k=4,
+                    use_approx=False,
+                    use_subset_relations=True,
+                    merge_similar_entities=True
+                )
+                
+                assert isinstance(result, dict)
+                results[threshold] = {
+                    "similar_entities_count": len(result["similar_entities"]),
+                    "subset_relationships_count": len(result["subset_relationships"]),
+                    "merged_entities_count": len(result["merged_entities"])
+                }
+
+            # Validate threshold behavior
+            for threshold, data in results.items():
+                assert isinstance(data["similar_entities_count"], int)
+                assert isinstance(data["subset_relationships_count"], int)
+                assert isinstance(data["merged_entities_count"], int)
+                assert data["similar_entities_count"] >= 0
+                assert data["subset_relationships_count"] >= 0
+                assert data["merged_entities_count"] >= 0
+
+        finally:
+            # Cleanup
+            if db.has_collection(collection_name):
+                db.delete_collection(collection_name)
+
+    def test_entity_clustering_merging_empty_collection(
+        self, db: StandardDatabase
+    ) -> None:
+        """Test entity clustering merging with empty collection."""
+        collection_name = "test_merging_empty"
+
+        # Clean up any existing collection
+        if db.has_collection(collection_name):
+            db.delete_collection(collection_name)
+
+        try:
+            fake_embeddings = FakeEmbeddings(dimension=EMBEDDING_DIMENSION)
+
+            # Create empty vector store
+            vector_store = ArangoVector(
+                embedding=fake_embeddings,
+                embedding_dimension=EMBEDDING_DIMENSION,
+                database=db,
+                collection_name=collection_name,
+            )
+
+            # Test clustering on empty collection
+            result = vector_store.find_entity_clusters(
+                threshold=0.5,
+                k=3,
+                use_approx=False,
+                use_subset_relations=True,
+                merge_similar_entities=True
+            )
+
+            # Should return empty structure
+            assert result == {"similar_entities": [], "subset_relationships": []}
+
+        finally:
+            # Cleanup
+            if db.has_collection(collection_name):
+                db.delete_collection(collection_name)
+
+    def test_entity_clustering_merging_performance_comparison(
+        self, vector_store_with_data: ArangoVector
+    ) -> None:
+        """Test performance comparison between merging enabled and disabled."""
+        # Test without merging
+        result_no_merge = vector_store_with_data.find_entity_clusters(
+            threshold=0.7,
+            k=4,
+            use_approx=False,
+            use_subset_relations=True,
+            merge_similar_entities=False
+        )
+
+        # Test with merging
+        result_with_merge = vector_store_with_data.find_entity_clusters(
+            threshold=0.7,
+            k=4,
+            use_approx=False,
+            use_subset_relations=True,
+            merge_similar_entities=True
+        )
+
+        # Both should return valid results
+        assert isinstance(result_no_merge, dict)
+        assert isinstance(result_with_merge, dict)
+
+        # Validate structure differences
+        assert "similar_entities" in result_no_merge
+        assert "subset_relationships" in result_no_merge
+        assert "merged_entities" not in result_no_merge
+
+        assert "similar_entities" in result_with_merge
+        assert "subset_relationships" in result_with_merge
+        assert "merged_entities" in result_with_merge
+
+        # Results should be consistent in similar_entities and subset_relationships
+        assert result_no_merge["similar_entities"] == result_with_merge["similar_entities"]
+        assert result_no_merge["subset_relationships"] == result_with_merge["subset_relationships"]
+
+    def test_entity_clustering_merging_real_world_scenario(
+        self, db: StandardDatabase
+    ) -> None:
+        """Test entity clustering merging with realistic duplicate entity scenario."""
+        collection_name = "test_merging_real_world"
+
+        # Clean up any existing collection
+        if db.has_collection(collection_name):
+            db.delete_collection(collection_name)
+
+        try:
+            fake_embeddings = FakeEmbeddings(dimension=EMBEDDING_DIMENSION)
+
+            vector_store = ArangoVector(
+                embedding=fake_embeddings,
+                embedding_dimension=EMBEDDING_DIMENSION,
+                database=db,
+                collection_name=collection_name,
+            )
+
+            # Real-world scenario: character entities with modern variations
+            documents = [
+                # Daenerys - multiple representations (modern equivalent)
+                {
+                    "_key": "daenerys_full",
+                    "name": "Daenerys",
+                    "surname": "Targaryen",
+                    "house": "Targaryen",
+                    "region": "Essos",
+                    "alive": False,
+                    "age": 16,
+                    "titles": ["Queen of Dragons", "Breaker of Chains", "Mother of Dragons"],
+                    "traits": ["powerful", "determined", "fire", "dragons"],
+                    "text": "Daenerys Targaryen queen dragons fire breaker chains powerful",
+                    "profession": "queen",
+                    "detail_level": "full"
+                },
+                {
+                    "_key": "daenerys_partial",
+                    "name": "Dany",
+                    "surname": "Targaryen",
+                    "house": "Targaryen",
+                    "region": "Essos",
+                    "alive": False,
+                    "age": 16,
+                    "titles": ["Queen of Dragons"],
+                    "traits": ["powerful", "fire", "dragons"],
+                    "text": "Dany Targaryen queen dragons fire",
+                    "profession": "queen",
+                    "detail_level": "partial"
+                },
+                {
+                    "_key": "daenerys_minimal",
+                    "name": "Daenerys",
+                    "surname": "T",
+                    "house": "Targaryen",
+                    "region": "Essos",
+                    "alive": False,
+                    "age": 16,
+                    "titles": [],
+                    "traits": ["dragons"],
+                    "text": "Daenerys dragons",
+                    "profession": "queen",
+                    "detail_level": "minimal"
+                },
+                # Sansa - single representation
+                {
+                    "_key": "sansa_stark",
+                    "name": "Sansa",
+                    "surname": "Stark",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": True,
+                    "age": 18,
+                    "titles": ["Lady of Winterfell", "Queen in the North"],
+                    "traits": ["smart", "political", "survivor"],
+                    "text": "Sansa Stark lady political smart survivor north",
+                    "profession": "lady",
+                    "detail_level": "single"
+                },
+                # Sandor - duplicate representations  
+                {
+                    "_key": "sandor_long",
+                    "name": "Sandor",
+                    "surname": "Clegane",
+                    "house": "Clegane",
+                    "region": "Westerlands",
+                    "alive": True,
+                    "age": 35,
+                    "titles": ["The Hound", "Ser"],
+                    "traits": ["fierce", "loyal", "scarred", "fighter"],
+                    "text": "Sandor Clegane hound fierce loyal scarred fighter knight",
+                    "profession": "knight",
+                    "detail_level": "long"
+                },
+                {
+                    "_key": "sandor_short",
+                    "name": "The Hound",
+                    "surname": "Clegane",
+                    "house": "Clegane",
+                    "region": "Westerlands",
+                    "alive": True,
+                    "age": 35,
+                    "titles": ["The Hound"],
+                    "traits": ["fierce", "fighter"],
+                    "text": "Hound Clegane fierce fighter",
+                    "profession": "knight",
+                    "detail_level": "short"
+                }
+            ]
+
+            texts = [doc["text"] for doc in documents]
+            metadatas = [
+                {k: v for k, v in doc.items() if k not in ["_key", "text"]}
+                for doc in documents
+            ]
+            ids = [doc["_key"] for doc in documents]
+
+            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+
+            # Test entity resolution with merging
+            result = vector_store.find_entity_clusters(
+                threshold=0.2,  # Lower threshold to catch similar entities
+                k=5,
+                use_approx=False,
+                use_subset_relations=True,
+                merge_similar_entities=True
+            )
+
+            # Should detect and merge similar entities
+            assert isinstance(result, dict)
+            assert "similar_entities" in result
+            assert "subset_relationships" in result
+            assert "merged_entities" in result
+
+            similar_entities = result["similar_entities"]
+            subset_relationships = result["subset_relationships"]
+            merged_entities = result["merged_entities"]
+
+            # Should find some similar entities
+            assert len(similar_entities) > 0
+
+            # Validate entity resolution worked
+            if subset_relationships:
+                # Should have detected subset relationships
+                assert len(subset_relationships) > 0
+                
+                # Should have merged some entities
+                assert len(merged_entities) > 0
+                assert len(merged_entities) <= len(similar_entities)
+
+                # Validate merge structure
+                for merged in merged_entities:
+                    assert "entity" in merged
+                    assert "merged_entities" in merged
+                    assert isinstance(merged["merged_entities"], list)
+
+        finally:
+            # Cleanup
+            if db.has_collection(collection_name):
+                db.delete_collection(collection_name)
+
+    def test_entity_clustering_merging_with_exact_duplicates(
+        self, db: StandardDatabase
+    ) -> None:
+        """Test entity clustering merging with exact duplicate documents."""
+        collection_name = "test_merging_exact_duplicates"
+
+        # Clean up any existing collection
+        if db.has_collection(collection_name):
+            db.delete_collection(collection_name)
+
+        try:
+            fake_embeddings = FakeEmbeddings(dimension=EMBEDDING_DIMENSION)
+
+            vector_store = ArangoVector(
+                embedding=fake_embeddings,
+                embedding_dimension=EMBEDDING_DIMENSION,
+                database=db,
+                collection_name=collection_name,
+            )
+
+            # Create exact duplicate documents (same content, different keys)
+            documents = [
+                {
+                    "_key": "jon_snow_001",
+                    "name": "Jon",
+                    "surname": "Snow",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": True,
+                    "age": 16,
+                    "titles": ["Bastard of Winterfell", "Lord Commander"],
+                    "traits": ["honorable", "brave", "bastard"],
+                    "text": "Jon Snow bastard Stark honorable brave lord commander north",
+                    "profession": "commander",
+                    "source": "database_1"
+                },
+                {
+                    "_key": "jon_snow_002",
+                    "name": "Jon",
+                    "surname": "Snow",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": True,
+                    "age": 16,
+                    "titles": ["Bastard of Winterfell", "Lord Commander"],
+                    "traits": ["honorable", "brave", "bastard"],
+                    "text": "Jon Snow bastard Stark honorable brave lord commander north",
+                    "profession": "commander",
+                    "source": "database_2"
+                },
+                {
+                    "_key": "arya_stark_001",
+                    "name": "Arya",
+                    "surname": "Stark",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": True,
+                    "age": 11,
+                    "titles": ["No One", "Faceless"],
+                    "traits": ["skilled", "assassin", "young"],
+                    "text": "Arya Stark no one faceless assassin skilled young northern",
+                    "profession": "assassin",
+                    "source": "database_1"
+                },
+                {
+                    "_key": "arya_stark_002",
+                    "name": "Arya",
+                    "surname": "Stark",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": True,
+                    "age": 11,
+                    "titles": ["No One", "Faceless"],
+                    "traits": ["skilled", "assassin", "young"],
+                    "text": "Arya Stark no one faceless assassin skilled young northern",
+                    "profession": "assassin",
+                    "source": "database_2"
+                },
+                {
+                    "_key": "unique_character",
+                    "name": "Hodor",
+                    "surname": "",
+                    "house": "Stark",
+                    "region": "North",
+                    "alive": False,
+                    "age": 40,
+                    "titles": [],
+                    "traits": ["simple", "loyal", "strong"],
+                    "text": "Hodor simple loyal strong giant servant",
+                    "profession": "servant",
+                    "source": "single"
+                }
+            ]
+
+            texts = [doc["text"] for doc in documents]
+            metadatas = [
+                {k: v for k, v in doc.items() if k not in ["_key", "text"]}
+                for doc in documents
+            ]
+            ids = [doc["_key"] for doc in documents]
+
+            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+
+            # Test exact duplicate detection and merging
+            result = vector_store.find_entity_clusters(
+                threshold=0.1,  # Very low threshold to catch exact duplicates
+                k=5,
+                use_approx=False,
+                use_subset_relations=True,
+                merge_similar_entities=True
+            )
+
+            # Should detect exact duplicates
+            assert isinstance(result, dict)
+            assert "similar_entities" in result
+            assert "subset_relationships" in result
+            assert "merged_entities" in result
+
+            similar_entities = result["similar_entities"]
+            subset_relationships = result["subset_relationships"]
+            merged_entities = result["merged_entities"]
+
+            # Should find similar entities (exact duplicates)
+            assert len(similar_entities) > 0
+
+            # Should detect some exact duplicate relationships
+            if subset_relationships:
+                # Should have detected duplicate relationships
+                assert len(subset_relationships) > 0
+                
+                # Should have merged exact duplicates
+                assert len(merged_entities) > 0
+                assert len(merged_entities) <= len(similar_entities)
+
+                # Validate that exact duplicates were properly merged
+                for merged in merged_entities:
+                    assert "entity" in merged
+                    assert "merged_entities" in merged
+                    # For exact duplicates, should contain the duplicate entity
+                    if len(merged["merged_entities"]) > 1:
+                        # This means actual merging occurred
+                        assert isinstance(merged["merged_entities"], list)
 
         finally:
             # Cleanup

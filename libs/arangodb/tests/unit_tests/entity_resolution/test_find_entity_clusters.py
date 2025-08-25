@@ -136,10 +136,10 @@ class TestFindEntityClusters:
 
         # Should return dictionary with both clusters and subset relationships
         assert isinstance(result, dict)
-        assert "clusters" in result
+        assert "similar_entities" in result
         assert "subset_relationships" in result
         result_dict = cast(Dict[str, Any], result)
-        assert result_dict["clusters"] == mock_clusters
+        assert result_dict["similar_entities"] == mock_clusters
         assert result_dict["subset_relationships"] == mock_subsets
 
         # Verify both AQL queries were called
@@ -158,7 +158,7 @@ class TestFindEntityClusters:
 
         # Test with subset relations
         result = mock_vector_store.find_entity_clusters(use_subset_relations=True)
-        assert result == {"clusters": [], "subset_relationships": []}
+        assert result == {"similar_entities": [], "subset_relationships": []}
 
     def test_no_subset_relations_found(self, mock_vector_store: ArangoVector) -> None:
         """Test behavior when clusters exist but no subset relations found."""
@@ -178,7 +178,7 @@ class TestFindEntityClusters:
         result = mock_vector_store.find_entity_clusters(use_subset_relations=True)
 
         result_dict = cast(Dict[str, Any], result)
-        assert result_dict["clusters"] == mock_clusters
+        assert result_dict["similar_entities"] == mock_clusters
         assert result_dict["subset_relationships"] == []
 
     def test_euclidean_distance_strategy(self, mock_vector_store: ArangoVector) -> None:
@@ -472,9 +472,9 @@ class TestFindEntityClusters:
 
         # Verify the structure
         result_dict = cast(Dict[str, Any], result)
-        assert result_dict["clusters"] == mock_clusters
+        assert result_dict["similar_entities"] == mock_clusters
         assert result_dict["subset_relationships"] == mock_subsets
-        assert len(result_dict["clusters"]) == 3
+        assert len(result_dict["similar_entities"]) == 3
         assert len(result_dict["subset_relationships"]) == 1
 
     def test_edge_case_single_cluster(self, mock_vector_store: ArangoVector) -> None:
@@ -506,6 +506,250 @@ class TestFindEntityClusters:
         call_args = mock_vector_store.db.aql.execute.call_args  # type: ignore
         bind_vars = call_args[1]["bind_vars"]
         assert bind_vars["threshold"] == 0.99
+
+    def test_merge_entities_warning_when_subset_relations_false(
+        self, mock_vector_store: ArangoVector
+    ) -> None:
+        """Test warning when merge_similar_entities=True but use_subset_relations=False."""
+        import warnings
+        
+        mock_clusters = [{"entity": "doc1", "similar": ["doc2"]}]
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = lambda self: iter(mock_clusters)
+        mock_vector_store.db.aql.execute.return_value = mock_cursor  # type: ignore
+
+        # Capture warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            
+            result = mock_vector_store.find_entity_clusters(
+                use_subset_relations=False, 
+                merge_similar_entities=True
+            )
+            
+            # Should return basic clusters and issue warning
+            assert result == mock_clusters
+            assert len(w) == 1
+            expected_msg = ("merge_similar_entities=True requires "
+                           "use_subset_relations=True")
+            assert expected_msg in str(w[0].message)
+            assert issubclass(w[0].category, UserWarning)
+
+    def test_merge_entities_with_subset_relationships(
+        self, mock_vector_store: ArangoVector
+    ) -> None:
+        """Test entity merging when subset relationships exist."""
+        mock_clusters = [
+            {"entity": "doc1", "similar": ["doc2", "doc3"]},
+            {"entity": "doc4", "similar": ["doc2", "doc3", "doc5"]},
+            {"entity": "doc6", "similar": ["doc7"]},
+        ]
+
+        mock_subsets = [
+            {"subsetGroup": "doc1", "supersetGroup": "doc4"}
+        ]
+
+        mock_merged = [
+            {"entity": "doc4", "merged_entities": ["doc1", "doc2", "doc3", "doc5"]},
+            {"entity": "doc6", "merged_entities": ["doc7"]},
+        ]
+
+        # Mock three calls: clusters, subsets, and merge
+        mock_cursor_1 = MagicMock()
+        mock_cursor_1.__iter__ = lambda self: iter(mock_clusters)
+        mock_cursor_2 = MagicMock()
+        mock_cursor_2.__iter__ = lambda self: iter(mock_subsets)
+        mock_cursor_3 = MagicMock()
+        mock_cursor_3.__iter__ = lambda self: iter(mock_merged)
+
+        mock_vector_store.db.aql.execute.side_effect = [
+            mock_cursor_1, 
+            mock_cursor_2, 
+            mock_cursor_3
+        ]  # type: ignore
+
+        result = mock_vector_store.find_entity_clusters(
+            use_subset_relations=True, 
+            merge_similar_entities=True
+        )
+
+        # Should return dictionary with all three keys
+        assert isinstance(result, dict)
+        result_dict = cast(Dict[str, Any], result)
+        assert "similar_entities" in result_dict
+        assert "subset_relationships" in result_dict
+        assert "merged_entities" in result_dict
+        
+        assert result_dict["similar_entities"] == mock_clusters
+        assert result_dict["subset_relationships"] == mock_subsets
+        assert result_dict["merged_entities"] == mock_merged
+
+        # Verify all three AQL queries were called
+        assert mock_vector_store.db.aql.execute.call_count == 3  # type: ignore
+
+    def test_merge_entities_no_subset_relationships(
+        self, mock_vector_store: ArangoVector
+    ) -> None:
+        """Test entity merging when no subset relationships exist."""
+        mock_clusters = [
+            {"entity": "doc1", "similar": ["doc2"]},
+            {"entity": "doc3", "similar": ["doc4"]},
+        ]
+
+        # First call returns clusters, second call returns empty subsets
+        mock_cursor_1 = MagicMock()
+        mock_cursor_1.__iter__ = lambda self: iter(mock_clusters)
+        mock_cursor_2 = MagicMock()
+        mock_cursor_2.__iter__ = lambda self: iter([])
+
+        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore
+
+        result = mock_vector_store.find_entity_clusters(
+            use_subset_relations=True, 
+            merge_similar_entities=True
+        )
+
+        # Should return dictionary indicating no merging was performed
+        assert isinstance(result, dict)
+        result_dict = cast(Dict[str, Any], result)
+        assert "similar_entities" in result_dict
+        assert "subset_relationships" in result_dict
+        assert "merged_entities" in result_dict
+        
+        assert result_dict["similar_entities"] == mock_clusters
+        assert result_dict["subset_relationships"] == []
+        assert result_dict["merged_entities"] == []  # Empty - no merging occurred
+
+        # Verify only two AQL queries were called (no merge query)
+        assert mock_vector_store.db.aql.execute.call_count == 2  # type: ignore
+
+    def test_merge_entities_empty_initial_results(
+        self, mock_vector_store: ArangoVector
+    ) -> None:
+        """Test entity merging when no initial clusters are found."""
+        mock_cursor = MagicMock()
+        mock_cursor.__iter__ = lambda self: iter([])
+        mock_vector_store.db.aql.execute.return_value = mock_cursor  # type: ignore
+
+        result = mock_vector_store.find_entity_clusters(
+            use_subset_relations=True, 
+            merge_similar_entities=True
+        )
+
+        # Should return empty structure
+        assert result == {"similar_entities": [], "subset_relationships": []}
+
+        # Verify only one AQL query was called (initial clustering)
+        assert mock_vector_store.db.aql.execute.call_count == 1  # type: ignore
+
+    def test_merge_entities_aql_query_structure(
+        self, mock_vector_store: ArangoVector
+    ) -> None:
+        """Test that the merge AQL query has the correct structure."""
+        mock_clusters = [
+            {"entity": "doc1", "similar": ["doc2"]},
+            {"entity": "doc3", "similar": ["doc2", "doc4"]},
+        ]
+
+        mock_subsets = [{"subsetGroup": "doc1", "supersetGroup": "doc3"}]
+        mock_merged = [{"entity": "doc3", "merged_entities": ["doc1", "doc2", "doc4"]}]
+
+        mock_cursor_1 = MagicMock()
+        mock_cursor_1.__iter__ = lambda self: iter(mock_clusters)
+        mock_cursor_2 = MagicMock()
+        mock_cursor_2.__iter__ = lambda self: iter(mock_subsets)
+        mock_cursor_3 = MagicMock()
+        mock_cursor_3.__iter__ = lambda self: iter(mock_merged)
+
+        mock_vector_store.db.aql.execute.side_effect = [
+            mock_cursor_1, 
+            mock_cursor_2, 
+            mock_cursor_3
+        ]  # type: ignore
+
+        mock_vector_store.find_entity_clusters(
+            use_subset_relations=True, 
+            merge_similar_entities=True
+        )
+
+        # Get the merge query (third call)
+        merge_query_call = mock_vector_store.db.aql.execute.call_args_list[2]  
+        merge_query = merge_query_call[0][0]
+
+        # Verify merge query structure
+        assert "FOR group IN @results" in merge_query
+        assert "LET isSubset = LENGTH(" in merge_query
+        assert "FILTER NOT isSubset" in merge_query
+        assert "LET entitiesToMerge = (" in merge_query
+        assert "UNION_DISTINCT(group.similar, entitiesToMerge)" in merge_query
+        expected_return = ("RETURN { entity: group.entity, "
+                          "merged_entities: mergedSimilar }")
+        assert expected_return in merge_query
+
+        # Verify bind variables for merge query
+        bind_vars = merge_query_call[1]["bind_vars"]
+        assert "results" in bind_vars
+        assert "subsets" in bind_vars
+        assert bind_vars["results"] == mock_clusters
+        assert bind_vars["subsets"] == mock_subsets
+
+    def test_merge_entities_complex_hierarchy(
+        self, mock_vector_store: ArangoVector
+    ) -> None:
+        """Test entity merging with complex hierarchical subset relationships."""
+        mock_clusters = [
+            {"entity": "A", "similar": ["B"]},
+            {"entity": "C", "similar": ["B", "D"]},
+            {"entity": "E", "similar": ["B", "D", "F", "G"]},
+            {"entity": "H", "similar": ["I"]},  # Standalone cluster
+        ]
+
+        mock_subsets = [
+            {"subsetGroup": "A", "supersetGroup": "C"},
+            {"subsetGroup": "C", "supersetGroup": "E"},
+            # A is subset of C, C is subset of E, H is standalone
+        ]
+
+        mock_merged = [
+            {"entity": "E", "merged_entities": ["A", "C", "B", "D", "F", "G"]},
+            {"entity": "H", "merged_entities": ["I"]},
+        ]
+
+        mock_cursor_1 = MagicMock()
+        mock_cursor_1.__iter__ = lambda self: iter(mock_clusters)
+        mock_cursor_2 = MagicMock()
+        mock_cursor_2.__iter__ = lambda self: iter(mock_subsets)
+        mock_cursor_3 = MagicMock()
+        mock_cursor_3.__iter__ = lambda self: iter(mock_merged)
+
+        mock_vector_store.db.aql.execute.side_effect = [
+            mock_cursor_1, 
+            mock_cursor_2, 
+            mock_cursor_3
+        ]  # type: ignore
+
+        result = mock_vector_store.find_entity_clusters(
+            use_subset_relations=True, 
+            merge_similar_entities=True
+        )
+
+        result_dict = cast(Dict[str, Any], result)
+        
+        # Verify original data is preserved
+        assert result_dict["similar_entities"] == mock_clusters
+        assert result_dict["subset_relationships"] == mock_subsets
+        
+        # Verify merging result
+        assert result_dict["merged_entities"] == mock_merged
+        assert len(result_dict["merged_entities"]) == 2  # Only non-subset entities
+        
+        # Verify E (top-level entity) contains all merged entities
+        e_cluster = next(
+            cluster for cluster in result_dict["merged_entities"] 
+            if cluster["entity"] == "E"
+        )
+        assert "A" in e_cluster["merged_entities"]  # Merged from A
+        assert "C" in e_cluster["merged_entities"]  # Merged from C
 
 
 if __name__ == "__main__":
