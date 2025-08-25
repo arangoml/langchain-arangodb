@@ -1400,25 +1400,25 @@ class ArangoVector(VectorStore):
         :param use_subset_relations: Whether to analyze subset relations.
             Defaults to False.
         :type use_subset_relations: bool
-        :param merge_similar_entities: Whether to merge similar entities based on 
+        :param merge_similar_entities: Whether to merge similar entities based on
             subset relationships. Only effective when use_subset_relations=True.
             When True, merges subset groups into their superset groups to create
             consolidated, non-overlapping clusters. Defaults to False.
         :type merge_similar_entities: bool
         :return: Return format depends on parameters:
-            
-            - Basic clustering (use_subset_relations=False and 
-              merge_similar_entities=False): 
+
+            - Basic clustering (use_subset_relations=False and
+              merge_similar_entities=False):
               List[Dict] with format: {'entity': entity_key, 'similar': [list_of_keys]}
-            
-            - With subset analysis (use_subset_relations=True, 
+
+            - With subset analysis (use_subset_relations=True,
               merge_similar_entities=False):
               Dict with keys: 'similar_entities', 'subset_relationships'
-            
+
             - With merging (use_subset_relations=True, merge_similar_entities=True):
-              Dict with keys: 'similar_entities', 'subset_relationships', 
+              Dict with keys: 'similar_entities', 'subset_relationships',
               'merged_entities'
-              
+
         :rtype: Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]
         """
         # Use provided collection name or default to instance collection
@@ -1478,11 +1478,12 @@ class ArangoVector(VectorStore):
         if not use_subset_relations:
             if merge_similar_entities:
                 import warnings
+
                 warnings.warn(
                     "merge_similar_entities=True requires use_subset_relations=True. "
                     "Ignoring merge_similar_entities parameter.",
-                    UserWarning
-                ) 
+                    UserWarning,
+                )
             return results
 
         # SUBSET RELATIONS - only execute when use_subset_relations=True
@@ -1514,7 +1515,7 @@ class ArangoVector(VectorStore):
         if use_subset_relations and not merge_similar_entities:
             return {"similar_entities": results, "subset_relationships": subsets}
 
-        # MERGE ENTITIES - only execute when merge_similar_entities=True 
+        # MERGE ENTITIES - only execute when merge_similar_entities=True
         # and use_subset_relations=True
         if merge_similar_entities and use_subset_relations:
             if not subsets:
@@ -1524,7 +1525,7 @@ class ArangoVector(VectorStore):
                     "subset_relationships": subsets,
                     "merged_entities": [],
                 }
-                
+
             # Perform merging when subset relationships exist
             merge_query = """
                 FOR group IN @results
@@ -1551,17 +1552,17 @@ class ArangoVector(VectorStore):
 
                     RETURN { entity: group.entity, merged_entities: mergedSimilar }
             """
-            
+
             bind_vars_merge: MutableMapping[str, Any] = {
                 "results": results,
                 "subsets": subsets,
             }
-            
+
             merge_query_result = self.db.aql.execute(
                 merge_query, bind_vars=bind_vars_merge, stream=True
             )
             merged_results = list(cast(Iterable[Dict[str, Any]], merge_query_result))
-            
+
             return {
                 "similar_entities": results,
                 "subset_relationships": subsets,

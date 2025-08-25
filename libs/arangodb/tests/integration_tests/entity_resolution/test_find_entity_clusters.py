@@ -306,7 +306,10 @@ class TestFindEntityClustersIntegration:
             results[k] = {
                 "clusters": len(result_dict["similar_entities"]),
                 "max_similar": (
-                    max(len(cluster["similar"]) for cluster in result_dict["similar_entities"])
+                    max(
+                        len(cluster["similar"])
+                        for cluster in result_dict["similar_entities"]
+                    )
                     if result_dict["similar_entities"]
                     else 0
                 ),
@@ -339,7 +342,10 @@ class TestFindEntityClustersIntegration:
             use_approx=False,
             use_subset_relations=True,
         )
-        assert result_with_subsets == {"similar_entities": [], "subset_relationships": []}
+        assert result_with_subsets == {
+            "similar_entities": [],
+            "subset_relationships": [],
+        }
 
     def test_single_document_collection(self, db: StandardDatabase) -> None:
         """Test entity clustering with single document collection."""
@@ -562,7 +568,11 @@ class TestFindEntityClustersIntegration:
             ]
             ids = [doc["_key"] for doc in documents]
 
-            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+            vector_store.add_texts(
+                texts=texts,  # type: ignore[arg-type]
+                metadatas=metadatas,
+                ids=ids,  # type: ignore[arg-type]
+            )
 
             # Test clustering
             result = vector_store.find_entity_clusters(
@@ -585,11 +595,11 @@ class TestFindEntityClustersIntegration:
     ) -> None:
         """Test entity clustering with merge_similar_entities enabled."""
         result = vector_store_with_data.find_entity_clusters(
-            threshold=0.6, 
-            k=4, 
-            use_approx=False, 
+            threshold=0.6,
+            k=4,
+            use_approx=False,
             use_subset_relations=True,
-            merge_similar_entities=True
+            merge_similar_entities=True,
         )
 
         # Should return a dictionary with all three keys
@@ -624,18 +634,18 @@ class TestFindEntityClustersIntegration:
         """Test entity clustering with merging when no subset relationships exist."""
         # Use very high threshold to avoid subset relationships
         result = vector_store_with_data.find_entity_clusters(
-            threshold=0.95, 
-            k=2, 
-            use_approx=False, 
+            threshold=0.95,
+            k=2,
+            use_approx=False,
             use_subset_relations=True,
-            merge_similar_entities=True
+            merge_similar_entities=True,
         )
 
         # Should handle case with no subset relationships gracefully
         if isinstance(result, dict) and "subset_relationships" in result:
             subset_relationships = result["subset_relationships"]
             merged_entities = result["merged_entities"]
-            
+
             # When no subset relationships exist, merged_entities should be empty
             if not subset_relationships:
                 assert merged_entities == []
@@ -643,26 +653,28 @@ class TestFindEntityClustersIntegration:
     def test_entity_clustering_merging_warning_case(
         self, vector_store_with_data: ArangoVector
     ) -> None:
-        """Test warning when merge_similar_entities=True but use_subset_relations=False."""
+        """Test warning when merge_similar_entities=True but
+        use_subset_relations=False."""
         import warnings
-        
+
         # Capture warnings
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            
+
             result = vector_store_with_data.find_entity_clusters(
                 threshold=0.7,
                 k=3,
                 use_approx=False,
                 use_subset_relations=False,  # False
-                merge_similar_entities=True  # True - should trigger warning
+                merge_similar_entities=True,  # True - should trigger warning
             )
-            
+
             # Should return basic clusters and issue warning
             assert isinstance(result, list)
             assert len(w) == 1
-            expected_msg = ("merge_similar_entities=True requires "
-                           "use_subset_relations=True")
+            expected_msg = (
+                "merge_similar_entities=True requires use_subset_relations=True"
+            )
             assert expected_msg in str(w[0].message)
             assert issubclass(w[0].category, UserWarning)
 
@@ -701,11 +713,14 @@ class TestFindEntityClustersIntegration:
                     "age": 41,
                     "titles": ["Lord of Winterfell", "Warden of the North"],
                     "traits": ["honorable", "duty-bound", "just"],
-                    "text": "Ned Stark honorable lord Winterfell northern warden dutiful just",
+                    "text": (
+                        "Ned Stark honorable lord Winterfell northern warden "
+                        "dutiful just"
+                    ),
                     "profession": "lord",
                 },
                 {
-                    "_key": "ned_stark_short", 
+                    "_key": "ned_stark_short",
                     "name": "Ned",
                     "surname": "Stark",
                     "house": "Stark",
@@ -727,7 +742,10 @@ class TestFindEntityClustersIntegration:
                     "age": 32,
                     "titles": ["Hand of the King", "Imp"],
                     "traits": ["clever", "witty", "dwarf"],
-                    "text": "Tyrion Lannister clever imp witty hand king dwarf intelligent wise",
+                    "text": (
+                        "Tyrion Lannister clever imp witty hand king dwarf "
+                        "intelligent wise"
+                    ),
                     "profession": "advisor",
                 },
                 {
@@ -753,9 +771,12 @@ class TestFindEntityClustersIntegration:
                     "age": 35,
                     "titles": ["Ser"],
                     "traits": ["mercenary", "pragmatic", "skilled"],
-                    "text": "Bronn independent sellsword mercenary pragmatic skilled fighter",
+                    "text": (
+                        "Bronn independent sellsword mercenary pragmatic "
+                        "skilled fighter"
+                    ),
                     "profession": "sellsword",
-                }
+                },
             ]
 
             texts = [doc["text"] for doc in documents]
@@ -765,15 +786,19 @@ class TestFindEntityClustersIntegration:
             ]
             ids = [doc["_key"] for doc in documents]
 
-            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+            vector_store.add_texts(
+                texts=texts,  # type: ignore[arg-type]
+                metadatas=metadatas,
+                ids=ids,  # type: ignore[arg-type]
+            )
 
             # Test clustering with merging
             result = vector_store.find_entity_clusters(
-                threshold=0.3, 
-                k=4, 
-                use_approx=False, 
+                threshold=0.3,
+                k=4,
+                use_approx=False,
                 use_subset_relations=True,
-                merge_similar_entities=True
+                merge_similar_entities=True,
             )
 
             # Should successfully merge similar entities
@@ -794,7 +819,7 @@ class TestFindEntityClustersIntegration:
             if subset_relationships:
                 # Merged entities should be fewer than or equal to original
                 assert len(merged_entities) <= len(similar_entities)
-                
+
                 # Each merged entity should have proper structure
                 for merged in merged_entities:
                     assert "entity" in merged
@@ -807,7 +832,7 @@ class TestFindEntityClustersIntegration:
                 db.delete_collection(collection_name)
 
     def test_entity_clustering_merging_complex_hierarchy(
-        self, db: StandardDatabase  
+        self, db: StandardDatabase
     ) -> None:
         """Test entity clustering with merging in complex hierarchical scenarios."""
         collection_name = "test_merging_hierarchy"
@@ -840,7 +865,7 @@ class TestFindEntityClustersIntegration:
                     "traits": ["stark", "north", "honor"],
                     "text": "stark north honor",
                     "profession": "unknown",
-                    "detail_level": "minimal"
+                    "detail_level": "minimal",
                 },
                 {
                     "_key": "stark_basic",
@@ -854,10 +879,10 @@ class TestFindEntityClustersIntegration:
                     "traits": ["stark", "north", "honor", "duty", "family"],
                     "text": "stark north honor duty family",
                     "profession": "family_member",
-                    "detail_level": "basic"
+                    "detail_level": "basic",
                 },
                 {
-                    "_key": "stark_detailed", 
+                    "_key": "stark_detailed",
                     "name": "Lord",
                     "surname": "Stark",
                     "house": "Stark",
@@ -868,7 +893,7 @@ class TestFindEntityClustersIntegration:
                     "traits": ["stark", "north", "honor", "duty", "family", "lord"],
                     "text": "stark north honor duty family winterfell lord warden",
                     "profession": "lord",
-                    "detail_level": "detailed"
+                    "detail_level": "detailed",
                 },
                 {
                     "_key": "lannister_different",
@@ -882,8 +907,8 @@ class TestFindEntityClustersIntegration:
                     "traits": ["lannister", "gold", "power", "wealth"],
                     "text": "lannister gold power wealth different",
                     "profession": "noble",
-                    "detail_level": "independent"
-                }
+                    "detail_level": "independent",
+                },
             ]
 
             texts = [doc["text"] for doc in documents]
@@ -893,7 +918,11 @@ class TestFindEntityClustersIntegration:
             ]
             ids = [doc["_key"] for doc in documents]
 
-            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+            vector_store.add_texts(
+                texts=texts,  # type: ignore[arg-type]
+                metadatas=metadatas,
+                ids=ids,  # type: ignore[arg-type]
+            )
 
             # Test with low threshold to ensure hierarchy is detected
             result = vector_store.find_entity_clusters(
@@ -901,12 +930,12 @@ class TestFindEntityClustersIntegration:
                 k=5,
                 use_approx=False,
                 use_subset_relations=True,
-                merge_similar_entities=True
+                merge_similar_entities=True,
             )
 
             # Should handle complex hierarchy properly
             assert isinstance(result, dict)
-            
+
             subset_relationships = result["subset_relationships"]
             merged_entities = result["merged_entities"]
 
@@ -914,7 +943,7 @@ class TestFindEntityClustersIntegration:
             if subset_relationships and merged_entities:
                 # Should have consolidated the hierarchy
                 assert len(merged_entities) > 0
-                
+
                 # Verify that top-level entity contains merged content
                 for merged in merged_entities:
                     if merged["entity"] == "stark_detailed":
@@ -923,7 +952,7 @@ class TestFindEntityClustersIntegration:
                         assert len(merged_list) > 1
 
         finally:
-            # Cleanup  
+            # Cleanup
             if db.has_collection(collection_name):
                 db.delete_collection(collection_name)
 
@@ -947,7 +976,8 @@ class TestFindEntityClustersIntegration:
                 collection_name=collection_name,
             )
 
-            # Add similar documents that should cluster differently at different thresholds
+            # Add similar documents that should cluster differently at
+            # different thresholds
             documents = [
                 {
                     "_key": "stark_very_detailed",
@@ -958,10 +988,17 @@ class TestFindEntityClustersIntegration:
                     "alive": True,
                     "age": 16,
                     "titles": ["Three-Eyed Raven", "Lord of Winterfell"],
-                    "traits": ["stark", "family", "northern", "honor", "duty", "loyalty"],
+                    "traits": [
+                        "stark",
+                        "family",
+                        "northern",
+                        "honor",
+                        "duty",
+                        "loyalty",
+                    ],
                     "text": "stark family northern honor duty loyalty winterfell",
                     "profession": "lord",
-                    "similarity_type": "very_similar"
+                    "similarity_type": "very_similar",
                 },
                 {
                     "_key": "stark_detailed",
@@ -972,10 +1009,17 @@ class TestFindEntityClustersIntegration:
                     "alive": False,
                     "age": 11,
                     "titles": ["Prince"],
-                    "traits": ["stark", "family", "northern", "honor", "duty", "loyalty"],
+                    "traits": [
+                        "stark",
+                        "family",
+                        "northern",
+                        "honor",
+                        "duty",
+                        "loyalty",
+                    ],
                     "text": "stark family northern honor duty loyalty",
                     "profession": "prince",
-                    "similarity_type": "very_similar"
+                    "similarity_type": "very_similar",
                 },
                 {
                     "_key": "stark_basic",
@@ -989,7 +1033,7 @@ class TestFindEntityClustersIntegration:
                     "traits": ["stark", "northern", "honor"],
                     "text": "stark northern honor",
                     "profession": "ranger",
-                    "similarity_type": "somewhat_similar"
+                    "similarity_type": "somewhat_similar",
                 },
                 {
                     "_key": "lannister_different",
@@ -1003,8 +1047,8 @@ class TestFindEntityClustersIntegration:
                     "traits": ["lannister", "gold", "rich", "powerful"],
                     "text": "lannister gold rich powerful",
                     "profession": "lord",
-                    "similarity_type": "different"
-                }
+                    "similarity_type": "different",
+                },
             ]
 
             texts = [doc["text"] for doc in documents]
@@ -1014,7 +1058,11 @@ class TestFindEntityClustersIntegration:
             ]
             ids = [doc["_key"] for doc in documents]
 
-            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+            vector_store.add_texts(
+                texts=texts,  # type: ignore[arg-type]
+                metadatas=metadatas,
+                ids=ids,  # type: ignore[arg-type]
+            )
 
             # Test with different thresholds
             thresholds = [0.1, 0.5, 0.8]
@@ -1026,14 +1074,14 @@ class TestFindEntityClustersIntegration:
                     k=4,
                     use_approx=False,
                     use_subset_relations=True,
-                    merge_similar_entities=True
+                    merge_similar_entities=True,
                 )
-                
+
                 assert isinstance(result, dict)
                 results[threshold] = {
                     "similar_entities_count": len(result["similar_entities"]),
                     "subset_relationships_count": len(result["subset_relationships"]),
-                    "merged_entities_count": len(result["merged_entities"])
+                    "merged_entities_count": len(result["merged_entities"]),
                 }
 
             # Validate threshold behavior
@@ -1077,7 +1125,7 @@ class TestFindEntityClustersIntegration:
                 k=3,
                 use_approx=False,
                 use_subset_relations=True,
-                merge_similar_entities=True
+                merge_similar_entities=True,
             )
 
             # Should return empty structure
@@ -1098,7 +1146,7 @@ class TestFindEntityClustersIntegration:
             k=4,
             use_approx=False,
             use_subset_relations=True,
-            merge_similar_entities=False
+            merge_similar_entities=False,
         )
 
         # Test with merging
@@ -1107,7 +1155,7 @@ class TestFindEntityClustersIntegration:
             k=4,
             use_approx=False,
             use_subset_relations=True,
-            merge_similar_entities=True
+            merge_similar_entities=True,
         )
 
         # Both should return valid results
@@ -1124,8 +1172,13 @@ class TestFindEntityClustersIntegration:
         assert "merged_entities" in result_with_merge
 
         # Results should be consistent in similar_entities and subset_relationships
-        assert result_no_merge["similar_entities"] == result_with_merge["similar_entities"]
-        assert result_no_merge["subset_relationships"] == result_with_merge["subset_relationships"]
+        assert (
+            result_no_merge["similar_entities"] == result_with_merge["similar_entities"]
+        )
+        assert (
+            result_no_merge["subset_relationships"]
+            == result_with_merge["subset_relationships"]
+        )
 
     def test_entity_clustering_merging_real_world_scenario(
         self, db: StandardDatabase
@@ -1158,11 +1211,17 @@ class TestFindEntityClustersIntegration:
                     "region": "Essos",
                     "alive": False,
                     "age": 16,
-                    "titles": ["Queen of Dragons", "Breaker of Chains", "Mother of Dragons"],
+                    "titles": [
+                        "Queen of Dragons",
+                        "Breaker of Chains",
+                        "Mother of Dragons",
+                    ],
                     "traits": ["powerful", "determined", "fire", "dragons"],
-                    "text": "Daenerys Targaryen queen dragons fire breaker chains powerful",
+                    "text": (
+                        "Daenerys Targaryen queen dragons fire breaker chains powerful"
+                    ),
                     "profession": "queen",
-                    "detail_level": "full"
+                    "detail_level": "full",
                 },
                 {
                     "_key": "daenerys_partial",
@@ -1176,7 +1235,7 @@ class TestFindEntityClustersIntegration:
                     "traits": ["powerful", "fire", "dragons"],
                     "text": "Dany Targaryen queen dragons fire",
                     "profession": "queen",
-                    "detail_level": "partial"
+                    "detail_level": "partial",
                 },
                 {
                     "_key": "daenerys_minimal",
@@ -1190,7 +1249,7 @@ class TestFindEntityClustersIntegration:
                     "traits": ["dragons"],
                     "text": "Daenerys dragons",
                     "profession": "queen",
-                    "detail_level": "minimal"
+                    "detail_level": "minimal",
                 },
                 # Sansa - single representation
                 {
@@ -1205,9 +1264,9 @@ class TestFindEntityClustersIntegration:
                     "traits": ["smart", "political", "survivor"],
                     "text": "Sansa Stark lady political smart survivor north",
                     "profession": "lady",
-                    "detail_level": "single"
+                    "detail_level": "single",
                 },
-                # Sandor - duplicate representations  
+                # Sandor - duplicate representations
                 {
                     "_key": "sandor_long",
                     "name": "Sandor",
@@ -1220,7 +1279,7 @@ class TestFindEntityClustersIntegration:
                     "traits": ["fierce", "loyal", "scarred", "fighter"],
                     "text": "Sandor Clegane hound fierce loyal scarred fighter knight",
                     "profession": "knight",
-                    "detail_level": "long"
+                    "detail_level": "long",
                 },
                 {
                     "_key": "sandor_short",
@@ -1234,8 +1293,8 @@ class TestFindEntityClustersIntegration:
                     "traits": ["fierce", "fighter"],
                     "text": "Hound Clegane fierce fighter",
                     "profession": "knight",
-                    "detail_level": "short"
-                }
+                    "detail_level": "short",
+                },
             ]
 
             texts = [doc["text"] for doc in documents]
@@ -1245,7 +1304,11 @@ class TestFindEntityClustersIntegration:
             ]
             ids = [doc["_key"] for doc in documents]
 
-            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+            vector_store.add_texts(
+                texts=texts,  # type: ignore[arg-type]
+                metadatas=metadatas,
+                ids=ids,  # type: ignore[arg-type]
+            )
 
             # Test entity resolution with merging
             result = vector_store.find_entity_clusters(
@@ -1253,7 +1316,7 @@ class TestFindEntityClustersIntegration:
                 k=5,
                 use_approx=False,
                 use_subset_relations=True,
-                merge_similar_entities=True
+                merge_similar_entities=True,
             )
 
             # Should detect and merge similar entities
@@ -1273,7 +1336,7 @@ class TestFindEntityClustersIntegration:
             if subset_relationships:
                 # Should have detected subset relationships
                 assert len(subset_relationships) > 0
-                
+
                 # Should have merged some entities
                 assert len(merged_entities) > 0
                 assert len(merged_entities) <= len(similar_entities)
@@ -1321,9 +1384,11 @@ class TestFindEntityClustersIntegration:
                     "age": 16,
                     "titles": ["Bastard of Winterfell", "Lord Commander"],
                     "traits": ["honorable", "brave", "bastard"],
-                    "text": "Jon Snow bastard Stark honorable brave lord commander north",
+                    "text": (
+                        "Jon Snow bastard Stark honorable brave lord commander north"
+                    ),
                     "profession": "commander",
-                    "source": "database_1"
+                    "source": "database_1",
                 },
                 {
                     "_key": "jon_snow_002",
@@ -1335,9 +1400,11 @@ class TestFindEntityClustersIntegration:
                     "age": 16,
                     "titles": ["Bastard of Winterfell", "Lord Commander"],
                     "traits": ["honorable", "brave", "bastard"],
-                    "text": "Jon Snow bastard Stark honorable brave lord commander north",
+                    "text": (
+                        "Jon Snow bastard Stark honorable brave lord commander north"
+                    ),
                     "profession": "commander",
-                    "source": "database_2"
+                    "source": "database_2",
                 },
                 {
                     "_key": "arya_stark_001",
@@ -1349,9 +1416,11 @@ class TestFindEntityClustersIntegration:
                     "age": 11,
                     "titles": ["No One", "Faceless"],
                     "traits": ["skilled", "assassin", "young"],
-                    "text": "Arya Stark no one faceless assassin skilled young northern",
+                    "text": (
+                        "Arya Stark no one faceless assassin skilled young northern"
+                    ),
                     "profession": "assassin",
-                    "source": "database_1"
+                    "source": "database_1",
                 },
                 {
                     "_key": "arya_stark_002",
@@ -1363,9 +1432,11 @@ class TestFindEntityClustersIntegration:
                     "age": 11,
                     "titles": ["No One", "Faceless"],
                     "traits": ["skilled", "assassin", "young"],
-                    "text": "Arya Stark no one faceless assassin skilled young northern",
+                    "text": (
+                        "Arya Stark no one faceless assassin skilled young northern"
+                    ),
                     "profession": "assassin",
-                    "source": "database_2"
+                    "source": "database_2",
                 },
                 {
                     "_key": "unique_character",
@@ -1379,8 +1450,8 @@ class TestFindEntityClustersIntegration:
                     "traits": ["simple", "loyal", "strong"],
                     "text": "Hodor simple loyal strong giant servant",
                     "profession": "servant",
-                    "source": "single"
-                }
+                    "source": "single",
+                },
             ]
 
             texts = [doc["text"] for doc in documents]
@@ -1390,7 +1461,11 @@ class TestFindEntityClustersIntegration:
             ]
             ids = [doc["_key"] for doc in documents]
 
-            vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+            vector_store.add_texts(
+                texts=texts,  # type: ignore[arg-type]
+                metadatas=metadatas,
+                ids=ids,  # type: ignore[arg-type]
+            )
 
             # Test exact duplicate detection and merging
             result = vector_store.find_entity_clusters(
@@ -1398,7 +1473,7 @@ class TestFindEntityClustersIntegration:
                 k=5,
                 use_approx=False,
                 use_subset_relations=True,
-                merge_similar_entities=True
+                merge_similar_entities=True,
             )
 
             # Should detect exact duplicates
@@ -1418,7 +1493,7 @@ class TestFindEntityClustersIntegration:
             if subset_relationships:
                 # Should have detected duplicate relationships
                 assert len(subset_relationships) > 0
-                
+
                 # Should have merged exact duplicates
                 assert len(merged_entities) > 0
                 assert len(merged_entities) <= len(similar_entities)

@@ -1,3 +1,4 @@
+# type: ignore
 from typing import Any, Dict, List, cast
 from unittest.mock import MagicMock, patch
 
@@ -130,7 +131,7 @@ class TestFindEntityClusters:
         mock_cursor_2 = MagicMock()
         mock_cursor_2.__iter__ = lambda self: iter(mock_subsets)
 
-        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore
+        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore[attr-defined]
 
         result = mock_vector_store.find_entity_clusters(use_subset_relations=True)
 
@@ -173,7 +174,7 @@ class TestFindEntityClusters:
         mock_cursor_2 = MagicMock()
         mock_cursor_2.__iter__ = lambda self: iter([])
 
-        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore
+        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore[attr-defined]
 
         result = mock_vector_store.find_entity_clusters(use_subset_relations=True)
 
@@ -197,7 +198,7 @@ class TestFindEntityClusters:
         mock_vector_store.find_entity_clusters(use_approx=True)
 
         # Verify query was built with Euclidean distance function (first and only call)
-        call_args = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore
+        call_args = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore[attr-defined]
         assert "APPROX_NEAR_L2" in call_args
         assert "ASC" in call_args  # Euclidean uses ascending sort
 
@@ -214,7 +215,7 @@ class TestFindEntityClusters:
         mock_vector_store.find_entity_clusters(use_approx=True)
 
         # Verify query was built with Cosine distance function (first and only call)
-        call_args = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore
+        call_args = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore[attr-defined]
         assert "APPROX_NEAR_COSINE" in call_args
         assert "DESC" in call_args  # Cosine uses descending sort
 
@@ -231,7 +232,7 @@ class TestFindEntityClusters:
         mock_vector_store.find_entity_clusters(use_approx=False)
 
         # Verify query was built with exact Cosine similarity function
-        call_args = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore
+        call_args = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore[attr-defined]
         assert "COSINE_SIMILARITY" in call_args
         assert "DESC" in call_args
 
@@ -250,7 +251,7 @@ class TestFindEntityClusters:
         mock_vector_store.find_entity_clusters(use_approx=False)
 
         # Verify query was built with exact L2 distance function
-        call_args = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore
+        call_args = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore[attr-defined]
         assert "L2_DISTANCE" in call_args
         assert "ASC" in call_args
 
@@ -282,7 +283,7 @@ class TestFindEntityClusters:
     ) -> None:
         """Test that vector index is created when needed for approx search."""
         # Mock no existing vector index
-        mock_vector_store.collection.indexes.return_value = []  # type: ignore
+        mock_vector_store.collection.indexes.return_value = []  # type: ignore[attr-defined]
 
         with patch.object(
             mock_vector_store, "retrieve_vector_index", return_value=None
@@ -313,7 +314,7 @@ class TestFindEntityClusters:
         mock_vector_store.find_entity_clusters()
 
         # Get the AQL query that was executed (first and only call)
-        call_args = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore
+        call_args = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore[attr-defined]
 
         # Verify query structure
         assert "FOR doc1 IN @@collection" in call_args
@@ -332,12 +333,12 @@ class TestFindEntityClusters:
         mock_cursor_2 = MagicMock()
         mock_cursor_2.__iter__ = lambda self: iter(mock_subsets)
 
-        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore
+        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore[attr-defined]
 
         mock_vector_store.find_entity_clusters(use_subset_relations=True)
 
         # Get the subset query (second call)
-        subset_query = mock_vector_store.db.aql.execute.call_args_list[1][0][0]  # type: ignore
+        subset_query = mock_vector_store.db.aql.execute.call_args_list[1][0][0]  # type: ignore[attr-defined]
 
         # Verify subset query structure
         assert "FOR group1 IN @results" in subset_query
@@ -383,7 +384,7 @@ class TestFindEntityClusters:
 
         mock_vector_store.find_entity_clusters(use_approx=True)
 
-        query = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore
+        query = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore[attr-defined]
 
         # With approx search, filter should be after LIMIT
         lines = query.strip().split("\n")
@@ -414,7 +415,7 @@ class TestFindEntityClusters:
 
         mock_vector_store.find_entity_clusters(use_approx=False)
 
-        query = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore
+        query = mock_vector_store.db.aql.execute.call_args[0][0]  # type: ignore[attr-defined]
 
         # Without approx search, filter should be before LIMIT
         lines = query.strip().split("\n")
@@ -466,7 +467,7 @@ class TestFindEntityClusters:
         mock_cursor_2 = MagicMock()
         mock_cursor_2.__iter__ = lambda self: iter(mock_subsets)
 
-        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore
+        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore[attr-defined]
 
         result = mock_vector_store.find_entity_clusters(use_subset_relations=True)
 
@@ -510,9 +511,10 @@ class TestFindEntityClusters:
     def test_merge_entities_warning_when_subset_relations_false(
         self, mock_vector_store: ArangoVector
     ) -> None:
-        """Test warning when merge_similar_entities=True but use_subset_relations=False."""
+        """Test warning when merge_similar_entities=True but
+        use_subset_relations=False."""
         import warnings
-        
+
         mock_clusters = [{"entity": "doc1", "similar": ["doc2"]}]
         mock_cursor = MagicMock()
         mock_cursor.__iter__ = lambda self: iter(mock_clusters)
@@ -521,17 +523,17 @@ class TestFindEntityClusters:
         # Capture warnings
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            
+
             result = mock_vector_store.find_entity_clusters(
-                use_subset_relations=False, 
-                merge_similar_entities=True
+                use_subset_relations=False, merge_similar_entities=True
             )
-            
+
             # Should return basic clusters and issue warning
             assert result == mock_clusters
             assert len(w) == 1
-            expected_msg = ("merge_similar_entities=True requires "
-                           "use_subset_relations=True")
+            expected_msg = (
+                "merge_similar_entities=True requires use_subset_relations=True"
+            )
             assert expected_msg in str(w[0].message)
             assert issubclass(w[0].category, UserWarning)
 
@@ -545,9 +547,7 @@ class TestFindEntityClusters:
             {"entity": "doc6", "similar": ["doc7"]},
         ]
 
-        mock_subsets = [
-            {"subsetGroup": "doc1", "supersetGroup": "doc4"}
-        ]
+        mock_subsets = [{"subsetGroup": "doc1", "supersetGroup": "doc4"}]
 
         mock_merged = [
             {"entity": "doc4", "merged_entities": ["doc1", "doc2", "doc3", "doc5"]},
@@ -563,14 +563,13 @@ class TestFindEntityClusters:
         mock_cursor_3.__iter__ = lambda self: iter(mock_merged)
 
         mock_vector_store.db.aql.execute.side_effect = [
-            mock_cursor_1, 
-            mock_cursor_2, 
-            mock_cursor_3
-        ]  # type: ignore
+            mock_cursor_1,
+            mock_cursor_2,
+            mock_cursor_3,
+        ]  # type: ignore[attr-defined]
 
         result = mock_vector_store.find_entity_clusters(
-            use_subset_relations=True, 
-            merge_similar_entities=True
+            use_subset_relations=True, merge_similar_entities=True
         )
 
         # Should return dictionary with all three keys
@@ -579,7 +578,7 @@ class TestFindEntityClusters:
         assert "similar_entities" in result_dict
         assert "subset_relationships" in result_dict
         assert "merged_entities" in result_dict
-        
+
         assert result_dict["similar_entities"] == mock_clusters
         assert result_dict["subset_relationships"] == mock_subsets
         assert result_dict["merged_entities"] == mock_merged
@@ -602,11 +601,10 @@ class TestFindEntityClusters:
         mock_cursor_2 = MagicMock()
         mock_cursor_2.__iter__ = lambda self: iter([])
 
-        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore
+        mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore[attr-defined]
 
         result = mock_vector_store.find_entity_clusters(
-            use_subset_relations=True, 
-            merge_similar_entities=True
+            use_subset_relations=True, merge_similar_entities=True
         )
 
         # Should return dictionary indicating no merging was performed
@@ -615,7 +613,7 @@ class TestFindEntityClusters:
         assert "similar_entities" in result_dict
         assert "subset_relationships" in result_dict
         assert "merged_entities" in result_dict
-        
+
         assert result_dict["similar_entities"] == mock_clusters
         assert result_dict["subset_relationships"] == []
         assert result_dict["merged_entities"] == []  # Empty - no merging occurred
@@ -632,8 +630,7 @@ class TestFindEntityClusters:
         mock_vector_store.db.aql.execute.return_value = mock_cursor  # type: ignore
 
         result = mock_vector_store.find_entity_clusters(
-            use_subset_relations=True, 
-            merge_similar_entities=True
+            use_subset_relations=True, merge_similar_entities=True
         )
 
         # Should return empty structure
@@ -662,18 +659,17 @@ class TestFindEntityClusters:
         mock_cursor_3.__iter__ = lambda self: iter(mock_merged)
 
         mock_vector_store.db.aql.execute.side_effect = [
-            mock_cursor_1, 
-            mock_cursor_2, 
-            mock_cursor_3
-        ]  # type: ignore
+            mock_cursor_1,
+            mock_cursor_2,
+            mock_cursor_3,
+        ]  # type: ignore[attr-defined]
 
         mock_vector_store.find_entity_clusters(
-            use_subset_relations=True, 
-            merge_similar_entities=True
+            use_subset_relations=True, merge_similar_entities=True
         )
 
         # Get the merge query (third call)
-        merge_query_call = mock_vector_store.db.aql.execute.call_args_list[2]  
+        merge_query_call = mock_vector_store.db.aql.execute.call_args_list[2]  # type: ignore[attr-defined]
         merge_query = merge_query_call[0][0]
 
         # Verify merge query structure
@@ -682,8 +678,9 @@ class TestFindEntityClusters:
         assert "FILTER NOT isSubset" in merge_query
         assert "LET entitiesToMerge = (" in merge_query
         assert "UNION_DISTINCT(group.similar, entitiesToMerge)" in merge_query
-        expected_return = ("RETURN { entity: group.entity, "
-                          "merged_entities: mergedSimilar }")
+        expected_return = (
+            "RETURN { entity: group.entity, merged_entities: mergedSimilar }"
+        )
         assert expected_return in merge_query
 
         # Verify bind variables for merge query
@@ -723,29 +720,29 @@ class TestFindEntityClusters:
         mock_cursor_3.__iter__ = lambda self: iter(mock_merged)
 
         mock_vector_store.db.aql.execute.side_effect = [
-            mock_cursor_1, 
-            mock_cursor_2, 
-            mock_cursor_3
-        ]  # type: ignore
+            mock_cursor_1,
+            mock_cursor_2,
+            mock_cursor_3,
+        ]  # type: ignore[attr-defined]
 
         result = mock_vector_store.find_entity_clusters(
-            use_subset_relations=True, 
-            merge_similar_entities=True
+            use_subset_relations=True, merge_similar_entities=True
         )
 
         result_dict = cast(Dict[str, Any], result)
-        
+
         # Verify original data is preserved
         assert result_dict["similar_entities"] == mock_clusters
         assert result_dict["subset_relationships"] == mock_subsets
-        
+
         # Verify merging result
         assert result_dict["merged_entities"] == mock_merged
         assert len(result_dict["merged_entities"]) == 2  # Only non-subset entities
-        
+
         # Verify E (top-level entity) contains all merged entities
         e_cluster = next(
-            cluster for cluster in result_dict["merged_entities"] 
+            cluster
+            for cluster in result_dict["merged_entities"]
             if cluster["entity"] == "E"
         )
         assert "A" in e_cluster["merged_entities"]  # Merged from A
