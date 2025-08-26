@@ -48,19 +48,31 @@ class ArangoGraphQAChain(Chain):
     """
 
     graph: ArangoGraph = Field(exclude=True)
+    """The ArangoGraph instance to use for the chain."""
     embedding: Optional[Embeddings] = Field(default=None, exclude=True)
+    """Embedding model to use for the chain."""
     query_cache_collection_name: str = Field(default="Queries")
+    """Name of the collection for storing queries."""
     aql_generation_chain: Runnable[Dict[str, Any], Any]
+    """Chain to use for AQL generation."""
     aql_fix_chain: Runnable[Dict[str, Any], Any]
+    """Chain to use for AQL fix."""
     qa_chain: Runnable[Dict[str, Any], Any]
+    """Chain to use for QA."""
     input_key: str = "query"  #: :meta private:
+    """Key to use for the input."""
     output_key: str = "result"  #: :meta private:
+    """Key to use for the output."""
     use_query_cache: bool = Field(default=False)
+    """Whether to use the query cache."""
     query_cache_similarity_threshold: float = Field(default=0.80)
+    """Similarity threshold for matching cached queries."""
     include_history: bool = Field(default=False)
+    """Whether to include the chat history in the prompt."""
     max_history_messages: int = Field(default=10)
+    """Maximum number of messages to include in the chat history."""
     chat_history_store: Optional[ArangoChatMessageHistory] = Field(default=None)
-
+    """ArangoChatMessageHistory instance to store chat history."""
     top_k: int = 10
     """Number of results to return from the query"""
     aql_examples: str = ""
@@ -141,7 +153,7 @@ class ArangoGraphQAChain(Chain):
     ) -> ArangoGraphQAChain:
         """Initialize from LLM.
 
-        :param llm: The language model to use.
+        :param llm: The large language model to use.
         :type llm: BaseLanguageModel
         :param embedding: The embedding model to use.
         :type embedding: Embeddings
@@ -151,8 +163,8 @@ class ArangoGraphQAChain(Chain):
         :param query_cache_similarity_threshold: The similarity threshold
             to consider a query as a match in the cache.
         :type query_cache_similarity_threshold: float
-        :param query_cache_collection_name: The name of the collection
-            to use for the query cache.
+        :param query_cache_collection_name: Name of the collection for
+            storing queries.
         :type query_cache_collection_name: str
         :param include_history: If True, includes recent chat history in the prompt
             to provide context for query generation.
@@ -160,7 +172,8 @@ class ArangoGraphQAChain(Chain):
         :param max_history_messages: The maximum number of messages to
             include in the chat history.
         :type max_history_messages: int
-        :param chat_history_store: The chat history store to use.
+        :param chat_history_store: ArangoChatMessageHistory instance to
+            store chat history.
         :type chat_history_store: ArangoChatMessageHistory
         :param qa_prompt: The prompt to use for the QA chain.
         :type qa_prompt: BasePromptTemplate
