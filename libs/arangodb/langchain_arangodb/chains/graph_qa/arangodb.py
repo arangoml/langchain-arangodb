@@ -427,22 +427,11 @@ class ArangoGraphQAChain(Chain):
         if max_history_messages <= 0:
             raise ValueError("max_history_messages must be greater than 0")
 
-        if self.chat_history_store is not None:
-            collection_name = self.chat_history_store._collection_name  # type: ignore
-
         chat_history = []
-        if include_history:
-            aql = f"""
-                FOR doc IN {collection_name}
-                SORT doc._key DESC
-                LIMIT @n
-                RETURN UNSET(doc, ["_id", "_key", "_rev", "session_id"])
-                """
-            cursor = self.graph.db.aql.execute(
-                aql,
-                bind_vars={"n": self.max_history_messages},  # type: ignore
+        if include_history and self.chat_history_store is not None:
+            chat_history.extend(
+                self.chat_history_store.get_messages(n_messages=max_history_messages)
             )
-            chat_history = [d for d in cursor][::-1]  # type: ignore
 
         ######################
         # Check Query Cache #

@@ -1,4 +1,4 @@
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 
 from arango.database import StandardDatabase
 from langchain_core.chat_history import BaseChatMessageHistory
@@ -138,6 +138,25 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
             " Use the 'add_messages' instead."
         )
 
+    def get_messages(self, role: Optional[str] = None, n_messages: int = 10) -> list:
+        """Retrieve messages from ArangoDB, optionally filtered by role."""
+        query = """
+            FOR doc IN @@col
+                FILTER doc.session_id == @session_id
+                FILTER @role == null || doc.role == @role
+                SORT doc._key DESC
+                LIMIT @n
+                RETURN UNSET(doc, ["_id", "_key", "_rev", "session_id"])
+        """
+        bind_vars = {
+            "@col": self._collection_name,
+            "session_id": self._session_id,
+            "role": role,
+            "n": n_messages,
+        }
+        cursor = self._db.aql.execute(query, bind_vars=bind_vars)  # type: ignore
+        return [d for d in cursor][::-1]  # type: ignore
+
     def add_message(self, message: BaseMessage) -> None:
         """Append the message to the record in ArangoDB.
 
@@ -178,10 +197,11 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
         self._db.collection(self._collection_name).insert(
             {
                 "role": "qa",
+                "session_id": self._session_id,
                 "user_input": user_input,
                 "aql_query": aql_query,
                 "result": result,
-            },
+            }
         )
 
     def clear(self) -> None:

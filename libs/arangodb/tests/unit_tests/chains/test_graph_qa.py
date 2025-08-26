@@ -662,20 +662,22 @@ class TestArangoGraphQAChain:
             result="2",
         )
 
-        fake_graph_store.db.aql.execute.return_value = iter(
-            [
-                {
-                    "user_input": "What is 1+1?",
-                    "aql_query": "RETURN 1+1",
-                    "result": "2",
-                },
-                {
-                    "user_input": "What is 2+2?",
-                    "aql_query": "RETURN 2+2",
-                    "result": "4",
-                },
-            ]
-        )
+        chat_history_store.get_messages.return_value = [
+            {
+                "user_input": "What is 1+1?",
+                "aql_query": "RETURN 1+1",
+                "result": "2",
+                "role": "qa",
+                "session_id": "test",
+            },
+            {
+                "user_input": "What is 2+2?",
+                "aql_query": "RETURN 2+2",
+                "result": "4",
+                "role": "qa",
+                "session_id": "test",
+            },
+        ]
 
         # Mock LLM chains
         mock_chains[  # type: ignore
