@@ -7,4 +7,3 @@ __pycache__
 .venv*
 libs/arangodb/doc/_build
 .DS_Store
-.coverage
