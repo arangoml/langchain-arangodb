@@ -1300,9 +1300,9 @@ class ArangoVector(VectorStore):
 
                 FOR item IN scored
                     FILTER item.score == maxScore
-                    LET doc = KEEP(item.doc, {return_fields_list})
+                    LET data = KEEP(item.doc, {return_fields_list})
                     LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
-                    RETURN {{doc, score: item.score, metadata}}
+                    RETURN {{data, score: item.score, metadata}}
             """
 
         bind_vars = {
