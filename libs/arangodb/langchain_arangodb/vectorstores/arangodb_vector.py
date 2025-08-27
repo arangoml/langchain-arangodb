@@ -138,8 +138,11 @@ class ArangoVector(VectorStore):
         if distance_strategy not in [
             DistanceStrategy.COSINE,
             DistanceStrategy.EUCLIDEAN_DISTANCE,
+            DistanceStrategy.JACCARD,
+            DistanceStrategy.DOT_PRODUCT,
+            DistanceStrategy.MAX_INNER_PRODUCT,
         ]:
-            m = "distance_strategy must be 'COSINE' or 'EUCLIDEAN_DISTANCE'"
+            m = "distance_strategy must be one of: 'COSINE', 'EUCLIDEAN_DISTANCE', 'JACCARD', 'DOT_PRODUCT', 'MAX_INNER_PRODUCT'"
             raise ValueError(m)
 
         self.embedding = embedding
@@ -1289,6 +1292,8 @@ class ArangoVector(VectorStore):
                             FOR i IN 0..LENGTH(doc.embedding)-1
                                 RETURN doc.embedding[i] * @embedding[i]
                         )
+                        SORT score {sort_order}
+                        LIMIT {k}
                         RETURN {{doc, score}}
                 )
                 LET maxScore= MAX(scored[*].score)
