@@ -1232,6 +1232,12 @@ class ArangoVector(VectorStore):
         elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
             score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
             sort_order = "ASC"
+        elif self._distance_strategy in [DistanceStrategy.JACCARD, DistanceStrategy.MAX_INNER_PRODUCT, DistanceStrategy.DOT_PRODUCT]:
+            if use_approx:
+                raise ValueError(f"Unsupported metric: {self._distance_strategy} is not supported for approximate search")
+            if self._distance_strategy == DistanceStrategy.JACCARD:
+                score_func = "JACCARD"
+            sort_order = "DESC"
         else:
             raise ValueError(f"Unsupported metric: {self._distance_strategy}")
 
@@ -1246,17 +1252,53 @@ class ArangoVector(VectorStore):
         return_fields.update({"_key", self.text_field})
         return_fields_list = list(return_fields)
 
-        aql_query = f"""
-            FOR doc IN @@collection
-                {filter_clause if not use_approx else ""}
-                LET score = {score_func}(doc.{self.embedding_field}, @embedding)
-                SORT score {sort_order}
-                LIMIT {k}
-                {filter_clause if use_approx else ""}
-                LET data = KEEP(doc, {return_fields_list})
-                LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
-                RETURN {{data, score, metadata}}
-        """
+        if self._distance_strategy in [DistanceStrategy.JACCARD, DistanceStrategy.COSINE, DistanceStrategy.EUCLIDEAN_DISTANCE]:
+            aql_query = f"""
+                FOR doc IN @@collection
+                    {filter_clause if not use_approx else ""}
+                    LET score = {score_func}(doc.{self.embedding_field}, @embedding)
+                    SORT score {sort_order}
+                    LIMIT {k}
+                    {filter_clause if use_approx else ""}
+                    LET data = KEEP(doc, {return_fields_list})
+                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
+                    RETURN {{data, score, metadata}}
+            """
+        
+        elif self._distance_strategy == DistanceStrategy.DOT_PRODUCT:
+            aql_query = f"""
+                FOR doc IN @@collection
+                    {filter_clause}
+                    LET score = SUM(
+                        FOR i IN 0..LENGTH(doc.embedding)-1
+                            RETURN doc.embedding[i] * @embedding[i]
+                    )
+                    SORT score {sort_order}
+                    LIMIT {k}
+                    LET data = KEEP(doc, {return_fields_list})
+                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
+                    RETURN {{data, score, metadata}}
+            """
+        
+        elif self._distance_strategy == DistanceStrategy.MAX_INNER_PRODUCT:
+            aql_query = f"""
+                LET scored = (
+                    FOR doc IN @@collection
+                        {filter_clause}
+                        LET score = SUM(
+                            FOR i IN 0..LENGTH(doc.embedding)-1
+                                RETURN doc.embedding[i] * @embedding[i]
+                        )
+                        RETURN {{doc, score}}
+                )
+                LET maxScore= MAX(scored[*].score)
+
+                FOR item IN scored
+                    FILTER item.score == maxScore
+                    LET doc = KEEP(item.doc, {return_fields_list})
+                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
+                    RETURN {{doc, score: item.score, metadata}}
+            """
 
         bind_vars = {
             "@collection": self.collection_name,
