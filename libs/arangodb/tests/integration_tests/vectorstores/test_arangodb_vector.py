@@ -1523,3 +1523,104 @@ def test_arangovector_max_inner_product_distance(
     results_with_scores = vector_store.similarity_search_with_score(query, k=1, use_approx=False)
     assert len(results_with_scores) == 1
     assert isinstance(results_with_scores[0][1], (int, float))
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_arangovector_jaccard_hybrid_search(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test JACCARD hybrid search."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+    
+    # Clean up any leftover views from previous runs
+    try:
+        db.delete_view("keyword_index_jaccard_hybrid")
+    except:
+        pass
+
+    vector_store = ArangoVector.from_texts(
+        texts=["foo document", "bar document"],
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_collection",
+        keyword_index_name="keyword_index_jaccard_hybrid",
+        distance_strategy=DistanceStrategy.JACCARD,
+        search_type=SearchType.HYBRID,
+        insert_text=True,
+    )
+
+    results = vector_store.similarity_search("foo", k=2, search_type=SearchType.HYBRID, use_approx=False)
+    assert len(results) >= 1
+    assert results[0].page_content == "foo document"
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_arangovector_dot_product_hybrid_search(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test DOT_PRODUCT hybrid search."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+    
+    # Clean up any leftover views from previous runs
+    try:
+        db.delete_view("keyword_index_dot_hybrid")
+    except:
+        pass
+
+    vector_store = ArangoVector.from_texts(
+        texts=["foo document", "bar document"],
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_collection",
+        keyword_index_name="keyword_index_dot_hybrid",
+        distance_strategy=DistanceStrategy.DOT_PRODUCT,
+        search_type=SearchType.HYBRID,
+        insert_text=True,
+    )
+
+    results = vector_store.similarity_search("foo", k=2, search_type=SearchType.HYBRID, use_approx=False)
+    assert len(results) >= 1
+    assert results[0].page_content == "foo document"
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_arangovector_max_inner_product_hybrid_search(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test MAX_INNER_PRODUCT hybrid search."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+    
+    # Clean up any leftover views from previous runs
+    try:
+        db.delete_view("keyword_index_max_hybrid")
+    except:
+        pass
+
+    vector_store = ArangoVector.from_texts(
+        texts=["foo document", "bar document"],
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_collection",
+        keyword_index_name="keyword_index_max_hybrid",
+        distance_strategy=DistanceStrategy.MAX_INNER_PRODUCT,
+        search_type=SearchType.HYBRID,
+        insert_text=True,
+    )
+
+    results = vector_store.similarity_search("foo", k=2, search_type=SearchType.HYBRID, use_approx=False)
+    assert len(results) >= 1
+    assert results[0].page_content == "foo document"
