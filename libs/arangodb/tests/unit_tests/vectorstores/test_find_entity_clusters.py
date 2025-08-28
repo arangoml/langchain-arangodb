@@ -136,11 +136,14 @@ class TestFindEntityClusters:
             {"entity": "doc3", "similar": ["doc4"]},
         ]
 
-        # First call returns clusters, second call returns empty subsets
+        # First call returns clusters
         mock_cursor_1 = MagicMock()
         mock_cursor_1.__iter__ = lambda self: iter(mock_clusters)
+
+        # Second call returns combined result (empty subsets and merged entities)
+        mock_combined_result = {"subset_relationships": [], "merged_entities": []}
         mock_cursor_2 = MagicMock()
-        mock_cursor_2.__iter__ = lambda self: iter([])
+        mock_cursor_2.__iter__ = lambda self: iter([mock_combined_result])
 
         mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore[attr-defined]
 
@@ -189,8 +192,14 @@ class TestFindEntityClusters:
 
         mock_cursor_1 = MagicMock()
         mock_cursor_1.__iter__ = lambda self: iter(mock_clusters)
+
+        # Second call returns combined result
+        mock_combined_result = {
+            "subset_relationships": mock_subsets,
+            "merged_entities": [],
+        }
         mock_cursor_2 = MagicMock()
-        mock_cursor_2.__iter__ = lambda self: iter(mock_subsets)
+        mock_cursor_2.__iter__ = lambda self: iter([mock_combined_result])
 
         mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore[attr-defined]
 
@@ -256,11 +265,14 @@ class TestFindEntityClusters:
             {"entity": "doc3", "similar": ["doc4"]},
         ]
 
-        # First call returns clusters, second call returns empty subsets
+        # First call returns clusters
         mock_cursor_1 = MagicMock()
         mock_cursor_1.__iter__ = lambda self: iter(mock_clusters)
+
+        # Second call returns combined result with empty subsets and merged entities
+        mock_combined_result = {"subset_relationships": [], "merged_entities": []}
         mock_cursor_2 = MagicMock()
-        mock_cursor_2.__iter__ = lambda self: iter([])
+        mock_cursor_2.__iter__ = lambda self: iter([mock_combined_result])
 
         mock_vector_store.db.aql.execute.side_effect = [mock_cursor_1, mock_cursor_2]  # type: ignore[attr-defined]
 
@@ -306,15 +318,18 @@ class TestFindEntityClusters:
 
         mock_cursor_1 = MagicMock()
         mock_cursor_1.__iter__ = lambda self: iter(mock_clusters)
+
+        # Second call returns combined result
+        mock_combined_result = {
+            "subset_relationships": mock_subsets,
+            "merged_entities": mock_merged,
+        }
         mock_cursor_2 = MagicMock()
-        mock_cursor_2.__iter__ = lambda self: iter(mock_subsets)
-        mock_cursor_3 = MagicMock()
-        mock_cursor_3.__iter__ = lambda self: iter(mock_merged)
+        mock_cursor_2.__iter__ = lambda self: iter([mock_combined_result])
 
         mock_vector_store.db.aql.execute.side_effect = [
             mock_cursor_1,
             mock_cursor_2,
-            mock_cursor_3,
         ]  # type: ignore[attr-defined]
 
         result = mock_vector_store.find_entity_clusters(

@@ -1489,78 +1489,74 @@ class ArangoVector(VectorStore):
             return results
 
         # SUBSET RELATIONS - only execute when use_subset_relations=True
-        subset_query = """
+        combined_query = """
+            // Step 1: Calculate subset relationships
+            LET subsetResults = (
                 FOR group1 IN @results
                     FOR group2 IN @results
                         FILTER group1.entity != group2.entity
                         AND LENGTH(group1.similar) < LENGTH(group2.similar)
-                        // Check if group1 is a subset of group2
+                        
                         LET group1Keys = group1.similar
                         LET group2Keys = group2.similar
                         LET missingKeys = MINUS(group1Keys, group2Keys)
+                        
                         FILTER LENGTH(missingKeys) == 0
                         RETURN {
                             subsetGroup: group1.entity,
                             supersetGroup: group2.entity
                         }
-            """
-        bind_vars_subset: MutableMapping[str, Any] = {
-            "results": results,
-        }
-        subsets_query = self.db.aql.execute(
-            subset_query, bind_vars=bind_vars_subset, stream=True
-        )
-        subsets = list(cast(Iterable[Dict[str, Any]], subsets_query))
-
-        if use_subset_relations and not merge_similar_entities:
-            return {"similar_entities": results, "subset_relationships": subsets}
-
-        # MERGE ENTITIES - only execute when merge_similar_entities=True
-        # and use_subset_relations=True
-        if merge_similar_entities and use_subset_relations:
-            if not subsets:
-                # No subset relationships found, no merging possible
-                return {
-                    "similar_entities": results,
-                    "subset_relationships": subsets,
-                    "merged_entities": [],
-                }
-
-            # Perform merging when subset relationships exist
-            merge_query = """
+            )
+            
+            // Step 2: Calculate merged entities ONLY if merge_similar_entities=true
+            LET mergedResults = @merge_similar_entities && LENGTH(subsetResults) > 0 ? (
                 FOR group IN @results
                     LET isSubset = LENGTH(
-                        FOR rel IN @subsets 
+                        FOR rel IN subsetResults 
                         FILTER rel.subsetGroup == group.entity 
                         RETURN 1
                     ) > 0
+                    
                     FILTER NOT isSubset
+                    
                     LET entitiesToMerge = (
-                        FOR rel IN @subsets
+                        FOR rel IN subsetResults
                             FILTER rel.supersetGroup == group.entity
-                            LET subsetGroup = FIRST(
-                                FOR sg IN @results 
-                                FILTER sg.entity == rel.subsetGroup 
-                                RETURN sg
-                            )
-                            RETURN subsetGroup.entity
+                            RETURN rel.subsetGroup
                     )
+                    
                     LET mergedSimilar = UNION_DISTINCT(group.similar, entitiesToMerge)
+                    
                     RETURN { entity: group.entity, merged_entities: mergedSimilar }
-            """
-
-            bind_vars_merge: MutableMapping[str, Any] = {
-                "results": results,
-                "subsets": subsets,
+            ) : []
+            
+            // Return results based on what was requested
+            RETURN {
+                subset_relationships: subsetResults,
+                merged_entities: mergedResults
             }
+        """
 
-            merge_query_result = self.db.aql.execute(
-                merge_query, bind_vars=bind_vars_merge, stream=True
-            )
-            merged_results = list(cast(Iterable[Dict[str, Any]], merge_query_result))
+        bind_vars_combined: MutableMapping[str, Any] = {
+            "results": results,
+            "merge_similar_entities": merge_similar_entities,
+        }
 
+        # Execute combined query
+        combined_result = self.db.aql.execute(
+            combined_query, bind_vars=bind_vars_combined, stream=True
+        )
+        merged_result = list(cast(Iterable[Dict[str, Any]], combined_result))[0]
+
+        # Return results based on merge_similar_entities parameter
+        if merge_similar_entities:
             return {
                 "similar_entities": results,
-                "subset_relationships": subsets,
-                "merged_entities": merged_results,
+                "subset_relationships": merged_result["subset_relationships"],
+                "merged_entities": merged_result["merged_entities"],
+            }
+        else:
+            return {
+                "similar_entities": results,
+                "subset_relationships": merged_result["subset_relationships"],
             }

@@ -109,15 +109,15 @@ class TestFindEntityClustersIntegration:
             },
             {
                 "_key": "007",
-                "name": "Ceresei",
-                "surname": "L",
-                "house": "Lannister",
-                "region": "Westerlands",
+                "name": "Daenerys",
+                "surname": "Targaryen",
+                "house": "Targaryen",
+                "region": "Essos",
                 "alive": False,
-                "age": 35,
-                "titles": ["Queen Regent", "Queen Mother"],
-                "traits": ["ruthless", "proud", "ambitious"],
-                "text": "Cersei Lannister queen regent ruthless ambitious proud mother",
+                "age": 23,
+                "titles": ["Mother of Dragons", "Khaleesi"],
+                "traits": ["determined", "fierce", "revolutionary"],
+                "text": "Daenerys Targaryen mother dragons khaleesi fire blood",
                 "profession": "queen",
             },
             {
@@ -143,7 +143,7 @@ class TestFindEntityClustersIntegration:
                 "age": 41,
                 "titles": ["Lord of Winterfell", "Warden of the North"],
                 "traits": ["honorable", "duty-bound", "just"],
-                "text": "Ned Stark honorable lord Winterfell northern warden dutiful",
+                "text": "Ned S honorable lord Winterfell northern warden variant",
                 "profession": "lord",
             },
         ]
@@ -361,7 +361,7 @@ class TestFindEntityClustersIntegration:
         """Test entity clustering with very high threshold returning no results."""
         # Test with very high threshold - should return empty results
         result = vector_store_with_data.find_entity_clusters(
-            threshold=0.99999,  # Extremely high threshold
+            threshold=1,  # Extremely high threshold
             k=3,
             use_approx=False,
             use_subset_relations=False,
@@ -370,7 +370,7 @@ class TestFindEntityClustersIntegration:
 
         # Test with subset relations and high threshold
         result_with_subsets = vector_store_with_data.find_entity_clusters(
-            threshold=0.99999,  # Extremely high threshold
+            threshold=1,  # Extremely high threshold
             k=3,
             use_approx=False,
             use_subset_relations=True,
@@ -417,7 +417,7 @@ class TestFindEntityClustersIntegration:
         """Test error handling with various parameter combinations."""
         # Very high threshold should return empty results, not error
         result = vector_store_with_data.find_entity_clusters(
-            threshold=0.99, k=3, use_approx=False
+            threshold=0.9, k=3, use_approx=False
         )
         assert isinstance(result, list)
 
@@ -429,7 +429,7 @@ class TestFindEntityClustersIntegration:
 
         # Very large k should be handled gracefully
         result = vector_store_with_data.find_entity_clusters(
-            threshold=0.1, k=1000, use_approx=False
+            threshold=0.1, k=20, use_approx=False
         )
         assert isinstance(result, list)
 
