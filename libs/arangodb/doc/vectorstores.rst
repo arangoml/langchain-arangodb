@@ -323,6 +323,210 @@ Hybrid search combines vector similarity with traditional keyword search using R
         vector_weight=1.0,
         keyword_weight=1.0,
     )
+Entity Resolution
+------------------
+
+The ArangoDB vectorstore provides entity resolution capabilities through the ``find_entity_clusters`` method. 
+It compares documents within the collection to each other and returns entities grouped with their most similar documents. Each entity is returned with a list of the top k most similar entities based on the chosen similarity function.
+
+.. code-block:: python
+
+    # Default entity clustering
+    clusters = vectorstore.find_entity_clusters(
+        threshold=0.8,      # Minimum similarity score
+        k=4,               # Number of similar documents per entity  
+        use_approx=True   # Use approximate search for faster results
+    )
+
+**Entity ResolutionParameters:**
+
+- ``threshold``: Minimum similarity score for documents to be considered similar (default: 0.8)
+- ``k``: Number of similar documents to return for each entity (default: 4)
+- ``distance_strategy``: Distance metric to use for clustering (default: DistanceStrategy.COSINE)
+- ``use_approx``: Whether to use approximate nearest neighbor or exact search (default: True)
+- ``use_subset_relations``: Whether to analyze subset relationships between clusters (default: False) (optional)
+- ``merge_similar_entities``: Whether to merge entities based on subset relationships (default: False) (optional)
+
+Subset Relationship Analysis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Enable ``use_subset_relations = True`` highlights the subset and superset relationships between entities:
+
+.. code-block:: python
+
+    # Analyze subset relationships
+    result = vectorstore.find_entity_clusters(
+        threshold=0.7,
+        k=5,
+        use_subset_relations=True
+    )
+
+Entity Merging
+~~~~~~~~~~~~~~
+
+Enable ``merge_similar_entities = True`` to merge overlapping entity clusters to create consolidated, non-overlapping groups:
+
+Note: In-order to merge entities, you need to enable ``use_subset_relations = True``,  by default ``use_subset_relations = False``.
+
+.. code-block:: python
+
+    # Merge similar entities based on subset relationships  
+    merged_result = vectorstore.find_entity_clusters(
+        threshold=0.75,
+        k=6,
+        use_subset_relations=True,
+        merge_similar_entities=True
+    )
+
+Distance Strategy Support
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Entity clustering works with different distance metrics and automatically selects the appropriate AQL functions:
+
+.. code-block:: python
+
+    from langchain_arangodb.vectorstores.utils import DistanceStrategy
+    
+    # Cosine similarity (default) - higher scores are better, sorted DESC
+    vectorstore_cosine = ArangoVector(
+        embedding=embeddings,
+        embedding_dimension=embedding_dimension,
+        database=db,
+        distance_strategy=DistanceStrategy.COSINE
+    )
+    
+    # Euclidean distance - lower distances are better, sorted ASC  
+    vectorstore_euclidean = ArangoVector(
+        embedding=embeddings, 
+        embedding_dimension=embedding_dimension,
+        database=db,
+        distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE
+    )
+
+**Approximate Search (requires ArangoDB >= 3.12.4)**
+
+Automatically uses ``APPROX_NEAR_COSINE`` or ``APPROX_NEAR_L2`` functions and creates vector index:
+
+.. code-block:: python
+
+    # Uses APPROX_NEAR_COSINE function, automatically creates vector index
+    cosine_clusters = vectorstore_cosine.find_entity_clusters(
+        threshold=0.8,
+        use_approx=True  # Fast approximate search
+    )
+    
+    # Uses APPROX_NEAR_L2 function, automatically creates vector index
+    euclidean_clusters = vectorstore_euclidean.find_entity_clusters(
+        threshold=0.5,
+        use_approx=True  # Fast approximate search
+    )
+
+**Exact Search (works with all ArangoDB versions)**
+
+Uses ``COSINE_SIMILARITY`` or ``L2_DISTANCE`` functions:
+
+.. code-block:: python
+
+    # Uses COSINE_SIMILARITY function, no vector index required
+    cosine_exact = vectorstore_cosine.find_entity_clusters(
+        threshold=0.8,
+        use_approx=False  # Precise 
+    )
+    
+    # Uses L2_DISTANCE function, no vector index required
+    euclidean_exact = vectorstore_euclidean.find_entity_clusters(
+        threshold=0.5,
+        use_approx=False  # Precise
+    )
+
+**Threshold Selection**
+
+Choose thresholds based on your distance strategy:
+
+- **Cosine similarity**: Higher values (0.8-0.95) for stricter matching
+- **Euclidean distance**: Lower values (0.3-0.5) for stricter matching
+
+Return Formats
+~~~~~~~~~~~~~
+
+The method returns different formats based on the parameters used:
+
+1. **Basic clustering** (``use_subset_relations=False``):
+   
+   .. code-block:: python
+   
+       # Function call
+       clusters = vectorstore.find_entity_clusters(
+           threshold=0.8,
+           k=4,
+           use_subset_relations=False
+       )
+       
+       # Output
+       [
+           {'entity': 'jon_snow', 'similar': ['jon', 'j_snow','jonsnow']},
+           {'entity': 'daenerys_targaryen', 'similar': ['daenerys_t', 'daene']},
+           {'entity': 'tyrion_lannister', 'similar': ['tyrion','tyrion_L']}
+       ]
+
+2. **With subset analysis** (``use_subset_relations=True``, ``merge_similar_entities=False``):
+   
+   .. code-block:: python
+   
+       # Function call
+       result = vectorstore.find_entity_clusters(
+           threshold=0.8,
+           k=4,
+           use_subset_relations=True,
+           merge_similar_entities=False
+       )
+       
+       # Output - shows which groups are subsets of others
+       {
+           'similar_entities': [
+               {'entity': 'jon_snow', 'similar': ['jon', 'j_snow','jonsnow']},
+               {'entity': 'jon_s', 'similar': ['jon']},
+               {'entity': 'daenerys_targaryen', 'similar': ['daenerys_t', 'daene']},
+               {'entity': 'daentargaryen', 'similar': ['daene']},
+               {'entity': 'tyrion_lannister', 'similar': ['tyrion','tyrion_L']}
+           ],
+           'subset_relationships': [
+               {'subsetGroup': 'jon_s', 'supersetGroup': 'jon_snow'},
+               {'subsetGroup': 'daentargaryen', 'supersetGroup': 'daenerys_targaryen'}
+           ]
+       }
+
+3. **With merging** (``use_subset_relations=True``, ``merge_similar_entities=True``):
+   
+   .. code-block:: python
+   
+       # Function call
+       merged_result = vectorstore.find_entity_clusters(
+           threshold=0.8,
+           k=4,
+           use_subset_relations=True,
+           merge_similar_entities=True
+       )
+       
+       # Output - consolidates overlapping groups into final clusters
+       {
+           'similar_entities': [
+               {'entity': 'jon_snow', 'similar': ['jon', 'j_snow','jonsnow']},
+               {'entity': 'jon_s', 'similar': ['jon']},
+               {'entity': 'daenerys_targaryen', 'similar': ['daenerys_t', 'daene']},
+               {'entity': 'daentargaryen', 'similar': ['daene']},
+               {'entity': 'tyrion_lannister', 'similar': ['tyrion','tyrion_L']}
+           ],
+           'subset_relationships': [
+               {'subsetGroup': 'jon_s', 'supersetGroup': 'jon_snow'},
+               {'subsetGroup': 'daentargaryen', 'supersetGroup': 'daenerys_targaryen'}
+           ]
+           'merged_entities': [
+               {'entity': 'jon_snow', 'merged_entities': ['jon', 'j_snow', 'jonsnow','jon_s',]},
+               {'entity': 'daenerys_targaryen', 'merged_entities': ['daene', 'daenerys_t', 'daentargaryen']}
+           ]
+       }
+
 
 Document Management
 ------------------
