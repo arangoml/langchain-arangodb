@@ -1,3 +1,4 @@
+import time
 from typing import Any, List, Optional, Union
 
 from arango.database import StandardDatabase
@@ -138,23 +139,32 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
             " Use the 'add_messages' instead."
         )
 
-    def get_messages(self, role: Optional[str] = None, n_messages: int = 10) -> list:
+    def get_messages(
+        self,
+        role: Optional[str] = None,
+        n_messages: int = 10,
+        excluded_fields: list[str] = ["_id", "_key", "_rev", "session_id", "time"],
+    ) -> list:
         """Retrieve messages from ArangoDB, optionally filtered by role."""
-        query = """
+        query = f"""
             FOR doc IN @@col
                 FILTER doc.session_id == @session_id
-                FILTER @role == null || doc.role == @role
-                SORT doc._key DESC
+                {"AND doc.role == @role" if role else ""}
+                SORT doc.time DESC
                 LIMIT @n
-                RETURN UNSET(doc, ["_id", "_key", "_rev", "session_id"])
+                RETURN UNSET(doc, @excluded_fields)
         """
         bind_vars = {
             "@col": self._collection_name,
             "session_id": self._session_id,
-            "role": role,
             "n": n_messages,
+            "excluded_fields": excluded_fields,
         }
+        if role is not None:
+            bind_vars["role"] = role
         cursor = self._db.aql.execute(query, bind_vars=bind_vars)  # type: ignore
+
+        # return in chronological order
         return [d for d in cursor][::-1]  # type: ignore
 
     def add_message(self, message: BaseMessage) -> None:
@@ -189,6 +199,7 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
                 "role": message.type,
                 "content": message.content,
                 "session_id": self._session_id,
+                "time": time.time(),
             },
         )
 
@@ -198,6 +209,7 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
             {
                 "role": "qa",
                 "session_id": self._session_id,
+                "time": time.time(),
                 "user_input": user_input,
                 "aql_query": aql_query,
                 "result": result,
