@@ -1234,9 +1234,11 @@ class ArangoVector(VectorStore):
     ) -> Tuple[str, dict[str, Any]]:
         if self._distance_strategy == DistanceStrategy.COSINE:
             score_func = "APPROX_NEAR_COSINE" if use_approx else "COSINE_SIMILARITY"
+            scoring_query = f"{score_func}(doc.{self.embedding_field}, @embedding)"
             sort_order = "DESC"
         elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
             score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
+            scoring_query = f"{score_func}(doc.{self.embedding_field}, @embedding)"
             sort_order = "ASC"
         elif self._distance_strategy in [
             DistanceStrategy.JACCARD,
@@ -1250,6 +1252,15 @@ class ArangoVector(VectorStore):
                 )
             if self._distance_strategy == DistanceStrategy.JACCARD:
                 score_func = "JACCARD"
+                scoring_query = f"{score_func}(doc.{self.embedding_field}, @embedding)"
+            elif self._distance_strategy in [
+                DistanceStrategy.DOT_PRODUCT,
+                DistanceStrategy.MAX_INNER_PRODUCT,
+            ]:
+                scoring_query = (
+                    "SUM(FOR i IN 0..LENGTH(doc.embedding)-1 "
+                    "RETURN doc.embedding[i] * @embedding[i])"
+                )
             sort_order = "DESC"
         else:
             raise ValueError(f"Unsupported metric: {self._distance_strategy}")
@@ -1269,11 +1280,12 @@ class ArangoVector(VectorStore):
             DistanceStrategy.JACCARD,
             DistanceStrategy.COSINE,
             DistanceStrategy.EUCLIDEAN_DISTANCE,
+            DistanceStrategy.DOT_PRODUCT,
         ]:
             aql_query = f"""
                 FOR doc IN @@collection
                     {filter_clause if not use_approx else ""}
-                    LET score = {score_func}(doc.{self.embedding_field}, @embedding)
+                    LET score = {scoring_query}
                     SORT score {sort_order}
                     LIMIT {k}
                     {filter_clause if use_approx else ""}
@@ -1281,43 +1293,26 @@ class ArangoVector(VectorStore):
                     LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
                     RETURN {{data, score, metadata}}
             """
-
-        elif self._distance_strategy == DistanceStrategy.DOT_PRODUCT:
-            aql_query = f"""
-                FOR doc IN @@collection
-                    {filter_clause}
-                    LET score = SUM(
-                        FOR i IN 0..LENGTH(doc.embedding)-1
-                            RETURN doc.embedding[i] * @embedding[i]
-                    )
-                    SORT score {sort_order}
-                    LIMIT {k}
-                    LET data = KEEP(doc, {return_fields_list})
-                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
-                    RETURN {{data, score, metadata}}
-            """
-
         elif self._distance_strategy == DistanceStrategy.MAX_INNER_PRODUCT:
             aql_query = f"""
                 LET scored = (
                     FOR doc IN @@collection
                         {filter_clause}
-                        LET score = SUM(
-                            FOR i IN 0..LENGTH(doc.embedding)-1
-                                RETURN doc.embedding[i] * @embedding[i]
-                        )
+                        LET score = {scoring_query}
                         SORT score {sort_order}
                         LIMIT {k}
                         RETURN {{doc, score}}
                 )
-                LET maxScore= MAX(scored[*].score)
-
+                LET maxScore = MAX(scored[*].score)
+                
                 FOR item IN scored
                     FILTER item.score == maxScore
                     LET data = KEEP(item.doc, {return_fields_list})
                     LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
                     RETURN {{data, score: item.score, metadata}}
             """
+        else:
+            raise ValueError(f"Unsupported metric: {self._distance_strategy}")
 
         bind_vars = {
             "@collection": self.collection_name,
@@ -1346,9 +1341,11 @@ class ArangoVector(VectorStore):
 
         if self._distance_strategy == DistanceStrategy.COSINE:
             score_func = "APPROX_NEAR_COSINE" if use_approx else "COSINE_SIMILARITY"
+            scoring_query = f"{score_func}(doc.{self.embedding_field}, @embedding)"
             sort_order = "DESC"
         elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
             score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
+            scoring_query = f"{score_func}(doc.{self.embedding_field}, @embedding)"
             sort_order = "ASC"
         elif self._distance_strategy in [
             DistanceStrategy.JACCARD,
@@ -1362,6 +1359,15 @@ class ArangoVector(VectorStore):
                 )
             if self._distance_strategy == DistanceStrategy.JACCARD:
                 score_func = "JACCARD"
+                scoring_query = f"{score_func}(doc.{self.embedding_field}, @embedding)"
+            elif self._distance_strategy in [
+                DistanceStrategy.DOT_PRODUCT,
+                DistanceStrategy.MAX_INNER_PRODUCT,
+            ]:
+                scoring_query = (
+                    "SUM(FOR i IN 0..LENGTH(doc.embedding)-1 "
+                    "RETURN doc.embedding[i] * @embedding[i])"
+                )
             sort_order = "DESC"
         else:
             raise ValueError(f"Unsupported metric: {self._distance_strategy}")
@@ -1389,12 +1395,13 @@ class ArangoVector(VectorStore):
             DistanceStrategy.JACCARD,
             DistanceStrategy.COSINE,
             DistanceStrategy.EUCLIDEAN_DISTANCE,
+            DistanceStrategy.DOT_PRODUCT,
         ]:
-            aql_query = f"""
+            vector_search_query = f"""
                 LET vector_results = (
                     FOR doc IN @@collection
                         {filter_clause if not use_approx else ""}
-                        LET score = {score_func}(doc.{self.embedding_field}, @embedding)
+                        LET score = {scoring_query}
                         SORT score {sort_order}
                         LIMIT {k}
                         {filter_clause if use_approx else ""}
@@ -1403,80 +1410,9 @@ class ArangoVector(VectorStore):
                         LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
                         RETURN {{ key: doc._key, score: rrf_score }}
                 )
-
-                LET keyword_results = (
-                    FOR doc IN @@view
-                        {keyword_search_clause}
-                        {filter_clause}
-                        LET score = BM25(doc)
-                        SORT score DESC
-                        LIMIT {k}
-                        WINDOW {{ preceding: "unbounded", following: 0 }}
-                        AGGREGATE rank = COUNT(1)
-                        LET rrf_score = {keyword_weight} / ({self.rrf_constant} + rank)
-                        RETURN {{ key: doc._key, score: rrf_score }}
-                )
-
-                FOR result IN APPEND(vector_results, keyword_results)
-                    COLLECT key = result.key AGGREGATE score = SUM(result.score)
-                    SORT score DESC
-                    LIMIT {self.rrf_search_limit}
-                    LET data = FIRST(
-                        FOR doc IN @@collection
-                            FILTER doc._key == key
-                            LIMIT 1
-                            RETURN KEEP(doc, {return_fields_list})
-                    )
-                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
-                    RETURN {{ data, score, metadata }}
-            """
-
-        elif self._distance_strategy == DistanceStrategy.DOT_PRODUCT:
-            aql_query = f"""
-                LET vector_results = (
-                    FOR doc IN @@collection
-                        {filter_clause}
-                        LET score = SUM(
-                            FOR i IN 0..LENGTH(doc.embedding)-1
-                                RETURN doc.embedding[i] * @embedding[i]
-                        )
-                        SORT score DESC
-                        LIMIT {k}
-                        WINDOW {{ preceding: "unbounded", following: 0 }}
-                        AGGREGATE rank = COUNT(1)
-                        LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
-                        RETURN {{ key: doc._key, score: rrf_score }}
-                )
-                
-                LET keyword_results = (
-                    FOR doc IN @@view
-                        {keyword_search_clause}
-                        {filter_clause}
-                        LET score = BM25(doc)
-                        SORT score DESC
-                        LIMIT {k}
-                        WINDOW {{ preceding: "unbounded", following: 0 }}
-                        AGGREGATE rank = COUNT(1)
-                        LET rrf_score = {keyword_weight} / ({self.rrf_constant} + rank)
-                        RETURN {{ key: doc._key, score: rrf_score }}
-                )
-
-                FOR result IN APPEND(vector_results, keyword_results)
-                    COLLECT key = result.key AGGREGATE score = SUM(result.score)
-                    SORT score DESC
-                    LIMIT {self.rrf_search_limit}
-                    LET data = FIRST(
-                        FOR doc IN @@collection
-                            FILTER doc._key == key
-                            LIMIT 1
-                            RETURN KEEP(doc, {return_fields_list})
-                    )
-                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
-                    RETURN {{ data, score, metadata }}
-            """
-
+                """
         elif self._distance_strategy == DistanceStrategy.MAX_INNER_PRODUCT:
-            aql_query = f"""
+            vector_search_query = f"""
                 LET scored = (
                     FOR doc IN @@collection
                         {filter_clause}
@@ -1497,33 +1433,39 @@ class ArangoVector(VectorStore):
                         LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
                         RETURN {{ key: item.doc._key, score: rrf_score }}
                 )
+                """
+        else:
+            raise ValueError(f"Unsupported metric: {self._distance_strategy}")
 
-                LET keyword_results = (
-                    FOR doc IN @@view
-                        {keyword_search_clause}
-                        {filter_clause}
-                        LET score = BM25(doc)
-                        SORT score DESC
-                        LIMIT {k}
-                        WINDOW {{ preceding: "unbounded", following: 0 }}
-                        AGGREGATE rank = COUNT(1)
-                        LET rrf_score = {keyword_weight} / ({self.rrf_constant} + rank)
-                        RETURN {{ key: doc._key, score: rrf_score }}
-                )
+        aql_query = f"""
+            {vector_search_query}
 
-                FOR result IN APPEND(vector_results, keyword_results)
-                    COLLECT key = result.key AGGREGATE score = SUM(result.score)
+            LET keyword_results = (
+                FOR doc IN @@view
+                    {keyword_search_clause}
+                    {filter_clause}
+                    LET score = BM25(doc)
                     SORT score DESC
-                    LIMIT {self.rrf_search_limit}
-                    LET data = FIRST(
-                        FOR doc IN @@collection
-                            FILTER doc._key == key
-                            LIMIT 1
-                            RETURN KEEP(doc, {return_fields_list})
-                    )
-                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
-                    RETURN {{ data, score, metadata }}
-            """
+                    LIMIT {k}
+                    WINDOW {{ preceding: "unbounded", following: 0 }}
+                    AGGREGATE rank = COUNT(1)
+                    LET rrf_score = {keyword_weight} / ({self.rrf_constant} + rank)
+                    RETURN {{ key: doc._key, score: rrf_score }}
+            )
+
+            FOR result IN APPEND(vector_results, keyword_results)
+                COLLECT key = result.key AGGREGATE score = SUM(result.score)
+                SORT score DESC
+                LIMIT {self.rrf_search_limit}
+                LET data = FIRST(
+                    FOR doc IN @@collection
+                        FILTER doc._key == key
+                        LIMIT 1
+                        RETURN KEEP(doc, {return_fields_list})
+                )
+                LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
+                RETURN {{ data, score, metadata }}
+        """
 
         bind_vars = {
             "@collection": self.collection_name,
