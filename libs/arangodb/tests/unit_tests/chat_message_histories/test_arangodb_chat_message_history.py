@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from arango.database import StandardDatabase
@@ -129,6 +129,7 @@ def test_add_message() -> None:
             "role": "human",
             "content": "Hello, world!",
             "session_id": "test_session",
+            "time": ANY,
         }
     )
 
@@ -198,3 +199,97 @@ def test_messages_property() -> None:
     assert messages[0].content == "Hello"
     assert messages[1].type == "ai"
     assert messages[1].content == "Hi there"
+
+
+def test_add_qa_message() -> None:
+    """Test adding a QA message to the collection."""
+    mock_db = MagicMock(spec=StandardDatabase)
+    mock_collection = MagicMock()
+    mock_db.collection.return_value = mock_collection
+    mock_db.has_collection.return_value = True
+    mock_collection.indexes.return_value = [{"fields": ["session_id"]}]
+
+    message_store = ArangoChatMessageHistory(
+        session_id="test_session",
+        db=mock_db,
+    )
+
+    # Add the message
+    message_store.add_qa_message(
+        user_input="What is 1+1?",
+        aql_query="RETURN 1+1",
+        result="2",
+    )
+
+    # Verify the message was added to the collection
+    mock_db.collection.assert_called_with("ChatHistory")
+    mock_collection.insert.assert_called_once_with(
+        {
+            "role": "qa",
+            "user_input": "What is 1+1?",
+            "aql_query": "RETURN 1+1",
+            "result": "2",
+            "session_id": "test_session",
+            "time": ANY,
+        }
+    )
+
+
+def test_get_messages() -> None:
+    """Test retrieving messages from the collection."""
+    mock_db = MagicMock(spec=StandardDatabase)
+    mock_collection = MagicMock()
+    mock_aql = MagicMock()
+    mock_cursor = MagicMock()
+    mock_db.collection.return_value = mock_collection
+    mock_db.aql = mock_aql
+    mock_db.has_collection.return_value = True
+    mock_collection.indexes.return_value = [{"fields": ["session_id"]}]
+    mock_aql.execute.return_value = mock_cursor
+
+    rows = [
+        {"role": "human", "content": "Hello", "time": 1},
+        {"role": "ai", "content": "Hi there", "time": 2},
+        {
+            "role": "qa",
+            "user_input": "What is 1+1?",
+            "aql_query": "RETURN 1+1",
+            "result": "2",
+            "time": 3,
+        },
+    ]
+
+    def execute_side_effect(query=None, bind_vars=None, **kwargs):  # type: ignore
+        role = (bind_vars or {}).get("role")
+        filtered = [r for r in rows if role is None or r["role"] == role]
+        # mimic: SORT doc.time DESC
+        return sorted(filtered, key=lambda r: r["time"], reverse=True)
+
+    mock_aql.execute.side_effect = execute_side_effect
+
+    message_store = ArangoChatMessageHistory(
+        session_id="test_session",
+        db=mock_db,
+    )
+
+    # Get the messages
+    human_messages = message_store.get_messages(role="human")
+    ai_messages = message_store.get_messages(role="ai")
+    qa_messages = message_store.get_messages(role="qa")
+
+    assert len(human_messages) == 1
+    assert len(ai_messages) == 1
+    assert len(qa_messages) == 1
+    assert human_messages[0]["content"] == "Hello"
+    assert ai_messages[0]["content"] == "Hi there"
+    assert qa_messages[0]["user_input"] == "What is 1+1?"
+    assert qa_messages[0]["aql_query"] == "RETURN 1+1"
+    assert qa_messages[0]["result"] == "2"
+
+    all_messages = message_store.get_messages()
+    assert len(all_messages) == 3
+    assert all_messages[0]["content"] == "Hello"
+    assert all_messages[1]["content"] == "Hi there"
+    assert all_messages[2]["user_input"] == "What is 1+1?"
+    assert all_messages[2]["aql_query"] == "RETURN 1+1"
+    assert all_messages[2]["result"] == "2"
