@@ -1437,7 +1437,7 @@ def test_arangovector_jaccard_distance(
         username=arangodb_credentials["username"],
         password=arangodb_credentials["password"],
     )
-    texts_to_embed = ["docA", "docB", "docC"]
+    texts_to_embed = ["foo", "bar", "baz"]
 
     vector_store = ArangoVector.from_texts(
         texts=texts_to_embed,
@@ -1448,10 +1448,10 @@ def test_arangovector_jaccard_distance(
         overwrite_index=False,
     )
 
-    query = "docA"
+    query = "foo"
     results = vector_store.similarity_search(query, k=1, use_approx=False)
     assert len(results) == 1
-    assert results[0].page_content == "docA"
+    assert results[0].page_content == "foo"
 
     # Test with scores
     results_with_scores = vector_store.similarity_search_with_score(query, k=1, use_approx=False)
@@ -1470,7 +1470,7 @@ def test_arangovector_dot_product_distance(
         username=arangodb_credentials["username"],
         password=arangodb_credentials["password"],
     )
-    texts_to_embed = ["docA", "docB", "docC"]
+    texts_to_embed = ["foo", "bar", "baz"]
 
     vector_store = ArangoVector.from_texts(
         texts=texts_to_embed,
@@ -1481,10 +1481,10 @@ def test_arangovector_dot_product_distance(
         overwrite_index=False,
     )
 
-    query = "docA"
+    query = "foo"
     results = vector_store.similarity_search(query, k=1, use_approx=False)
     assert len(results) == 1
-    assert results[0].page_content == "docA"
+    assert results[0].page_content == "foo"
 
     # Test with scores
     results_with_scores = vector_store.similarity_search_with_score(query, k=1, use_approx=False)
@@ -1503,7 +1503,7 @@ def test_arangovector_max_inner_product_distance(
         username=arangodb_credentials["username"],
         password=arangodb_credentials["password"],
     )
-    texts_to_embed = ["docA", "docB", "docC"]
+    texts_to_embed = ["foo", "bar", "baz"]
 
     vector_store = ArangoVector.from_texts(
         texts=texts_to_embed,
@@ -1514,10 +1514,10 @@ def test_arangovector_max_inner_product_distance(
         overwrite_index=False,
     )
 
-    query = "docA"
+    query = "foo"
     results = vector_store.similarity_search(query, k=1, use_approx=False)
     assert len(results) == 1
-    assert results[0].page_content == "docA"
+    assert results[0].page_content == "foo"
 
     # Test with scores
     results_with_scores = vector_store.similarity_search_with_score(query, k=1, use_approx=False)
