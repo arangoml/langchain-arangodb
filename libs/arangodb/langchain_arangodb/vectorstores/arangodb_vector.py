@@ -142,7 +142,10 @@ class ArangoVector(VectorStore):
             DistanceStrategy.DOT_PRODUCT,
             DistanceStrategy.MAX_INNER_PRODUCT,
         ]:
-            m = "distance_strategy must be one of: 'COSINE', 'EUCLIDEAN_DISTANCE', 'JACCARD', 'DOT_PRODUCT', 'MAX_INNER_PRODUCT'"
+            m = (
+                "distance_strategy must be one of: 'COSINE', 'EUCLIDEAN_DISTANCE', "
+                "'JACCARD', 'DOT_PRODUCT', 'MAX_INNER_PRODUCT'"
+            )
             raise ValueError(m)
 
         self.embedding = embedding
@@ -1235,9 +1238,16 @@ class ArangoVector(VectorStore):
         elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
             score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
             sort_order = "ASC"
-        elif self._distance_strategy in [DistanceStrategy.JACCARD, DistanceStrategy.MAX_INNER_PRODUCT, DistanceStrategy.DOT_PRODUCT]:
+        elif self._distance_strategy in [
+            DistanceStrategy.JACCARD,
+            DistanceStrategy.MAX_INNER_PRODUCT,
+            DistanceStrategy.DOT_PRODUCT,
+        ]:
             if use_approx:
-                raise ValueError(f"Unsupported metric: {self._distance_strategy} is not supported for approximate search")
+                raise ValueError(
+                    f"Unsupported metric: {self._distance_strategy} is not supported "
+                    "for approximate search"
+                )
             if self._distance_strategy == DistanceStrategy.JACCARD:
                 score_func = "JACCARD"
             sort_order = "DESC"
@@ -1255,7 +1265,11 @@ class ArangoVector(VectorStore):
         return_fields.update({"_key", self.text_field})
         return_fields_list = list(return_fields)
 
-        if self._distance_strategy in [DistanceStrategy.JACCARD, DistanceStrategy.COSINE, DistanceStrategy.EUCLIDEAN_DISTANCE]:
+        if self._distance_strategy in [
+            DistanceStrategy.JACCARD,
+            DistanceStrategy.COSINE,
+            DistanceStrategy.EUCLIDEAN_DISTANCE,
+        ]:
             aql_query = f"""
                 FOR doc IN @@collection
                     {filter_clause if not use_approx else ""}
@@ -1267,7 +1281,7 @@ class ArangoVector(VectorStore):
                     LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
                     RETURN {{data, score, metadata}}
             """
-        
+
         elif self._distance_strategy == DistanceStrategy.DOT_PRODUCT:
             aql_query = f"""
                 FOR doc IN @@collection
@@ -1282,7 +1296,7 @@ class ArangoVector(VectorStore):
                     LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
                     RETURN {{data, score, metadata}}
             """
-        
+
         elif self._distance_strategy == DistanceStrategy.MAX_INNER_PRODUCT:
             aql_query = f"""
                 LET scored = (
@@ -1336,9 +1350,16 @@ class ArangoVector(VectorStore):
         elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
             score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
             sort_order = "ASC"
-        elif self._distance_strategy in [DistanceStrategy.JACCARD, DistanceStrategy.MAX_INNER_PRODUCT, DistanceStrategy.DOT_PRODUCT]:
+        elif self._distance_strategy in [
+            DistanceStrategy.JACCARD,
+            DistanceStrategy.MAX_INNER_PRODUCT,
+            DistanceStrategy.DOT_PRODUCT,
+        ]:
             if use_approx:
-                raise ValueError(f"Unsupported metric: {self._distance_strategy} is not supported for approximate search")
+                raise ValueError(
+                    f"Unsupported metric: {self._distance_strategy} is not supported "
+                    "for approximate search"
+                )
             if self._distance_strategy == DistanceStrategy.JACCARD:
                 score_func = "JACCARD"
             sort_order = "DESC"
@@ -1364,7 +1385,11 @@ class ArangoVector(VectorStore):
                 )
             """
 
-        if self._distance_strategy in [DistanceStrategy.JACCARD, DistanceStrategy.COSINE, DistanceStrategy.EUCLIDEAN_DISTANCE]:
+        if self._distance_strategy in [
+            DistanceStrategy.JACCARD,
+            DistanceStrategy.COSINE,
+            DistanceStrategy.EUCLIDEAN_DISTANCE,
+        ]:
             aql_query = f"""
                 LET vector_results = (
                     FOR doc IN @@collection

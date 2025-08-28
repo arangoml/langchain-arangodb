@@ -1454,7 +1454,9 @@ def test_arangovector_jaccard_distance(
     assert results[0].page_content == "foo"
 
     # Test with scores
-    results_with_scores = vector_store.similarity_search_with_score(query, k=1, use_approx=False)
+    results_with_scores = vector_store.similarity_search_with_score(
+        query, k=1, use_approx=False
+    )
     assert len(results_with_scores) == 1
     assert 0.0 <= results_with_scores[0][1] <= 1.0
 
@@ -1487,7 +1489,9 @@ def test_arangovector_dot_product_distance(
     assert results[0].page_content == "foo"
 
     # Test with scores
-    results_with_scores = vector_store.similarity_search_with_score(query, k=1, use_approx=False)
+    results_with_scores = vector_store.similarity_search_with_score(
+        query, k=1, use_approx=False
+    )
     assert len(results_with_scores) == 1
     assert isinstance(results_with_scores[0][1], (int, float))
 
@@ -1520,7 +1524,9 @@ def test_arangovector_max_inner_product_distance(
     assert results[0].page_content == "foo"
 
     # Test with scores
-    results_with_scores = vector_store.similarity_search_with_score(query, k=1, use_approx=False)
+    results_with_scores = vector_store.similarity_search_with_score(
+        query, k=1, use_approx=False
+    )
     assert len(results_with_scores) == 1
     assert isinstance(results_with_scores[0][1], (int, float))
 
@@ -1536,11 +1542,11 @@ def test_arangovector_jaccard_hybrid_search(
         username=arangodb_credentials["username"],
         password=arangodb_credentials["password"],
     )
-    
+
     # Clean up any leftover views from previous runs
     try:
         db.delete_view("keyword_index_jaccard_hybrid")
-    except:
+    except Exception:
         pass
 
     vector_store = ArangoVector.from_texts(
@@ -1554,9 +1560,12 @@ def test_arangovector_jaccard_hybrid_search(
         insert_text=True,
     )
 
-    results = vector_store.similarity_search("foo", k=2, search_type=SearchType.HYBRID, use_approx=False)
+    results = vector_store.similarity_search(
+        "foo", k=2, search_type=SearchType.HYBRID, use_approx=False
+    )
     assert len(results) >= 1
     assert results[0].page_content == "foo document"
+
 
 @pytest.mark.usefixtures("clear_arangodb_database")
 def test_arangovector_dot_product_hybrid_search(
@@ -1569,11 +1578,11 @@ def test_arangovector_dot_product_hybrid_search(
         username=arangodb_credentials["username"],
         password=arangodb_credentials["password"],
     )
-    
+
     # Clean up any leftover views from previous runs
     try:
         db.delete_view("keyword_index_dot_hybrid")
-    except:
+    except Exception:
         pass
 
     vector_store = ArangoVector.from_texts(
@@ -1587,7 +1596,9 @@ def test_arangovector_dot_product_hybrid_search(
         insert_text=True,
     )
 
-    results = vector_store.similarity_search("foo", k=2, search_type=SearchType.HYBRID, use_approx=False)
+    results = vector_store.similarity_search(
+        "foo", k=2, search_type=SearchType.HYBRID, use_approx=False
+    )
     assert len(results) >= 1
     assert results[0].page_content == "foo document"
 
@@ -1603,11 +1614,11 @@ def test_arangovector_max_inner_product_hybrid_search(
         username=arangodb_credentials["username"],
         password=arangodb_credentials["password"],
     )
-    
+
     # Clean up any leftover views from previous runs
     try:
         db.delete_view("keyword_index_max_hybrid")
-    except:
+    except Exception:
         pass
 
     vector_store = ArangoVector.from_texts(
@@ -1621,6 +1632,8 @@ def test_arangovector_max_inner_product_hybrid_search(
         insert_text=True,
     )
 
-    results = vector_store.similarity_search("foo", k=2, search_type=SearchType.HYBRID, use_approx=False)
+    results = vector_store.similarity_search(
+        "foo", k=2, search_type=SearchType.HYBRID, use_approx=False
+    )
     assert len(results) >= 1
     assert results[0].page_content == "foo document"

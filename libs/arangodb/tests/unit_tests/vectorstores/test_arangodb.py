@@ -141,9 +141,11 @@ def test_init_with_invalid_distance_strategy() -> None:
             distance_strategy="INVALID_STRATEGY",  # type: ignore
         )
 
-    assert "distance_strategy must be one of: 'COSINE', 'EUCLIDEAN_DISTANCE', 'JACCARD', 'DOT_PRODUCT', 'MAX_INNER_PRODUCT'" in str(
-        exc_info.value
+    expected_message = (
+        "distance_strategy must be one of: 'COSINE', 'EUCLIDEAN_DISTANCE', "
+        "'JACCARD', 'DOT_PRODUCT', 'MAX_INNER_PRODUCT'"
     )
+    assert expected_message in str(exc_info.value)
 
 
 def test_collection_creation_if_not_exists(arango_vector_factory: Any) -> None:
@@ -1118,9 +1120,7 @@ def test_build_hybrid_search_query_dot_product(
     """Test _build_hybrid_search_query with DOT_PRODUCT distance strategy."""
     from langchain_arangodb.vectorstores.utils import DistanceStrategy
 
-    vector_store = arango_vector_factory(
-        distance_strategy=DistanceStrategy.DOT_PRODUCT
-    )
+    vector_store = arango_vector_factory(distance_strategy=DistanceStrategy.DOT_PRODUCT)
 
     # Mock dependencies
     with patch.object(
@@ -1146,7 +1146,7 @@ def test_build_hybrid_search_query_dot_product(
     assert "SUM(" in query
     assert "doc.embedding[i] * @embedding[i]" in query
     assert "SORT score DESC" in query
-    assert "WINDOW { preceding: \"unbounded\", following: 0 }" in query
+    assert 'WINDOW { preceding: "unbounded", following: 0 }' in query
     assert "AGGREGATE rank = COUNT(1)" in query
 
 
@@ -1195,9 +1195,7 @@ def test_build_hybrid_search_query_jaccard(
     """Test _build_hybrid_search_query with JACCARD distance strategy."""
     from langchain_arangodb.vectorstores.utils import DistanceStrategy
 
-    vector_store = arango_vector_factory(
-        distance_strategy=DistanceStrategy.JACCARD
-    )
+    vector_store = arango_vector_factory(distance_strategy=DistanceStrategy.JACCARD)
 
     # Mock dependencies
     with patch.object(
@@ -1222,8 +1220,9 @@ def test_build_hybrid_search_query_jaccard(
     # Should use JACCARD built-in function
     assert "JACCARD" in query
     assert "SORT score DESC" in query
-    assert "WINDOW { preceding: \"unbounded\", following: 0 }" in query
+    assert 'WINDOW { preceding: "unbounded", following: 0 }' in query
     assert "AGGREGATE rank = COUNT(1)" in query
+
 
 def test_build_hybrid_search_query_version_check(arango_vector_factory: Any) -> None:
     """Test that _build_hybrid_search_query checks
@@ -1302,9 +1301,9 @@ def test_search_type_override_in_similarity_search(arango_vector_factory: Any) -
 def test_jaccard_distance_strategy(arango_vector_factory: Any) -> None:
     """Test JACCARD calculation with actual vectors and query generation."""
     vector_store = arango_vector_factory(distance_strategy=DistanceStrategy.JACCARD)
-    
+
     query_vector = [1.0, 1.0, 0.0]
-    
+
     # Test query generation
     query, bind_vars = vector_store._build_vector_search_query(
         embedding=query_vector,
@@ -1312,36 +1311,40 @@ def test_jaccard_distance_strategy(arango_vector_factory: Any) -> None:
         return_fields={"text"},
         use_approx=False,
         filter_clause="",
-        metadata_clause=""
+        metadata_clause="",
     )
-    
+
     # Verify JACCARD function is used correctly
     assert "JACCARD(doc.embedding, @embedding)" in query
     assert bind_vars["embedding"] == query_vector
     assert "DESC" in query
-    
+
     # Test mathematical correctness with real document data
     docs = [
         {"_key": "doc1", "text": "identical", "embedding": [1.0, 1.0, 0.0]},
         {"_key": "doc2", "text": "partial", "embedding": [1.0, 0.0, 1.0]},
         {"_key": "doc3", "text": "different", "embedding": [0.0, 0.0, 1.0]},
     ]
-    
+
     mock_cursor = MagicMock()
     # Set up cursor to be empty after first iteration
     mock_cursor.empty.side_effect = [False, True]
     mock_cursor.has_more.return_value = False
-    mock_cursor.__iter__ = MagicMock(return_value=iter([
-        {"data": docs[0], "score": 1.0, "metadata": {}},
-        {"data": docs[1], "score": 0.33, "metadata": {}},
-        {"data": docs[2], "score": 0.0, "metadata": {}},
-    ]))
+    mock_cursor.__iter__ = MagicMock(
+        return_value=iter(
+            [
+                {"data": docs[0], "score": 1.0, "metadata": {}},
+                {"data": docs[1], "score": 0.33, "metadata": {}},
+                {"data": docs[2], "score": 0.0, "metadata": {}},
+            ]
+        )
+    )
     vector_store.db.aql.execute.return_value = mock_cursor
-    
+
     # Query with vector [1,1,0]
     results = vector_store.similarity_search_with_score("test", k=3, use_approx=False)
     scores = [score for _, score in results]
-    
+
     # Verify results
     assert scores == [1.0, 0.33, 0.0]
     assert scores[0] > scores[1] > scores[2]
@@ -1351,9 +1354,9 @@ def test_jaccard_distance_strategy(arango_vector_factory: Any) -> None:
 def test_dot_product_distance_strategy(arango_vector_factory: Any) -> None:
     """Test DOT_PRODUCT calculation with actual vectors and query generation."""
     vector_store = arango_vector_factory(distance_strategy=DistanceStrategy.DOT_PRODUCT)
-    
+
     query_vector = [1.0, 2.0, 3.0]
-    
+
     # Test query generation
     query, bind_vars = vector_store._build_vector_search_query(
         embedding=query_vector,
@@ -1361,38 +1364,42 @@ def test_dot_product_distance_strategy(arango_vector_factory: Any) -> None:
         return_fields={"text"},
         use_approx=False,
         filter_clause="",
-        metadata_clause=""
+        metadata_clause="",
     )
-    
+
     # Verify dot product formula: sum of element-wise multiplication
     assert "SUM(" in query
     assert "doc.embedding[i] * @embedding[i]" in query
     assert "FOR i IN 0..LENGTH(doc.embedding)-1" in query
     assert bind_vars["embedding"] == query_vector
     assert "DESC" in query
-    
+
     # Test mathematical correctness with real document data
     docs = [
         {"_key": "doc1", "text": "high_score", "embedding": [2.0, 3.0, 1.0]},
         {"_key": "doc2", "text": "medium_score", "embedding": [1.0, 1.0, 1.0]},
         {"_key": "doc3", "text": "low_score", "embedding": [1.0, 0.0, 0.0]},
     ]
-    
+
     mock_cursor = MagicMock()
     # Set up cursor to be empty after first iteration
     mock_cursor.empty.side_effect = [False, True]
     mock_cursor.has_more.return_value = False
-    mock_cursor.__iter__ = MagicMock(return_value=iter([
-        {"data": docs[0], "score": 11.0, "metadata": {}},
-        {"data": docs[1], "score": 6.0, "metadata": {}}, 
-        {"data": docs[2], "score": 1.0, "metadata": {}},
-    ]))
+    mock_cursor.__iter__ = MagicMock(
+        return_value=iter(
+            [
+                {"data": docs[0], "score": 11.0, "metadata": {}},
+                {"data": docs[1], "score": 6.0, "metadata": {}},
+                {"data": docs[2], "score": 1.0, "metadata": {}},
+            ]
+        )
+    )
     vector_store.db.aql.execute.return_value = mock_cursor
-    
+
     # Query with vector [1,2,3]
     results = vector_store.similarity_search_with_score("test", k=3, use_approx=False)
     scores = [score for _, score in results]
-    
+
     # Verify results
     assert scores == [11.0, 6.0, 1.0]
     assert scores[0] > scores[1] > scores[2]
@@ -1401,10 +1408,12 @@ def test_dot_product_distance_strategy(arango_vector_factory: Any) -> None:
 
 def test_max_inner_product_strategy(arango_vector_factory: Any) -> None:
     """Test MAX_INNER_PRODUCT calculation with actual vectors and query generation."""
-    vector_store = arango_vector_factory(distance_strategy=DistanceStrategy.MAX_INNER_PRODUCT)
-    
+    vector_store = arango_vector_factory(
+        distance_strategy=DistanceStrategy.MAX_INNER_PRODUCT
+    )
+
     query_vector = [1.0, 2.0, 3.0]
-    
+
     # Test query generation
     query, bind_vars = vector_store._build_vector_search_query(
         embedding=query_vector,
@@ -1412,56 +1421,72 @@ def test_max_inner_product_strategy(arango_vector_factory: Any) -> None:
         return_fields={"text"},
         use_approx=False,
         filter_clause="",
-        metadata_clause=""
+        metadata_clause="",
     )
-    
+
     # Verify inner product calculation (similar to dot product)
     assert "SUM(" in query
     assert "doc.embedding[i] * @embedding[i]" in query
     assert bind_vars["embedding"] == query_vector
     assert "DESC" in query
-    
+
     # Test mathematical correctness with real document data
     docs = [
         {"_key": "doc1", "text": "high_score", "embedding": [2.0, 3.0, 1.0]},
         {"_key": "doc2", "text": "medium_score", "embedding": [1.0, 1.0, 1.0]},
         {"_key": "doc3", "text": "low_score", "embedding": [1.0, 0.0, 0.0]},
     ]
-    
+
     mock_cursor = MagicMock()
     # Set up cursor to be empty after first iteration
     mock_cursor.empty.side_effect = [False, True]
     mock_cursor.has_more.return_value = False
-    mock_cursor.__iter__ = MagicMock(return_value=iter([
-        {"data": docs[0], "score": 11.0, "metadata": {}},
-        {"data": docs[1], "score": 6.0, "metadata": {}},
-        {"data": docs[2], "score": 1.0, "metadata": {}},
-    ]))
+    mock_cursor.__iter__ = MagicMock(
+        return_value=iter(
+            [
+                {"data": docs[0], "score": 11.0, "metadata": {}},
+                {"data": docs[1], "score": 6.0, "metadata": {}},
+                {"data": docs[2], "score": 1.0, "metadata": {}},
+            ]
+        )
+    )
     vector_store.db.aql.execute.return_value = mock_cursor
-    
-    # Query with vector [1, 2, 3] 
+
+    # Query with vector [1, 2, 3]
     results = vector_store.similarity_search_with_score("test", k=3, use_approx=False)
     scores = [score for _, score in results]
-    
+
     # Verify inner product calculations
     assert scores == [11.0, 6.0, 1.0]
     assert len(results) == 3
     assert scores[0] > scores[1] > scores[2]
 
 
-def test_distance_strategy_reject_approximate_search(arango_vector_factory: Any) -> None:
+def test_distance_strategy_reject_approximate_search(
+    arango_vector_factory: Any,
+) -> None:
     """Test new metrics raise exception for approximate search."""
     test_vector = [1.0, 2.0, 3.0]
-    
-    for strategy in [DistanceStrategy.JACCARD, DistanceStrategy.DOT_PRODUCT, DistanceStrategy.MAX_INNER_PRODUCT]:
+
+    for strategy in [
+        DistanceStrategy.JACCARD,
+        DistanceStrategy.DOT_PRODUCT,
+        DistanceStrategy.MAX_INNER_PRODUCT,
+    ]:
         vector_store = arango_vector_factory(distance_strategy=strategy)
-        
-        with pytest.raises(ValueError, match=f"Unsupported metric: {strategy} is not supported for approximate search"):
+
+        expected_error = (
+            f"Unsupported metric: {strategy} is not supported for approximate search"
+        )
+        with pytest.raises(
+            ValueError,
+            match=expected_error,
+        ):
             vector_store._build_vector_search_query(
                 embedding=test_vector,
                 k=1,
                 return_fields={"text"},
                 use_approx=True,
                 filter_clause="",
-                metadata_clause=""
+                metadata_clause="",
             )
