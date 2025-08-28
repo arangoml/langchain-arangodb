@@ -1112,6 +1112,119 @@ def test_build_hybrid_search_query_euclidean_distance(
     assert "SORT score ASC" in query  # Euclidean uses ascending sort
 
 
+def test_build_hybrid_search_query_dot_product(
+    arango_vector_factory: Any,
+) -> None:
+    """Test _build_hybrid_search_query with DOT_PRODUCT distance strategy."""
+    from langchain_arangodb.vectorstores.utils import DistanceStrategy
+
+    vector_store = arango_vector_factory(
+        distance_strategy=DistanceStrategy.DOT_PRODUCT
+    )
+
+    # Mock dependencies
+    with patch.object(
+        vector_store, "retrieve_keyword_index", return_value={"name": "test_view"}
+    ):
+        with patch.object(
+            vector_store, "retrieve_vector_index", return_value={"name": "test_index"}
+        ):
+            query, bind_vars = vector_store._build_hybrid_search_query(
+                query="test",
+                k=2,
+                embedding=[0.1] * 64,
+                return_fields=set(),
+                use_approx=False,
+                filter_clause="",
+                vector_weight=0.7,
+                keyword_weight=0.3,
+                keyword_search_clause="",
+                metadata_clause="",
+            )
+
+    # Should use manual dot product calculation
+    assert "SUM(" in query
+    assert "doc.embedding[i] * @embedding[i]" in query
+    assert "SORT score DESC" in query
+    assert "WINDOW { preceding: \"unbounded\", following: 0 }" in query
+    assert "AGGREGATE rank = COUNT(1)" in query
+
+
+def test_build_hybrid_search_query_max_inner_product(
+    arango_vector_factory: Any,
+) -> None:
+    """Test _build_hybrid_search_query with MAX_INNER_PRODUCT distance strategy."""
+    from langchain_arangodb.vectorstores.utils import DistanceStrategy
+
+    vector_store = arango_vector_factory(
+        distance_strategy=DistanceStrategy.MAX_INNER_PRODUCT
+    )
+
+    # Mock dependencies
+    with patch.object(
+        vector_store, "retrieve_keyword_index", return_value={"name": "test_view"}
+    ):
+        with patch.object(
+            vector_store, "retrieve_vector_index", return_value={"name": "test_index"}
+        ):
+            query, bind_vars = vector_store._build_hybrid_search_query(
+                query="test",
+                k=3,
+                embedding=[0.2] * 64,
+                return_fields=set(),
+                use_approx=False,
+                filter_clause="",
+                vector_weight=0.6,
+                keyword_weight=0.4,
+                keyword_search_clause="",
+                metadata_clause="",
+            )
+
+    assert "SUM(" in query
+    assert "doc.embedding[i] * @embedding[i]" in query
+    assert "SORT score DESC" in query
+    assert "LET scored = (" in query
+    assert "LET maxScore = MAX(scored[*].score)" in query
+    assert "FILTER item.score == maxScore" in query
+    assert "item.doc._key" in query
+
+
+def test_build_hybrid_search_query_jaccard(
+    arango_vector_factory: Any,
+) -> None:
+    """Test _build_hybrid_search_query with JACCARD distance strategy."""
+    from langchain_arangodb.vectorstores.utils import DistanceStrategy
+
+    vector_store = arango_vector_factory(
+        distance_strategy=DistanceStrategy.JACCARD
+    )
+
+    # Mock dependencies
+    with patch.object(
+        vector_store, "retrieve_keyword_index", return_value={"name": "test_view"}
+    ):
+        with patch.object(
+            vector_store, "retrieve_vector_index", return_value={"name": "test_index"}
+        ):
+            query, bind_vars = vector_store._build_hybrid_search_query(
+                query="test",
+                k=2,
+                embedding=[0.1] * 64,
+                return_fields=set(),
+                use_approx=False,
+                filter_clause="",
+                vector_weight=0.8,
+                keyword_weight=0.2,
+                keyword_search_clause="",
+                metadata_clause="",
+            )
+
+    # Should use JACCARD built-in function
+    assert "JACCARD" in query
+    assert "SORT score DESC" in query
+    assert "WINDOW { preceding: \"unbounded\", following: 0 }" in query
+    assert "AGGREGATE rank = COUNT(1)" in query
+
 def test_build_hybrid_search_query_version_check(arango_vector_factory: Any) -> None:
     """Test that _build_hybrid_search_query checks
     ArangoDB version for approximate search."""
