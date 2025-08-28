@@ -1336,6 +1336,12 @@ class ArangoVector(VectorStore):
         elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
             score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
             sort_order = "ASC"
+        elif self._distance_strategy in [DistanceStrategy.JACCARD, DistanceStrategy.MAX_INNER_PRODUCT, DistanceStrategy.DOT_PRODUCT]:
+            if use_approx:
+                raise ValueError(f"Unsupported metric: {self._distance_strategy} is not supported for approximate search")
+            if self._distance_strategy == DistanceStrategy.JACCARD:
+                score_func = "JACCARD"
+            sort_order = "DESC"
         else:
             raise ValueError(f"Unsupported metric: {self._distance_strategy}")
 
@@ -1358,46 +1364,141 @@ class ArangoVector(VectorStore):
                 )
             """
 
-        aql_query = f"""
-            LET vector_results = (
-                FOR doc IN @@collection
-                    {filter_clause if not use_approx else ""}
-                    LET score = {score_func}(doc.{self.embedding_field}, @embedding)
-                    SORT score {sort_order}
-                    LIMIT {k}
-                    {filter_clause if use_approx else ""}
-                    WINDOW {{ preceding: "unbounded", following: 0 }}
-                    AGGREGATE rank = COUNT(1)
-                    LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
-                    RETURN {{ key: doc._key, score: rrf_score }}
-            )
-
-            LET keyword_results = (
-                FOR doc IN @@view
-                    {keyword_search_clause}
-                    {filter_clause}
-                    LET score = BM25(doc)
-                    SORT score DESC
-                    LIMIT {k}
-                    WINDOW {{ preceding: "unbounded", following: 0 }}
-                    AGGREGATE rank = COUNT(1)
-                    LET rrf_score = {keyword_weight} / ({self.rrf_constant} + rank)
-                    RETURN {{ key: doc._key, score: rrf_score }}
-            )
-
-            FOR result IN APPEND(vector_results, keyword_results)
-                COLLECT key = result.key AGGREGATE score = SUM(result.score)
-                SORT score DESC
-                LIMIT {self.rrf_search_limit}
-                LET data = FIRST(
+        if self._distance_strategy in [DistanceStrategy.JACCARD, DistanceStrategy.COSINE, DistanceStrategy.EUCLIDEAN_DISTANCE]:
+            aql_query = f"""
+                LET vector_results = (
                     FOR doc IN @@collection
-                        FILTER doc._key == key
-                        LIMIT 1
-                        RETURN KEEP(doc, {return_fields_list})
+                        {filter_clause if not use_approx else ""}
+                        LET score = {score_func}(doc.{self.embedding_field}, @embedding)
+                        SORT score {sort_order}
+                        LIMIT {k}
+                        {filter_clause if use_approx else ""}
+                        WINDOW {{ preceding: "unbounded", following: 0 }}
+                        AGGREGATE rank = COUNT(1)
+                        LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
+                        RETURN {{ key: doc._key, score: rrf_score }}
                 )
-                LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
-                RETURN {{ data, score, metadata }}
-        """
+
+                LET keyword_results = (
+                    FOR doc IN @@view
+                        {keyword_search_clause}
+                        {filter_clause}
+                        LET score = BM25(doc)
+                        SORT score DESC
+                        LIMIT {k}
+                        WINDOW {{ preceding: "unbounded", following: 0 }}
+                        AGGREGATE rank = COUNT(1)
+                        LET rrf_score = {keyword_weight} / ({self.rrf_constant} + rank)
+                        RETURN {{ key: doc._key, score: rrf_score }}
+                )
+
+                FOR result IN APPEND(vector_results, keyword_results)
+                    COLLECT key = result.key AGGREGATE score = SUM(result.score)
+                    SORT score DESC
+                    LIMIT {self.rrf_search_limit}
+                    LET data = FIRST(
+                        FOR doc IN @@collection
+                            FILTER doc._key == key
+                            LIMIT 1
+                            RETURN KEEP(doc, {return_fields_list})
+                    )
+                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
+                    RETURN {{ data, score, metadata }}
+            """
+
+        elif self._distance_strategy == DistanceStrategy.DOT_PRODUCT:
+            aql_query = f"""
+                LET vector_results = (
+                    FOR doc IN @@collection
+                        {filter_clause}
+                        LET score = SUM(
+                            FOR i IN 0..LENGTH(doc.embedding)-1
+                                RETURN doc.embedding[i] * @embedding[i]
+                        )
+                        SORT score DESC
+                        LIMIT {k}
+                        WINDOW {{ preceding: "unbounded", following: 0 }}
+                        AGGREGATE rank = COUNT(1)
+                        LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
+                        RETURN {{ key: doc._key, score: rrf_score }}
+                )
+                
+                LET keyword_results = (
+                    FOR doc IN @@view
+                        {keyword_search_clause}
+                        {filter_clause}
+                        LET score = BM25(doc)
+                        SORT score DESC
+                        LIMIT {k}
+                        WINDOW {{ preceding: "unbounded", following: 0 }}
+                        AGGREGATE rank = COUNT(1)
+                        LET rrf_score = {keyword_weight} / ({self.rrf_constant} + rank)
+                        RETURN {{ key: doc._key, score: rrf_score }}
+                )
+
+                FOR result IN APPEND(vector_results, keyword_results)
+                    COLLECT key = result.key AGGREGATE score = SUM(result.score)
+                    SORT score DESC
+                    LIMIT {self.rrf_search_limit}
+                    LET data = FIRST(
+                        FOR doc IN @@collection
+                            FILTER doc._key == key
+                            LIMIT 1
+                            RETURN KEEP(doc, {return_fields_list})
+                    )
+                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
+                    RETURN {{ data, score, metadata }}
+            """
+
+        elif self._distance_strategy == DistanceStrategy.MAX_INNER_PRODUCT:
+            aql_query = f"""
+                LET scored = (
+                    FOR doc IN @@collection
+                        {filter_clause}
+                        LET score = SUM(
+                            FOR i IN 0..LENGTH(doc.embedding)-1
+                                RETURN doc.embedding[i] * @embedding[i]
+                        )
+                        SORT score {sort_order}
+                        LIMIT {k}
+                        RETURN {{doc, score}}
+                )
+                LET maxScore = MAX(scored[*].score)
+
+                LET vector_results = (
+                    FOR item IN scored
+                        FILTER item.score == maxScore
+                        LET rank = 1
+                        LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
+                        RETURN {{ key: item.doc._key, score: rrf_score }}
+                )
+
+                LET keyword_results = (
+                    FOR doc IN @@view
+                        {keyword_search_clause}
+                        {filter_clause}
+                        LET score = BM25(doc)
+                        SORT score DESC
+                        LIMIT {k}
+                        WINDOW {{ preceding: "unbounded", following: 0 }}
+                        AGGREGATE rank = COUNT(1)
+                        LET rrf_score = {keyword_weight} / ({self.rrf_constant} + rank)
+                        RETURN {{ key: doc._key, score: rrf_score }}
+                )
+
+                FOR result IN APPEND(vector_results, keyword_results)
+                    COLLECT key = result.key AGGREGATE score = SUM(result.score)
+                    SORT score DESC
+                    LIMIT {self.rrf_search_limit}
+                    LET data = FIRST(
+                        FOR doc IN @@collection
+                            FILTER doc._key == key
+                            LIMIT 1
+                            RETURN KEEP(doc, {return_fields_list})
+                    )
+                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
+                    RETURN {{ data, score, metadata }}
+            """
 
         bind_vars = {
             "@collection": self.collection_name,
