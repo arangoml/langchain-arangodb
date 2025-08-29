@@ -10,7 +10,7 @@ from langchain.chains.base import Chain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import Field
@@ -449,9 +449,9 @@ class ArangoGraphQAChain(Chain):
 
         chat_history = []
         if include_history and self.chat_history_store is not None:
-            for msg in self.chat_history_store.messages[-max_history_messages:]:
-                cls = HumanMessage if msg.type == "human" else AIMessage
-                chat_history.append(cls(content=msg.content))
+            chat_history.extend(
+                self.chat_history_store.get_messages(n_messages=max_history_messages)
+            )
 
         ######################
         # Check Query Cache #
@@ -651,10 +651,12 @@ class ArangoGraphQAChain(Chain):
         # Store Chat History #
         ########################
 
-        if self.chat_history_store:
-            self.chat_history_store.add_user_message(user_input)
-            self.chat_history_store.add_ai_message(aql_query)
-            self.chat_history_store.add_ai_message(content)
+        if self.chat_history_store is not None:
+            self.chat_history_store.add_qa_message(
+                user_input,
+                aql_query,
+                result.content if isinstance(result, AIMessage) else result,  # type: ignore
+            )
 
         return results
 
