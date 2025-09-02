@@ -1260,16 +1260,16 @@ class ArangoVector(VectorStore):
 
     def _ensure_vector_index(self) -> None:
         """Ensure the vector index exists."""
-        if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
-            m = "Approximate Nearest Neighbor search requires ArangoDB >= 3.12.4."
-            raise ValueError(m)
-
         if self._distance_strategy in [
             DistanceStrategy.JACCARD,
             DistanceStrategy.DOT_PRODUCT,
             DistanceStrategy.MAX_INNER_PRODUCT,
         ]:
             m = f"Unsupported metric: {self._distance_strategy} is not supported for approximate search"  # noqa: E501
+            raise ValueError(m)
+
+        if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
+            m = "Approximate Nearest Neighbor search requires ArangoDB >= 3.12.4."
             raise ValueError(m)
 
         if not self.retrieve_vector_index():
