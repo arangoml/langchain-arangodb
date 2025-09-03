@@ -30,18 +30,18 @@ def test_add_messages(db: StandardDatabase) -> None:
 
     # Now check if the messages are stored in the database correctly
     assert len(message_store.messages) == 2
-    assert isinstance(message_store.messages[0], HumanMessage)
-    assert isinstance(message_store.messages[1], AIMessage)
-    assert message_store.messages[0].content == "Hello! Language Chain!"
-    assert message_store.messages[1].content == "Hi Guys!"
+    assert isinstance(message_store.messages[0], AIMessage)
+    assert isinstance(message_store.messages[1], HumanMessage)
+    assert message_store.messages[0].content == "Hi Guys!"
+    assert message_store.messages[1].content == "Hello! Language Chain!"
 
     assert len(message_store_another.messages) == 3
     assert isinstance(message_store_another.messages[0], HumanMessage)
     assert isinstance(message_store_another.messages[1], AIMessage)
     assert isinstance(message_store_another.messages[2], HumanMessage)
-    assert message_store_another.messages[0].content == "Hello! Bot!"
+    assert message_store_another.messages[0].content == "How's this pr going?"
     assert message_store_another.messages[1].content == "Hi there!"
-    assert message_store_another.messages[2].content == "How's this pr going?"
+    assert message_store_another.messages[2].content == "Hello! Bot!"
 
     # Now clear the first history
     message_store.clear()
@@ -108,10 +108,10 @@ def test_arangodb_message_history_clear_messages(
         ]
     )
     assert len(message_history.messages) == 2
-    assert isinstance(message_history.messages[0], HumanMessage)
-    assert isinstance(message_history.messages[1], AIMessage)
-    assert message_history.messages[0].content == "You are a helpful assistant."
-    assert message_history.messages[1].content == "Hello"
+    assert isinstance(message_history.messages[0], AIMessage)
+    assert isinstance(message_history.messages[1], HumanMessage)
+    assert message_history.messages[0].content == "Hello"
+    assert message_history.messages[1].content == "You are a helpful assistant."
 
     message_history.clear()
     assert len(message_history.messages) == 0
@@ -155,3 +155,33 @@ def test_arangodb_message_history_clear_session_collection(
     # Delete the collection (equivalent to delete_session_node in Neo4j)
     db.delete_collection(collection_name)
     assert not db.has_collection(collection_name)
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_add_and_get_messages(db: StandardDatabase) -> None:
+    """Test adding a QA message to the collection."""
+    message_history = ArangoChatMessageHistory(session_id="123", db=db)
+    message_history.add_qa_message(
+        user_input="What is 1+1?",
+        aql_query="RETURN 1+1",
+        result="2",
+    )
+    message_history.add_messages(
+        [
+            HumanMessage(content="You are a helpful assistant."),
+            AIMessage(content="Hello"),
+        ]
+    )
+    all_messages = message_history.get_messages()
+    assert len(all_messages) == 3
+    assert all_messages[0]["user_input"] == "What is 1+1?"
+    assert all_messages[0]["aql_query"] == "RETURN 1+1"
+    assert all_messages[0]["result"] == "2"
+    assert all_messages[1]["content"] == "You are a helpful assistant."
+    assert all_messages[2]["content"] == "Hello"
+
+    qa_messages = message_history.get_messages(role="qa")
+    assert len(qa_messages) == 1
+    assert qa_messages[0]["user_input"] == "What is 1+1?"
+    assert qa_messages[0]["aql_query"] == "RETURN 1+1"
+    assert qa_messages[0]["result"] == "2"

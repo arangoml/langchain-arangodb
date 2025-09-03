@@ -1,4 +1,5 @@
-from typing import Any, List, Union
+import time
+from typing import Any, List, Optional, Union
 
 from arango.database import StandardDatabase
 from langchain_core.chat_history import BaseChatMessageHistory
@@ -47,9 +48,21 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
         history.add_user_message("Hello! How are you?")
         history.add_ai_message("I'm doing well, thank you!")
 
+        # Add QA message
+        history.add_qa_message(
+            user_input="Who is the first character?",
+            aql_query="FOR doc IN Characters LIMIT 1 RETURN doc",
+            result="The first character is Arya Stark."
+        )
+
         # Retrieve messages
         messages = history.messages
         print(f"Found {len(messages)} messages")
+
+        # Retrieve messages by role
+        human_messages = history.get_messages(role="human")
+        ai_messages = history.get_messages(role="ai")
+        qa_messages = history.get_messages(role="qa")
 
         # Clear session
         history.clear()
@@ -138,6 +151,54 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
             " Use the 'add_messages' instead."
         )
 
+    def get_messages(
+        self,
+        role: Optional[str] = None,
+        n_messages: int = 10,
+        excluded_fields: list[str] = ["_id", "_key", "_rev", "session_id", "time"],
+    ) -> list:
+        """Retrieve messages from ArangoDB, optionally filtered by role.
+
+        :param role: Optional filter to retrieve messages of a specific role.
+        :type role: Optional[str]
+        :param n_messages: Number of messages to retrieve.
+        :type n_messages: int
+        :param excluded_fields: Fields to exclude from the returned messages.
+        :type excluded_fields: list[str]
+
+        .. code-block:: python
+
+            # Get all types of messages, default is 10 messages
+            messages = history.get_messages()
+
+            # Get the first 20 human messages
+            messages = history.get_messages(role="human", n_messages=20)
+
+            # Get the first 20 AI messages
+            messages = history.get_messages(role="ai", n_messages=20)
+
+        """
+        query = f"""
+            FOR doc IN @@col
+                FILTER doc.session_id == @session_id
+                {"AND doc.role == @role" if role else ""}
+                SORT doc.time DESC
+                LIMIT @n
+                RETURN UNSET(doc, @excluded_fields)
+        """
+        bind_vars = {
+            "@col": self._collection_name,
+            "session_id": self._session_id,
+            "n": n_messages,
+            "excluded_fields": excluded_fields,
+        }
+        if role is not None:
+            bind_vars["role"] = role
+        cursor = self._db.aql.execute(query, bind_vars=bind_vars)  # type: ignore
+
+        # return in chronological order
+        return [d for d in cursor][::-1]  # type: ignore
+
     def add_message(self, message: BaseMessage) -> None:
         """Append the message to the record in ArangoDB.
 
@@ -170,7 +231,37 @@ class ArangoChatMessageHistory(BaseChatMessageHistory):
                 "role": message.type,
                 "content": message.content,
                 "session_id": self._session_id,
+                "time": time.time(),
             },
+        )
+
+    def add_qa_message(self, user_input: str, aql_query: str, result: str) -> None:
+        """Add a QA message to the chat history.
+
+        :param user_input: The user's input.
+        :type user_input: str
+        :param aql_query: The AQL query to execute.
+        :type aql_query: str
+        :param result: The result of the AQL query.
+        :type result: str
+
+        .. code-block:: python
+
+            history.add_qa_message(
+                user_input="Who is the first character?",
+                aql_query="FOR doc IN Characters LIMIT 1 RETURN doc",
+                result="The first character is Arya Stark."
+            )
+        """
+        self._db.collection(self._collection_name).insert(
+            {
+                "role": "qa",
+                "session_id": self._session_id,
+                "time": time.time(),
+                "user_input": user_input,
+                "aql_query": aql_query,
+                "result": result,
+            }
         )
 
     def clear(self) -> None:

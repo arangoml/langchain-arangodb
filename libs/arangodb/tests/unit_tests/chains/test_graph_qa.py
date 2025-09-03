@@ -653,12 +653,30 @@ class TestArangoGraphQAChain:
 
         chat_history_store = Mock(spec=ArangoChatMessageHistory)
 
-        # Add fake message history (as objects, not dicts)
-        chat_history_store.messages = [
-            Mock(type="human", content="What is 1+1?"),
-            Mock(type="ai", content="2"),
-            Mock(type="human", content="What is 2+2?"),
-            Mock(type="ai", content="4"),
+        chat_history_store._collection_name = "ChatHistory"
+
+        # Add fake message history
+        chat_history_store.add_qa_message(
+            user_input="What is 1+1?",
+            aql_query="RETURN 1+1",
+            result="2",
+        )
+
+        chat_history_store.get_messages.return_value = [
+            {
+                "user_input": "What is 1+1?",
+                "aql_query": "RETURN 1+1",
+                "result": "2",
+                "role": "qa",
+                "session_id": "test",
+            },
+            {
+                "user_input": "What is 2+2?",
+                "aql_query": "RETURN 2+2",
+                "result": "4",
+                "role": "qa",
+                "session_id": "test",
+            },
         ]
 
         # Mock LLM chains
@@ -685,10 +703,10 @@ class TestArangoGraphQAChain:
         # Run the call
         result = chain.invoke({"query": "List all movies"})
 
-        # LLM received the latest 2 pairs (4 messages)
+        # LLM received the latest 2 docs
         llm_input = mock_chains["aql_generation_chain"].invoke.call_args[0][0]  # type: ignore
         chat_history = llm_input["chat_history"]
-        assert len(chat_history) == 4
+        assert len(chat_history) == 2
 
         # result has expected fields
         assert result["result"].content == "Here are the movies."

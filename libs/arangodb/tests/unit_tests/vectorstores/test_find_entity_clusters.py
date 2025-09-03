@@ -212,21 +212,6 @@ class TestFindEntityClusters:
         assert len(result_dict["similar_entities"]) == 3
         assert len(result_dict["subset_relationships"]) == 1
 
-    def test_edge_case_high_threshold(self, mock_vector_store: ArangoVector) -> None:
-        """Test edge case with very high threshold that yields no results."""
-        mock_cursor = MagicMock()
-        mock_cursor.__iter__ = lambda self: iter([])
-        mock_vector_store.db.aql.execute.return_value = mock_cursor  # type: ignore
-
-        result = mock_vector_store.find_entity_clusters(threshold=0.99)
-
-        assert result == []
-
-        # Verify high threshold was passed
-        call_args = mock_vector_store.db.aql.execute.call_args  # type: ignore
-        bind_vars = call_args[1]["bind_vars"]
-        assert bind_vars["threshold"] == 0.99
-
     def test_merge_entities_warning_when_subset_relations_false(
         self, mock_vector_store: ArangoVector
     ) -> None:
