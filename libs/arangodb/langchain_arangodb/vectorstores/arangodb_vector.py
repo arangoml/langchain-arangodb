@@ -1485,7 +1485,8 @@ class ArangoVector(VectorStore):
         returns entities grouped with their most similar documents. Each entity
         is returned with a list of the top k most similar entities based on the
         chosen similarity function.
-        similarity function:[COSINE, EUCLIDEAN_DISTANCE, JACCARD, APPROX_NEAR_COSINE, APPROX_NEAR_L2]
+        similarity function: [COSINE, EUCLIDEAN_DISTANCE, JACCARD,
+        APPROX_NEAR_COSINE, APPROX_NEAR_L2]
         NOTE: for JACCARD, use_approx is automatically set to False
 
 

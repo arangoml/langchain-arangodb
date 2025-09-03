@@ -403,6 +403,17 @@ Entity clustering works with different distance metrics and automatically select
         distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE
     )
 
+    # Jaccard distance - lower distances are better, sorted DESC
+    vectorstore_jaccard = ArangoVector(
+        embedding=embeddings,
+        embedding_dimension=embedding_dimension,
+        database=db,
+        distance_strategy=DistanceStrategy.JACCARD
+    )
+
+
+NOTE: for JACCARD, ``use_approx`` is automatically set to ``False``
+
 **Approximate Search (requires ArangoDB >= 3.12.4)**
 
 Automatically uses ``APPROX_NEAR_COSINE`` or ``APPROX_NEAR_L2`` functions and creates vector index:
@@ -423,7 +434,7 @@ Automatically uses ``APPROX_NEAR_COSINE`` or ``APPROX_NEAR_L2`` functions and cr
 
 **Exact Search (works with all ArangoDB versions)**
 
-Uses ``COSINE_SIMILARITY`` or ``L2_DISTANCE`` functions:
+Uses ``COSINE_SIMILARITY`` , ``L2_DISTANCE`` , ``JACCARD`` functions:
 
 .. code-block:: python
 
@@ -439,12 +450,19 @@ Uses ``COSINE_SIMILARITY`` or ``L2_DISTANCE`` functions:
         use_approx=False  # Precise
     )
 
+    # Uses JACCARD function, no vector index required
+    jaccard_exact = vectorstore_jaccard.find_entity_clusters(
+        threshold=0.3,
+        use_approx=False  
+    )
+
 **Threshold Selection**
 
 Choose thresholds based on your distance strategy:
 
-- **Cosine similarity**: Higher values (0.8-0.95) for stricter matching
-- **Euclidean distance**: Lower values (0.3-0.5) for stricter matching
+- **Cosine similarity**: Higher values (0.8-0.95) 
+- **Euclidean distance**: Lower values (0.3-0.5) 
+- **Jaccard distance**: Lower values (0.3-0.5)
 
 Return Formats
 ~~~~~~~~~~~~~
