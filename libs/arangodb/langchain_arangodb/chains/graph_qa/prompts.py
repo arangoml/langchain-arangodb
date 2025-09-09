@@ -106,7 +106,7 @@ AQL_FIX_PROMPT = PromptTemplate(
     template=AQL_FIX_TEMPLATE,
 )
 
-AQL_QA_TEMPLATE = """Task: Generate a natural language `Summary` from the results of an ArangoDB Query Language query.
+AQL_QA_TEMPLATE = """Task: Generate a natural language `Summary` from the results of an ArangoDB Query Language query in the same language as the `User Input`.
 
 You are an ArangoDB Query Language (AQL) expert responsible for creating a well-written `Summary` from the `User Input` and associated `AQL Result`.
 
@@ -123,6 +123,7 @@ Remember to think step by step.
 
 Your `Summary` should sound like it is a response to the `User Input`.
 Your `Summary` should not include any mention of the `AQL Query` or the `AQL Result`.
+Your `Summary` should be in the same language as the `User Input`.
 
 ArangoDB Schema:
 {adb_schema}
