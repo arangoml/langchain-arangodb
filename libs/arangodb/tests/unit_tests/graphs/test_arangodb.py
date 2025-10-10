@@ -7,9 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 from arango import ArangoClient
-from arango.exceptions import (
-    ArangoServerError,
-)
+from arango.exceptions import ArangoServerError
 from arango.request import Request
 from arango.response import Response
 from langchain_core.embeddings import Embeddings
@@ -521,7 +519,9 @@ class TestArangoGraph:
         assert graph._process_node_as_entity.call_count == 2
         graph._process_edge_as_entity.assert_called_once()
 
-    def test_get_node_key_handles_existing_and_new_node(self) -> None:  # noqa: F841 # type: ignore
+    def test_get_node_key_handles_existing_and_new_node(
+        self,
+    ) -> None:  # noqa: F841 # type: ignore
         # Setup
         graph = ArangoGraph(db=MagicMock())
         graph._hash = MagicMock(side_effect=lambda x: f"hashed_{x}")  # type: ignore

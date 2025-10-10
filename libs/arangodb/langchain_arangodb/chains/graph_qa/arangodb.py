@@ -7,6 +7,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain.chains.base import Chain
+from langchain_core.callbacks import CallbackManagerForChainRun
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.messages import AIMessage
+from langchain_core.prompts import BasePromptTemplate
+from langchain_core.runnables import Runnable
+from pydantic import Field
+
 from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_FIX_PROMPT,
     AQL_GENERATION_PROMPT,
@@ -19,13 +27,6 @@ from langchain_arangodb.chains.graph_qa.utils import (
 )
 from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
-from langchain_core.callbacks import CallbackManagerForChainRun
-from langchain_core.embeddings import Embeddings
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage
-from langchain_core.prompts import BasePromptTemplate
-from langchain_core.runnables import Runnable
-from pydantic import Field
 
 AQL_WRITE_OPERATIONS: List[str] = [
     "INSERT",
@@ -551,7 +552,9 @@ class ArangoGraphQAChain(Chain):
             query_message = f"AQL Query ({aql_generation_attempt})\n"
             if cached_query:
                 score_string = score if score is not None else "1.0"
-                query_message = f"AQL Query (used cached query, score: {score_string})\n"  # noqa: E501
+                query_message = (
+                    f"AQL Query (used cached query, score: {score_string})\n"  # noqa: E501
+                )
 
             _run_manager.on_text(query_message, verbose=self.verbose)
             _run_manager.on_text(
