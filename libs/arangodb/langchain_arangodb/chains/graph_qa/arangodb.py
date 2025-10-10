@@ -7,6 +7,18 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain.chains.base import Chain
+from langchain_arangodb.chains.graph_qa.prompts import (
+    AQL_FIX_PROMPT,
+    AQL_GENERATION_PROMPT,
+    AQL_QA_PROMPT,
+)
+from langchain_arangodb.chains.graph_qa.utils import (
+    is_aql_write_operation,
+    remove_comments,
+    remove_string_literals,
+)
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
+from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseLanguageModel
@@ -14,14 +26,6 @@ from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import Field
-
-from langchain_arangodb.chains.graph_qa.prompts import (
-    AQL_FIX_PROMPT,
-    AQL_GENERATION_PROMPT,
-    AQL_QA_PROMPT,
-)
-from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
-from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 
 AQL_WRITE_OPERATIONS: List[str] = [
     "INSERT",
@@ -540,15 +544,14 @@ class ArangoGraphQAChain(Chain):
                     error_msg = f"""
                         Security violation: Write operations are not allowed.
                         Detected write operation in query: {write_operation}
+                        AQL Query: {aql_query}
                     """
                     raise ValueError(error_msg)
 
             query_message = f"AQL Query ({aql_generation_attempt})\n"
             if cached_query:
                 score_string = score if score is not None else "1.0"
-                query_message = (
-                    f"AQL Query (used cached query, score: {score_string})\n"  # noqa: E501
-                )
+                query_message = f"AQL Query (used cached query, score: {score_string})\n"  # noqa: E501
 
             _run_manager.on_text(query_message, verbose=self.verbose)
             _run_manager.on_text(
@@ -669,10 +672,45 @@ class ArangoGraphQAChain(Chain):
         :return: True if the query is read-only, False otherwise.
         :rtype: Tuple[bool, Optional[str]]
         """
+        """Check if an AQL query contains only read operations.
+        The procedure is to get rid of string literals
+        and comments to avoid false positives.
+        After that, we check for the presence of any
+        write operation keywords in the cleaned query.
+        Checking write operations is done in AQL syntax-aware manner.
+        Write operations are blocked to ensure data integrity and security.
+        Args:
+            aql_query: The AQL query to validate
+        Returns:
+            bool: True if query is read-only, False if it contains write operations
+        """
+
+        # Normalize the query for case-insensitive comparison
         normalized_query = aql_query.upper()
 
-        for op in AQL_WRITE_OPERATIONS:
-            if op in normalized_query:
+        # Use word boundaries to avoid false positives in strings/identifiers
+
+        # Remove string literals
+        query_no_strings = remove_string_literals(normalized_query)
+
+        # Remove comments
+        query_no_comments = remove_comments(query_no_strings)
+
+        # Check for write operations in a syntax-aware manner
+        is_write, write_operation = is_aql_write_operation(query_no_comments)
+
+        if is_write:
+            return False, write_operation
+
+        # False positives are cheaper than false negatives.
+        # If a query is mistakenly identified as write, it won't cause data corruption.
+        # However, if a write query is allowed, it could lead to serious issues.
+        # Therefore, we err on the side of caution and treat it as a write operation
+        # if it contains any suspicious patterns after removing strings and comments.
+        blocked_operations = ["INSERT", "UPDATE", "REPLACE", "REMOVE", "UPSERT"]
+        for op in blocked_operations:
+            if re.search(rf"\b{op}\b", query_no_comments):
                 return False, op
 
+        # If no write operations are found, the query is read-only
         return True, None
