@@ -722,6 +722,7 @@ def test_is_read_only_query_returns_false_for_insert_query() -> None:
     write_query = "INSERT { name: 'test' } INTO MyCollection"
     is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
+    assert isinstance(operation, str)
     assert "INSERT" in operation
 
 
@@ -741,6 +742,7 @@ def test_is_read_only_query_returns_false_for_update_query() -> None:
     UPDATE doc WITH { name: 'new_test' } IN MyCollection"
     is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
+    assert isinstance(operation, str)
     assert "UPDATE" in operation
 
 
@@ -760,6 +762,7 @@ def test_is_read_only_query_returns_false_for_remove_query() -> None:
     doc._key== '123' REMOVE doc IN MyCollection"
     is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
+    assert isinstance(operation, str)
     assert "REMOVE" in operation
 
 
@@ -779,6 +782,7 @@ def test_is_read_only_query_returns_false_for_replace_query() -> None:
     REPLACE doc WITH { name: 'replaced_test' } IN MyCollection"
     is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
+    assert isinstance(operation, str)
     assert "REPLACE" in operation
 
 
@@ -802,6 +806,7 @@ def test_is_read_only_query_returns_false_for_upsert_query() -> None:
     is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
 
     assert is_read_only is False
+    assert isinstance(operation, str)
     assert "UPDATE" in operation
 
 
@@ -822,12 +827,14 @@ def test_is_read_only_query_is_case_insensitive() -> None:
     write_query_lower = "insert { name: 'test' } into MyCollection"
     is_read_only, operation = chain._is_read_only_query(write_query_lower)  # type: ignore
     assert is_read_only is False
+    assert isinstance(operation, str)
     assert "INSERT" in operation
 
     write_query_mixed = "UpSeRt { _key: '123' } InSeRt { name: 'new' } \
     UpDaTe { name: 'updated' } In MyCollection"
     is_read_only_mixed, operation_mixed = chain._is_read_only_query(write_query_mixed)  # type: ignore
     assert is_read_only_mixed is False
+    assert isinstance(operation_mixed, str)
     assert "UPDATE" in operation_mixed
 
 
