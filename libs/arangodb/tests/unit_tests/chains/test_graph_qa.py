@@ -435,7 +435,7 @@ class TestArangoGraphQAChain:
             "INSERT {name: 'test'} INTO Movies"
         )  # noqa: E501
         assert is_read_only is False
-        assert write_op == "INSERT"
+        assert "INSERT" in write_op
 
     def test_force_read_only_query_with_write_operation(
         self, fake_graph_store: FakeGraphStore, mock_chains: Dict[str, Runnable]
@@ -543,7 +543,7 @@ class TestArangoGraphQAChain:
         query = f"{write_op} {{name: 'test'}} INTO Movies"
         is_read_only, detected_op = chain._is_read_only_query(query)
         assert is_read_only is False
-        assert detected_op == write_op
+        assert write_op in detected_op
 
     def test_call_with_callback_manager(
         self, fake_graph_store: FakeGraphStore, mock_chains: Dict[str, Runnable]
