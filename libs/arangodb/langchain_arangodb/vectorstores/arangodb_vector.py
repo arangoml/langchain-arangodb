@@ -1,7 +1,20 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 import farmhash
 import numpy as np
@@ -138,8 +151,11 @@ class ArangoVector(VectorStore):
         if distance_strategy not in [
             DistanceStrategy.COSINE,
             DistanceStrategy.EUCLIDEAN_DISTANCE,
+            DistanceStrategy.JACCARD,
+            DistanceStrategy.DOT_PRODUCT,
+            DistanceStrategy.MAX_INNER_PRODUCT,
         ]:
-            m = "distance_strategy must be 'COSINE' or 'EUCLIDEAN_DISTANCE'"
+            m = "distance_strategy must be one of: 'COSINE', 'EUCLIDEAN_DISTANCE', 'JACCARD', 'DOT_PRODUCT', 'MAX_INNER_PRODUCT'"  # noqa: E501
             raise ValueError(m)
 
         self.embedding = embedding
@@ -886,7 +902,7 @@ class ArangoVector(VectorStore):
         search_type: SearchType = DEFAULT_SEARCH_TYPE,
         embedding_field: str = "embedding",
         text_field: str = "text",
-        index_name: str = "vector_index",
+        vector_index_name: str = "vector_index",
         distance_strategy: DistanceStrategy = DEFAULT_DISTANCE_STRATEGY,
         num_centroids: int = 1,
         ids: Optional[List[str]] = None,
@@ -924,8 +940,9 @@ class ArangoVector(VectorStore):
         :type embedding_field: str
         :param text_field: The field name to store text content. Defaults to "text".
         :type text_field: str
-        :param index_name: The name of the vector index. Defaults to "vector_index".
-        :type index_name: str
+        :param vector_index_name: The name of the vector index.
+            Defaults to "vector_index".
+        :type vector_index_name: str
         :param distance_strategy: The distance metric to use. Can be
             DistanceStrategy.COSINE or DistanceStrategy.EUCLIDEAN_DISTANCE.
             Defaults to DistanceStrategy.COSINE.
@@ -1005,7 +1022,7 @@ class ArangoVector(VectorStore):
             search_type=search_type,
             embedding_field=embedding_field,
             text_field=text_field,
-            vector_index_name=index_name,
+            vector_index_name=vector_index_name,
             distance_strategy=distance_strategy,
             num_centroids=num_centroids,
             keyword_index_name=keyword_index_name,
@@ -1036,6 +1053,7 @@ class ArangoVector(VectorStore):
         database: StandardDatabase,
         embedding_field: str = "embedding",
         text_field: str = "text",
+        vector_index_name: str = "vector_index",
         batch_size: int = 1000,
         aql_return_text_query: str = "",
         insert_text: bool = False,
@@ -1066,7 +1084,11 @@ class ArangoVector(VectorStore):
             Defaults to "embedding".
         :type embedding_field: str
         :param text_field: The field name to store text content. Defaults to "text".
+            Only used if `insert_text` is True.
         :type text_field: str
+        :param vector_index_name: The name of the vector index.
+            Defaults to "vector_index".
+        :type vector_index_name: str
         :param batch_size: Number of documents to process in each batch.
             Defaults to 1000.
         :type batch_size: int
@@ -1161,6 +1183,7 @@ class ArangoVector(VectorStore):
                 collection_name=collection_name,
                 embedding_field=embedding_field,
                 text_field=text_field,
+                vector_index_name=vector_index_name,
                 ids=ids,
                 insert_text=insert_text,
                 search_type=search_type,
@@ -1193,6 +1216,10 @@ class ArangoVector(VectorStore):
                     result["score"],
                     result["metadata"],
                 )
+
+                if not data:
+                    continue
+
                 _key = data.pop("_key")
                 page_content = data.pop(self.text_field)
                 doc = Document(
@@ -1206,6 +1233,61 @@ class ArangoVector(VectorStore):
 
         return results
 
+    def _get_score_query_and_sort_order(self, use_approx: bool) -> Tuple[str, str]:
+        """Get the score query and sort order for the given distance strategy.
+
+        :param use_approx: Whether to use approximate nearest neighbor search.
+        :type use_approx: bool
+        :return: A tuple containing the score query and sort order.
+        :rtype: Tuple[str, str]
+        """
+
+        if self._distance_strategy == DistanceStrategy.COSINE:
+            score_func = "APPROX_NEAR_COSINE" if use_approx else "COSINE_SIMILARITY"
+            scoring_query = f"{score_func}(doc.{self.embedding_field}, @embedding)"
+            sort_order = "DESC"
+        elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
+            score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
+            scoring_query = f"{score_func}(doc.{self.embedding_field}, @embedding)"
+            sort_order = "ASC"
+        elif self._distance_strategy == DistanceStrategy.JACCARD:
+            use_approx = False
+            score_func = "JACCARD"
+            scoring_query = f"{score_func}(doc.{self.embedding_field}, @embedding)"
+            sort_order = "DESC"
+        elif self._distance_strategy in [
+            DistanceStrategy.MAX_INNER_PRODUCT,
+            DistanceStrategy.DOT_PRODUCT,
+        ]:
+            scoring_query = """
+                SUM(
+                    FOR i IN 0..LENGTH(doc.embedding)-1 
+                    RETURN doc.embedding[i] * @embedding[i]
+                )
+            """
+            sort_order = "DESC"
+        else:
+            raise ValueError(f"Unsupported metric: {self._distance_strategy}")
+
+        return scoring_query, sort_order
+
+    def _ensure_vector_index(self) -> None:
+        """Ensure the vector index exists."""
+        if self._distance_strategy in [
+            DistanceStrategy.JACCARD,
+            DistanceStrategy.DOT_PRODUCT,
+            DistanceStrategy.MAX_INNER_PRODUCT,
+        ]:
+            m = f"Unsupported metric: {self._distance_strategy} is not supported for approximate search"  # noqa: E501
+            raise ValueError(m)
+
+        if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
+            m = "Approximate Nearest Neighbor search requires ArangoDB >= 3.12.4."
+            raise ValueError(m)
+
+        if not self.retrieve_vector_index():
+            self.create_vector_index()
+
     def _build_vector_search_query(
         self,
         embedding: List[float],
@@ -1215,37 +1297,51 @@ class ArangoVector(VectorStore):
         filter_clause: str,
         metadata_clause: str,
     ) -> Tuple[str, dict[str, Any]]:
-        if self._distance_strategy == DistanceStrategy.COSINE:
-            score_func = "APPROX_NEAR_COSINE" if use_approx else "COSINE_SIMILARITY"
-            sort_order = "DESC"
-        elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
-            score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
-            sort_order = "ASC"
-        else:
-            raise ValueError(f"Unsupported metric: {self._distance_strategy}")
+        scoring_query, sort_order = self._get_score_query_and_sort_order(use_approx)
 
         if use_approx:
-            if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
-                m = "Approximate Nearest Neighbor search requires ArangoDB >= 3.12.4."
-                raise ValueError(m)
-
-            if not self.retrieve_vector_index():
-                self.create_vector_index()
+            self._ensure_vector_index()
 
         return_fields.update({"_key", self.text_field})
         return_fields_list = list(return_fields)
 
-        aql_query = f"""
-            FOR doc IN @@collection
-                {filter_clause if not use_approx else ""}
-                LET score = {score_func}(doc.{self.embedding_field}, @embedding)
-                SORT score {sort_order}
-                LIMIT {k}
-                {filter_clause if use_approx else ""}
-                LET data = KEEP(doc, {return_fields_list})
-                LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
-                RETURN {{data, score, metadata}}
-        """
+        if self._distance_strategy in [
+            DistanceStrategy.JACCARD,
+            DistanceStrategy.COSINE,
+            DistanceStrategy.EUCLIDEAN_DISTANCE,
+            DistanceStrategy.DOT_PRODUCT,
+        ]:
+            aql_query = f"""
+                FOR doc IN @@collection
+                    {filter_clause if not use_approx else ""}
+                    LET score = {scoring_query}
+                    SORT score {sort_order}
+                    LIMIT {k}
+                    {filter_clause if use_approx else ""}
+                    LET data = KEEP(doc, {return_fields_list})
+                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
+                    RETURN {{data, score, metadata}}
+            """
+        elif self._distance_strategy == DistanceStrategy.MAX_INNER_PRODUCT:
+            aql_query = f"""
+                LET scored = (
+                    FOR doc IN @@collection
+                        {filter_clause}
+                        LET score = {scoring_query}
+                        SORT score {sort_order}
+                        LIMIT {k}
+                        RETURN {{doc, score}}
+                )
+                LET maxScore = MAX(scored[*].score)
+                
+                FOR item IN scored
+                    FILTER item.score == maxScore
+                    LET data = KEEP(item.doc, {return_fields_list})
+                    LET metadata = {f"({metadata_clause})" if metadata_clause else "{}"}
+                    RETURN {{data, score: item.score, metadata}}
+            """
+        else:
+            raise ValueError(f"Unsupported metric: {self._distance_strategy}")
 
         bind_vars = {
             "@collection": self.collection_name,
@@ -1269,25 +1365,13 @@ class ArangoVector(VectorStore):
     ) -> Tuple[str, dict[str, Any]]:
         """Build the hybrid search query using RRF."""
 
+        scoring_query, sort_order = self._get_score_query_and_sort_order(use_approx)
+
         if not self.retrieve_keyword_index():
             self.create_keyword_index()
 
-        if self._distance_strategy == DistanceStrategy.COSINE:
-            score_func = "APPROX_NEAR_COSINE" if use_approx else "COSINE_SIMILARITY"
-            sort_order = "DESC"
-        elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
-            score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
-            sort_order = "ASC"
-        else:
-            raise ValueError(f"Unsupported metric: {self._distance_strategy}")
-
         if use_approx:
-            if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
-                m = "Approximate Nearest Neighbor search requires ArangoDB >= 3.12.4."
-                raise ValueError(m)
-
-            if not self.retrieve_vector_index():
-                self.create_vector_index()
+            self._ensure_vector_index()
 
         return_fields.update({"_key", self.text_field})
         return_fields_list = list(return_fields)
@@ -1300,19 +1384,54 @@ class ArangoVector(VectorStore):
                 )
             """
 
+        if self._distance_strategy in [
+            DistanceStrategy.JACCARD,
+            DistanceStrategy.COSINE,
+            DistanceStrategy.EUCLIDEAN_DISTANCE,
+            DistanceStrategy.DOT_PRODUCT,
+        ]:
+            vector_search_query = f"""
+                LET vector_results = (
+                    FOR doc IN @@collection
+                        {filter_clause if not use_approx else ""}
+                        LET score = {scoring_query}
+                        SORT score {sort_order}
+                        LIMIT {k}
+                        {filter_clause if use_approx else ""}
+                        WINDOW {{ preceding: "unbounded", following: 0 }}
+                        AGGREGATE rank = COUNT(1)
+                        LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
+                        RETURN {{ key: doc._key, score: rrf_score }}
+                )
+                """
+        elif self._distance_strategy == DistanceStrategy.MAX_INNER_PRODUCT:
+            vector_search_query = f"""
+                LET scored = (
+                    FOR doc IN @@collection
+                        {filter_clause}
+                        LET score = SUM(
+                            FOR i IN 0..LENGTH(doc.embedding)-1
+                                RETURN doc.embedding[i] * @embedding[i]
+                        )
+                        SORT score {sort_order}
+                        LIMIT {k}
+                        RETURN {{doc, score}}
+                )
+                LET maxScore = MAX(scored[*].score)
+
+                LET vector_results = (
+                    FOR item IN scored
+                        FILTER item.score == maxScore
+                        LET rank = 1
+                        LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
+                        RETURN {{ key: item.doc._key, score: rrf_score }}
+                )
+                """
+        else:
+            raise ValueError(f"Unsupported metric: {self._distance_strategy}")
+
         aql_query = f"""
-            LET vector_results = (
-                FOR doc IN @@collection
-                    {filter_clause if not use_approx else ""}
-                    LET score = {score_func}(doc.{self.embedding_field}, @embedding)
-                    SORT score {sort_order}
-                    LIMIT {k}
-                    {filter_clause if use_approx else ""}
-                    WINDOW {{ preceding: "unbounded", following: 0 }}
-                    AGGREGATE rank = COUNT(1)
-                    LET rrf_score = {vector_weight} / ({self.rrf_constant} + rank)
-                    RETURN {{ key: doc._key, score: rrf_score }}
-            )
+            {vector_search_query}
 
             LET keyword_results = (
                 FOR doc IN @@view
@@ -1350,3 +1469,197 @@ class ArangoVector(VectorStore):
         }
 
         return aql_query, bind_vars
+
+    def find_entity_clusters(
+        self,
+        threshold: float = 0.8,
+        k: int = 4,
+        use_approx: bool = True,
+        use_subset_relations: bool = False,
+        merge_similar_entities: bool = False,
+    ) -> Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+        """
+        Find similar documents within the collection for entity resolution.
+
+        This method compares documents within the collection to each other and
+        returns entities grouped with their most similar documents. Each entity
+        is returned with a list of the top k most similar entities based on the
+        chosen similarity function.
+        similarity function: [COSINE, EUCLIDEAN_DISTANCE, JACCARD,
+        APPROX_NEAR_COSINE, APPROX_NEAR_L2]
+        NOTE: for JACCARD, use_approx is automatically set to False
+
+
+        :param threshold: Minimum similarity score for documents to be considered
+            similar. Defaults to 0.8.
+        :type threshold: float
+        :param k: Number of similar documents to return for each entity.
+            Defaults to 4.
+        :type k: int
+        :param use_approx: Whether to use approximate nearest neighbor search.
+            Defaults to True.
+        :type use_approx: bool
+        :param use_subset_relations: Whether to analyze subset relations.
+            Defaults to False.
+        :type use_subset_relations: bool
+        :param merge_similar_entities: Whether to merge similar entities based on
+            subset relationships. Only effective when use_subset_relations=True.
+            When True, merges subset groups into their superset groups to create
+            consolidated, non-overlapping clusters. Defaults to False.
+        :type merge_similar_entities: bool
+        :return: Return format depends on parameters:
+
+            - Basic clustering (use_subset_relations=False and
+              merge_similar_entities=False):
+              List[Dict] with format: {'entity': entity_key, 'similar': [list_of_keys]}
+
+            - With subset analysis (use_subset_relations=True,
+              merge_similar_entities=False):
+              Dict with keys: 'similar_entities', 'subset_relationships'
+
+            - With merging (use_subset_relations=True, merge_similar_entities=True):
+              Dict with keys: 'similar_entities', 'subset_relationships',
+              'merged_entities'
+
+        :rtype: Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]
+        """
+
+        target_collection = self.collection_name
+
+        if self._distance_strategy == DistanceStrategy.COSINE:
+            score_func = "APPROX_NEAR_COSINE" if use_approx else "COSINE_SIMILARITY"
+            sort_order = "DESC"
+        elif self._distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
+            score_func = "APPROX_NEAR_L2" if use_approx else "L2_DISTANCE"
+            sort_order = "ASC"
+        elif self._distance_strategy == DistanceStrategy.JACCARD:
+            use_approx = False
+            score_func = "JACCARD"
+            sort_order = "DESC"
+        else:
+            raise ValueError(f"Unsupported metric: {self._distance_strategy}")
+
+        if use_approx:
+            if version.parse(self.db.version()) < version.parse("3.12.4"):  # type: ignore
+                msg = "ANN search requires ArangoDB >= 3.12.4"
+                m = msg
+                raise ValueError(m)
+
+            if not self.retrieve_vector_index():
+                self.create_vector_index()
+
+        filter_key_clause = "FILTER doc1._key < doc2._key"
+        aql_query = f"""
+                FOR doc1 IN @@collection
+                    LET similar = (
+                        FOR doc2 IN @@collection
+                            {"" if use_approx else filter_key_clause}
+                            LET score = {score_func}(doc1.{self.embedding_field}, 
+                                doc2.{self.embedding_field})
+                            SORT score {sort_order}
+                            LIMIT @k
+                            {filter_key_clause if use_approx else ""}
+                            FILTER score >= @threshold
+                            RETURN doc2._key
+                    )
+                    FILTER LENGTH(similar) > 0
+                    RETURN {{entity: doc1._key, similar}}
+            """
+
+        bind_vars: MutableMapping[str, Any] = {
+            "@collection": target_collection,
+            "threshold": threshold,
+            "k": k,
+        }
+
+        cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
+
+        results = list(cast(Iterable[Dict[str, Any]], cursor))
+        if not results:
+            if not use_subset_relations:
+                return []
+            return {"similar_entities": [], "subset_relationships": []}
+
+        if not use_subset_relations:
+            if merge_similar_entities:
+                import warnings
+
+                warnings.warn(
+                    "merge_similar_entities=True requires use_subset_relations=True. "
+                    "Ignoring merge_similar_entities parameter.",
+                    UserWarning,
+                )
+            return results
+
+        # SUBSET RELATIONS - only execute when use_subset_relations=True
+        combined_query = """
+            // Step 1: Calculate subset relationships
+            LET subsetResults = (
+                FOR group1 IN @results
+                    FOR group2 IN @results
+                        FILTER group1.entity != group2.entity
+                        AND LENGTH(group1.similar) < LENGTH(group2.similar)
+                        
+                        LET group1Keys = group1.similar
+                        LET group2Keys = group2.similar
+                        LET missingKeys = MINUS(group1Keys, group2Keys)
+                        
+                        FILTER LENGTH(missingKeys) == 0
+                        RETURN {
+                            subsetGroup: group1.entity,
+                            supersetGroup: group2.entity
+                        }
+            )
+            
+            // Step 2: Calculate merged entities ONLY if merge_similar_entities=true
+            LET mergedResults = @merge_similar_entities && LENGTH(subsetResults) > 0 ? (
+                FOR group IN @results
+                    LET isSubset = LENGTH(
+                        FOR rel IN subsetResults 
+                        FILTER rel.subsetGroup == group.entity 
+                        RETURN 1
+                    ) > 0
+                    
+                    FILTER NOT isSubset
+                    
+                    LET entitiesToMerge = (
+                        FOR rel IN subsetResults
+                            FILTER rel.supersetGroup == group.entity
+                            RETURN rel.subsetGroup
+                    )
+                    
+                    LET mergedSimilar = UNION_DISTINCT(group.similar, entitiesToMerge)
+                    
+                    RETURN { entity: group.entity, merged_entities: mergedSimilar }
+            ) : []
+            
+            // Return results based on what was requested
+            RETURN {
+                subset_relationships: subsetResults,
+                merged_entities: mergedResults
+            }
+        """
+
+        bind_vars_combined: MutableMapping[str, Any] = {
+            "results": results,
+            "merge_similar_entities": merge_similar_entities,
+        }
+
+        # Execute combined query
+        combined_result = self.db.aql.execute(
+            combined_query, bind_vars=bind_vars_combined, stream=True
+        )
+        merged_result = list(cast(Iterable[Dict[str, Any]], combined_result))[0]
+
+        # Return results based on merge_similar_entities parameter
+        if merge_similar_entities:
+            return {
+                "similar_entities": results,
+                "subset_relationships": merged_result["subset_relationships"],
+                "merged_entities": merged_result["merged_entities"],
+            }
+        else:
+            return {
+                "similar_entities": results,
+                "subset_relationships": merged_result["subset_relationships"],
+            }

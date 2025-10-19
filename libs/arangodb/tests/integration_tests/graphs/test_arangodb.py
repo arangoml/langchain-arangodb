@@ -2,6 +2,7 @@ import json
 import os
 import pprint
 from collections import defaultdict
+from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
 import pytest
@@ -653,9 +654,12 @@ def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
             ],
         )
 
-    # Call generate_schema
+    # Call generate_schema with indexes included
     schema = graph.generate_schema(
-        sample_ratio=1.0, graph_name=graph_name, include_examples=True
+        sample_ratio=1.0,
+        graph_name=graph_name,
+        include_examples=True,
+        schema_include_indexes=True,
     )
 
     # Validate graph schema
@@ -665,12 +669,34 @@ def test_generate_schema_with_graph_name(db: StandardDatabase) -> None:
     edge_defs = graph_schema[0]["edge_definitions"]
     assert any(ed["edge_collection"] == edge_col for ed in edge_defs)
 
-    # Validate collection schema includes vertex and edge
-    collection_schema = schema["collection_schema"]
+    # Validate collection schema includes vertex, edge, and indexes
+    collection_schema: List[Dict[str, Any]] = schema["collection_schema"]
     col_names = {col["name"] for col in collection_schema}
     assert vertex_col1 in col_names
     assert vertex_col2 in col_names
     assert edge_col in col_names
+    for collection in collection_schema:
+        assert collection["indexes"] is not None
+        assert len(collection["indexes"]) > 0
+        assert isinstance(collection["indexes"], list)
+        assert isinstance(collection["indexes"][0], dict)
+
+        # Test filtered index structure - only essential fields included
+        for index in collection["indexes"]:
+            assert "id" in index
+            assert "fields" in index
+            assert isinstance(index["fields"], list)
+            # Required fields should always be present
+            assert index["id"] is not None
+            assert index["fields"] is not None
+            # Optional fields (type, name) may or may not be present
+            if "type" in index:
+                assert index["type"] is not None
+            if "name" in index:
+                assert index["name"] is not None
+            # Verify that other fields are not present
+            assert "unique" not in index
+            assert "sparse" not in index
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")

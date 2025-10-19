@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from arango import AQLQueryExecuteError, AQLQueryExplainError
 from langchain_classic.chains.base import Chain
 from langchain_core.callbacks import CallbackManagerForChainRun
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import BasePromptTemplate
@@ -19,7 +20,8 @@ from langchain_arangodb.chains.graph_qa.prompts import (
     AQL_GENERATION_PROMPT,
     AQL_QA_PROMPT,
 )
-from langchain_arangodb.graphs.graph_store import GraphStore
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
+from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 
 AQL_WRITE_OPERATIONS: List[str] = [
     "INSERT",
@@ -45,13 +47,32 @@ class ArangoGraphQAChain(Chain):
         See https://python.langchain.com/docs/security for more information.
     """
 
-    graph: GraphStore = Field(exclude=True)
+    graph: ArangoGraph = Field(exclude=True)
+    """The ArangoGraph instance to use for the chain."""
+    embedding: Optional[Embeddings] = Field(default=None, exclude=True)
+    """Embedding model to use for the chain."""
+    query_cache_collection_name: str = Field(default="Queries")
+    """Name of the collection for storing queries."""
     aql_generation_chain: Runnable[Dict[str, Any], Any]
+    """Chain to use for AQL generation."""
     aql_fix_chain: Runnable[Dict[str, Any], Any]
+    """Chain to use for AQL fix."""
     qa_chain: Runnable[Dict[str, Any], Any]
+    """Chain to use for QA."""
     input_key: str = "query"  #: :meta private:
+    """Key to use for the input."""
     output_key: str = "result"  #: :meta private:
-
+    """Key to use for the output."""
+    use_query_cache: bool = Field(default=False)
+    """Whether to use the query cache."""
+    query_cache_similarity_threshold: float = Field(default=0.80)
+    """Similarity threshold for matching cached queries."""
+    include_history: bool = Field(default=False)
+    """Whether to include the chat history in the prompt."""
+    max_history_messages: int = Field(default=10)
+    """Maximum number of messages to include in the chat history."""
+    chat_history_store: Optional[ArangoChatMessageHistory] = Field(default=None)
+    """ArangoChatMessageHistory instance to store chat history."""
     top_k: int = 10
     """Number of results to return from the query"""
     aql_examples: str = ""
@@ -102,6 +123,8 @@ class ArangoGraphQAChain(Chain):
                 "necessary precautions. "
                 "See https://python.langchain.com/docs/security for more information."
             )
+        self._last_user_input: Optional[str] = None
+        self._last_aql_query: Optional[str] = None
 
     @property
     def input_keys(self) -> List[str]:
@@ -130,8 +153,28 @@ class ArangoGraphQAChain(Chain):
     ) -> ArangoGraphQAChain:
         """Initialize from LLM.
 
-        :param llm: The language model to use.
+        :param llm: The large language model to use.
         :type llm: BaseLanguageModel
+        :param embedding: The embedding model to use.
+        :type embedding: Embeddings
+        :param use_query_cache: If True, enables reuse of similar
+            past queries from cache.
+        :type use_query_cache: bool
+        :param query_cache_similarity_threshold: The similarity threshold
+            to consider a query as a match in the cache.
+        :type query_cache_similarity_threshold: float
+        :param query_cache_collection_name: Name of the collection for
+            storing queries.
+        :type query_cache_collection_name: str
+        :param include_history: If True, includes recent chat history in the prompt
+            to provide context for query generation.
+        :type include_history: bool
+        :param max_history_messages: The maximum number of messages to
+            include in the chat history.
+        :type max_history_messages: int
+        :param chat_history_store: ArangoChatMessageHistory instance to
+            store chat history.
+        :type chat_history_store: ArangoChatMessageHistory
         :param qa_prompt: The prompt to use for the QA chain.
         :type qa_prompt: BasePromptTemplate
         :param aql_generation_prompt: The prompt to use for the AQL generation chain.
@@ -161,6 +204,170 @@ class ArangoGraphQAChain(Chain):
             aql_fix_chain=aql_fix_chain,
             **kwargs,
         )
+
+    def _check_and_insert_query(self, text: str, aql: str) -> str:
+        """
+        Check if a query is already in the cache and insert it if it's not.
+
+        :param text: The text of the query to check.
+        :type text: str
+        :param aql: The AQL query to check.
+        :type aql: str
+        :return: A message indicating the result of the operation.
+        """
+        text = text.strip().lower()
+        text_hash = self.graph._hash(text)
+        collection = self.graph.db.collection(self.query_cache_collection_name)
+
+        if collection.has(text_hash):
+            return f"This query is already in the cache: {text}"
+
+        if self.embedding is None:
+            raise ValueError("Cannot cache queries without an embedding model.")
+
+        query_embedding = self.embedding.embed_query(text)
+        collection.insert(
+            {
+                "_key": text_hash,
+                "text": text,
+                "embedding": query_embedding,
+                "aql": aql,
+            }
+        )
+
+        return f"Cached: {text}"
+
+    def cache_query(self, text: Optional[str] = None, aql: Optional[str] = None) -> str:
+        """
+        Cache a query generated by the LLM only if it's not already stored.
+
+        :param text: The text of the query to cache.
+        :param aql: The AQL query to cache.
+        :return: A message indicating the result of the operation.
+        """
+        if self.embedding is None:
+            raise ValueError("Cannot cache queries without an embedding model.")
+
+        if not self.graph.db.has_collection(self.query_cache_collection_name):
+            m = f"Collection {self.query_cache_collection_name} does not exist"  # noqa: E501
+            raise ValueError(m)
+
+        if not text and aql:
+            raise ValueError("Text is required to cache a query")
+
+        if text and not aql:
+            raise ValueError("AQL is required to cache a query")
+
+        if not text and not aql:
+            if self._last_user_input is None or self._last_aql_query is None:
+                m = "No previous query to cache. Please provide **text** and **aql**."
+                raise ValueError(m)
+
+            # Fallback: cache the most recent query
+            return self._check_and_insert_query(
+                self._last_user_input,
+                self._last_aql_query,
+            )
+
+        if not isinstance(text, str) or not isinstance(aql, str):
+            raise ValueError("Text and AQL must be strings")
+
+        return self._check_and_insert_query(text, aql)
+
+    def clear_query_cache(self, text: Optional[str] = None) -> str:
+        """
+        Clear the query cache.
+
+        :param text: The text of the query to delete from the cache.
+        :type text: str
+        :return: A message indicating the result of the operation.
+        """
+
+        if not self.graph.db.has_collection(self.query_cache_collection_name):
+            m = f"Collection {self.query_cache_collection_name} does not exist"
+            raise ValueError(m)
+
+        collection = self.graph.db.collection(self.query_cache_collection_name)
+
+        if text is None:
+            collection.truncate()
+            return "Cleared all queries from the cache"
+
+        text = text.strip().lower()
+        text_hash = self.graph._hash(text)
+
+        if collection.has(text_hash):
+            collection.delete(text_hash)
+            return f"Removed: {text}"
+
+        return f"Not found: {text}"
+
+    def _get_cached_query(
+        self, user_input: str, query_cache_similarity_threshold: float
+    ) -> Optional[Tuple[str, str]]:
+        """Get the cached query for the user input. Only used if embedding
+        is provided and **use_query_cache** is True.
+
+        :param user_input: The user input to search for in the cache.
+        :type user_input: str
+
+        :return: The cached query and score, if found.
+        :rtype: Optional[Tuple[str, int]]
+        """
+        if self.embedding is None:
+            raise ValueError("Cannot enable query cache without passing embedding")
+
+        if self.graph.db.collection(self.query_cache_collection_name).count() == 0:
+            return None
+
+        user_input = user_input.strip().lower()
+
+        # 1. Exact Search
+
+        query = f"""
+            FOR q IN {self.query_cache_collection_name}
+                FILTER q.text == @user_input
+                LIMIT 1
+                RETURN q.aql
+        """
+
+        cursor = self.graph.db.aql.execute(
+            query,
+            bind_vars={"user_input": user_input},
+        )
+
+        result = list(cursor)  # type: ignore
+
+        if result:
+            return result[0], "1.0"
+
+        # 2. Vector Search
+
+        embedding = self.embedding.embed_query(user_input)
+        query = """
+            FOR q IN @@col
+                LET score = COSINE_SIMILARITY(q.embedding, @embedding)
+                SORT score DESC
+                LIMIT 1
+                FILTER score > @score_threshold
+                RETURN {aql: q.aql, score: score}   
+        """
+
+        result = list(
+            self.graph.db.aql.execute(
+                query,
+                bind_vars={
+                    "@col": self.query_cache_collection_name,
+                    "embedding": embedding,  # type: ignore
+                    "score_threshold": query_cache_similarity_threshold,  # type: ignore
+                },
+            )
+        )
+
+        if result:
+            return result[0]["aql"], str(round(result[0]["score"], 2))
+
+        return None
 
     def _call(
         self,
@@ -211,20 +418,73 @@ class ArangoGraphQAChain(Chain):
         """
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         callbacks = _run_manager.get_child()
-        user_input = inputs[self.input_key]
+        user_input = inputs[self.input_key].strip().lower()
 
-        ######################
-        # Generate AQL Query #
-        ######################
-
-        aql_generation_output = self.aql_generation_chain.invoke(
-            {
-                "adb_schema": self.graph.schema_yaml,
-                "aql_examples": self.aql_examples,
-                "user_input": user_input,
-            },
-            callbacks=callbacks,
+        # Query Cache Parameters (can be overridden by inputs at runtime)
+        use_query_cache = inputs.get("use_query_cache", self.use_query_cache)
+        query_cache_similarity_threshold = inputs.get(
+            "query_cache_similarity_threshold", self.query_cache_similarity_threshold
         )
+
+        # Chat History Parameters (can be overridden by inputs at runtime)
+        include_history = inputs.get("include_history", self.include_history)
+        max_history_messages = inputs.get(
+            "max_history_messages", self.max_history_messages
+        )
+
+        if use_query_cache and self.embedding is None:
+            raise ValueError("Cannot enable query cache without passing embedding")
+
+        # ######################
+        # # Get Chat History #
+        # ######################
+
+        if include_history and self.chat_history_store is None:
+            raise ValueError(
+                "Chat message history is required if include_history is True"
+            )
+
+        if max_history_messages <= 0:
+            raise ValueError("max_history_messages must be greater than 0")
+
+        chat_history = []
+        if include_history and self.chat_history_store is not None:
+            chat_history.extend(
+                self.chat_history_store.get_messages(n_messages=max_history_messages)
+            )
+
+        ######################
+        # Check Query Cache #
+        ######################
+
+        cached_query, score = None, None
+        if use_query_cache:
+            if self.embedding is None:
+                m = "Embedding must be provided when using query cache"
+                raise ValueError(m)
+
+            if not self.graph.db.has_collection(self.query_cache_collection_name):
+                self.graph.db.create_collection(self.query_cache_collection_name)
+
+            cache_result = self._get_cached_query(
+                user_input, query_cache_similarity_threshold
+            )
+
+            if cache_result is not None:
+                cached_query, score = cache_result
+
+        if cached_query:
+            aql_generation_output = f"```aql{cached_query}```"
+        else:
+            aql_generation_output = self.aql_generation_chain.invoke(
+                {
+                    "adb_schema": self.graph.schema_yaml,
+                    "aql_examples": self.aql_examples,
+                    "user_input": user_input,
+                    "chat_history": chat_history,
+                },
+                callbacks=callbacks,
+            )
 
         aql_query = ""
         aql_error = ""
@@ -283,9 +543,14 @@ class ArangoGraphQAChain(Chain):
                     """
                     raise ValueError(error_msg)
 
-            _run_manager.on_text(
-                f"AQL Query ({aql_generation_attempt}):", verbose=self.verbose
-            )
+            query_message = f"AQL Query ({aql_generation_attempt})\n"
+            if cached_query:
+                score_string = score if score is not None else "1.0"
+                query_message = (
+                    f"AQL Query (used cached query, score: {score_string})\n"  # noqa: E501
+                )
+
+            _run_manager.on_text(query_message, verbose=self.verbose)
             _run_manager.on_text(
                 aql_query, color="green", end="\n", verbose=self.verbose
             )
@@ -300,7 +565,6 @@ class ArangoGraphQAChain(Chain):
                     "list_limit": self.output_list_limit,
                     "string_limit": self.output_string_limit,
                 }
-
                 aql_result = aql_execution_func(aql_query, params)
             except (AQLQueryExecuteError, AQLQueryExplainError) as e:
                 aql_error = str(e.error_message)
@@ -360,6 +624,18 @@ class ArangoGraphQAChain(Chain):
             callbacks=callbacks,
         )
 
+        content = str(result.content if isinstance(result, AIMessage) else result)
+
+        # Add summary
+        text = "Summary:"
+        _run_manager.on_text(text, end="\n", verbose=self.verbose)
+        _run_manager.on_text(
+            content,
+            color="green",
+            end="\n",
+            verbose=self.verbose,
+        )
+
         results: Dict[str, Any] = {self.output_key: result}
 
         if self.return_aql_query:
@@ -367,6 +643,20 @@ class ArangoGraphQAChain(Chain):
 
         if self.return_aql_result:
             results["aql_result"] = aql_result
+
+        self._last_user_input = user_input
+        self._last_aql_query = aql_query
+
+        ########################
+        # Store Chat History #
+        ########################
+
+        if self.chat_history_store is not None:
+            self.chat_history_store.add_qa_message(
+                user_input,
+                aql_query,
+                result.content if isinstance(result, AIMessage) else result,  # type: ignore
+            )
 
         return results
 

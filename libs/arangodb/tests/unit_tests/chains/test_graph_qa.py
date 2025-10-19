@@ -1,5 +1,6 @@
 """Unit tests for ArangoGraphQAChain."""
 
+import math
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, Mock
 
@@ -7,15 +8,16 @@ import pytest
 from arango import AQLQueryExecuteError
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.messages import AIMessage
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableLambda
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
-from langchain_arangodb.graphs.graph_store import GraphStore
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
+from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from tests.llms.fake_llm import FakeLLM
 
 
-class FakeGraphStore(GraphStore):
-    """A fake GraphStore implementation for testing purposes."""
+class FakeGraphStore(ArangoGraph):
+    """A fake ArangoGraph implementation for testing purposes."""
 
     def __init__(self) -> None:
         self._schema_yaml = "node_props:\n Movie:\n - property: title\n   type: STRING"
@@ -27,9 +29,23 @@ class FakeGraphStore(GraphStore):
         self.refreshed = False
         self.graph_documents_added = []  # type: ignore
 
+        # Mock the database interface
+        self.__db = Mock()
+        self.__db.collection = Mock()
+        mock_queries_collection = Mock()
+        mock_queries_collection.find = Mock(return_value=[])
+        mock_queries_collection.insert = Mock()
+        self.__db.collection.return_value = mock_queries_collection
+        self.__db.aql = Mock()
+        self.__db.aql.execute = Mock(return_value=[])
+
     @property
     def schema_yaml(self) -> str:
         return self._schema_yaml
+
+    @property
+    def db(self) -> Mock:  # type: ignore
+        return self.__db  # type: ignore
 
     @property
     def schema_json(self) -> str:
@@ -43,7 +59,7 @@ class FakeGraphStore(GraphStore):
         self.explains_run.append((query, params))
         return [{"plan": "This is a fake AQL query plan."}]
 
-    def refresh_schema(self) -> None:
+    def refresh_schema(self) -> None:  # type: ignore
         self.refreshed = True
 
     def add_graph_documents(  # type: ignore
@@ -66,6 +82,26 @@ class TestArangoGraphQAChain:
     def fake_llm(self) -> FakeLLM:
         """Create a fake LLM."""
         return FakeLLM()
+
+    @pytest.fixture
+    def mock_embedding(self) -> Mock:
+        """Create a mock embedding model."""
+        mock_emb = Mock()
+        mock_emb.embed_query = Mock(
+            return_value=[0.1, 0.2, 0.3]
+        )  # Simple mock embedding vector
+        return mock_emb
+
+    @pytest.fixture
+    def mock_db_with_queries(self) -> Mock:
+        """Create a mock database with a Queries collection."""
+        mock_db = Mock()
+        mock_collection = Mock()
+        mock_collection.find = Mock(return_value=[])  # Default to empty results
+        mock_db.collection = Mock(return_value=mock_collection)
+        mock_db.aql = Mock()
+        mock_db.aql.execute = Mock(return_value=[])  # Default to empty results
+        return mock_db
 
     @pytest.fixture
     def mock_chains(self) -> Dict[str, Runnable]:
@@ -528,3 +564,166 @@ class TestArangoGraphQAChain:
 
         assert "result" in result
         assert mock_run_manager.get_child.called
+
+    def test_query_cache(self, fake_graph_store: FakeGraphStore) -> None:
+        """Test query cache in 4 situations:
+        1. Exact search
+        2. Vector search
+        3. AQL generation and store new query
+        4. Query cache disabled
+        """
+
+        def cosine_similarity(v1, v2):  # type: ignore
+            dot = sum(a * b for a, b in zip(v1, v2))
+            norm1 = math.sqrt(sum(a * a for a in v1))
+            norm2 = math.sqrt(sum(b * b for b in v2))
+            if norm1 == 0.0 or norm2 == 0.0:
+                return 0.0
+            return dot / (norm1 * norm2)
+
+        fake_graph_store.db.collection("Queries").find = Mock(return_value=[])
+
+        # Simulate a previously cached query
+        stored_query = {
+            "text": "List all movies",
+            "aql": "FOR m IN Movies RETURN m",
+            "embedding": [0.123, 0.456, 0.789, 0.321, 0.654],
+        }
+
+        def mock_execute(query, bind_vars):  # type: ignore
+            # Handle vector search query
+            if "query_embedding" in bind_vars:
+                query_embedding = bind_vars["query_embedding"]
+                score = cosine_similarity(query_embedding, stored_query["embedding"])
+                if score > bind_vars.get("score_threshold", 0.75):
+                    return [{"aql": stored_query["aql"], "score": score}]
+                return []
+            # Handle regular query execution
+            return [{"title": "Inception"}]
+
+        fake_graph_store.db.aql.execute = Mock(side_effect=mock_execute)
+
+        dummy_llm = RunnableLambda(
+            lambda prompt: "```FOR m IN Movies LIMIT 1 RETURN m```"
+        )
+
+        chain = ArangoGraphQAChain.from_llm(
+            llm=dummy_llm,  # type: ignore
+            graph=fake_graph_store,
+            allow_dangerous_requests=True,
+            verbose=True,
+            return_aql_result=True,
+        )
+
+        chain.embedding = type(
+            "FakeEmbedding",
+            (),
+            {
+                "embed_query": staticmethod(
+                    lambda text: {
+                        "Find all movies": [0.123, 0.456, 0.789, 0.321, 0.654],
+                        "Show me all movies": [0.120, 0.460, 0.780, 0.330, 0.650],
+                    }.get(text, [0.0] * 5)
+                )
+            },
+        )()
+
+        # 1. Test with exact search
+        result1 = chain.invoke({"query": "Find all movies", "use_query_cache": True})
+        assert result1["aql_result"][0]["title"] == "Inception"
+
+        # 2. Test with vector search
+        result2 = chain.invoke({"query": "Show me all movies", "use_query_cache": True})
+        assert result2["aql_result"][0]["title"] == "Inception"
+
+        # 3. Test with aql generation and store new query
+        result3 = chain.invoke(
+            {"query": "What is the name of the first movie?", "use_query_cache": True}
+        )
+        assert result3["result"] == "```FOR m IN Movies LIMIT 1 RETURN m```"
+
+        # 4. Test with query cache disabled
+        result4 = chain.invoke({"query": "What is the name of the first movie?"})
+        assert result4["result"] == "```FOR m IN Movies LIMIT 1 RETURN m```"
+
+    def test_chat_history(
+        self, fake_graph_store: FakeGraphStore, mock_chains: Dict[str, Runnable]
+    ) -> None:
+        """test _call with chat history"""
+
+        chat_history_store = Mock(spec=ArangoChatMessageHistory)
+
+        chat_history_store._collection_name = "ChatHistory"
+
+        # Add fake message history
+        chat_history_store.add_qa_message(
+            user_input="What is 1+1?",
+            aql_query="RETURN 1+1",
+            result="2",
+        )
+
+        chat_history_store.get_messages.return_value = [
+            {
+                "user_input": "What is 1+1?",
+                "aql_query": "RETURN 1+1",
+                "result": "2",
+                "role": "qa",
+                "session_id": "test",
+            },
+            {
+                "user_input": "What is 2+2?",
+                "aql_query": "RETURN 2+2",
+                "result": "4",
+                "role": "qa",
+                "session_id": "test",
+            },
+        ]
+
+        # Mock LLM chains
+        mock_chains[  # type: ignore
+            "aql_generation_chain"
+        ].invoke.return_value = "```aql\nFOR m IN Movies RETURN m\n```"  # noqa: E501
+        mock_chains["qa_chain"].invoke.return_value = AIMessage(  # type: ignore
+            content="Here are the movies."
+        )  # noqa: E501
+
+        # Build the chain
+        chain = ArangoGraphQAChain(
+            graph=fake_graph_store,
+            aql_generation_chain=mock_chains["aql_generation_chain"],
+            aql_fix_chain=mock_chains["aql_fix_chain"],
+            qa_chain=mock_chains["qa_chain"],
+            allow_dangerous_requests=True,
+            include_history=True,
+            chat_history_store=chat_history_store,
+            max_history_messages=10,
+            return_aql_result=True,
+        )
+
+        # Run the call
+        result = chain.invoke({"query": "List all movies"})
+
+        # LLM received the latest 2 docs
+        llm_input = mock_chains["aql_generation_chain"].invoke.call_args[0][0]  # type: ignore
+        chat_history = llm_input["chat_history"]
+        assert len(chat_history) == 2
+
+        # result has expected fields
+        assert result["result"].content == "Here are the movies."
+        assert result["aql_result"][0]["title"] == "Inception"
+
+        # Error: chat history enabled but store is missing
+        chain.chat_history_store = None
+        with pytest.raises(
+            ValueError,
+            match="Chat message history is required if include_history is True",
+        ):
+            chain.invoke({"query": "List again"})
+
+        # Error: invalid max_history_messages
+        chain.chat_history_store = chat_history_store
+        chain.max_history_messages = 0
+        with pytest.raises(
+            ValueError, match="max_history_messages must be greater than 0"
+        ):
+            chain.invoke({"query": "List again"})

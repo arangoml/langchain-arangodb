@@ -103,7 +103,11 @@ class ArangoGraph(GraphStore):
     :type schema_string_limit: int
     :param schema_include_views: Whether to include ArangoDB Views and Analyzers as
         part of the schema passed to the AQL Generation prompt. Default is False.
+    :param schema_include_indexes: Whether to include ArangoDB Indexes as
+        part of the collection schema passed to the AQL Generation prompt.
+        Default is False.
     :type schema_include_views: bool
+    :type schema_include_indexes: bool
         :return: None
         :rtype: None
         :raises ArangoClientError: If the ArangoDB client cannot be created.
@@ -135,6 +139,7 @@ class ArangoGraph(GraphStore):
         schema_list_limit: int = 32,
         schema_string_limit: int = 256,
         schema_include_views: bool = False,
+        schema_include_indexes: bool = False,
     ) -> None:
         """
         Initializes the ArangoGraph instance.
@@ -152,6 +157,7 @@ class ArangoGraph(GraphStore):
                 schema_list_limit,
                 schema_string_limit,
                 schema_include_views,
+                schema_include_indexes,
             )
 
     @property
@@ -245,6 +251,7 @@ class ArangoGraph(GraphStore):
         list_limit: int = 32,
         schema_string_limit: int = 256,
         schema_include_views: bool = False,
+        schema_include_indexes: bool = False,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Generates the schema of the ArangoDB Database and returns it
@@ -270,7 +277,11 @@ class ArangoGraph(GraphStore):
         :type schema_string_limit: int
         :param schema_include_views: Whether to include ArangoDB Views and Analyzers as
             part of the schema passed to the AQL Generation prompt. Default is False.
+        :param schema_include_indexes: Whether to include ArangoDB Indexes as
+            part of the collection schema passed to the AQL Generation prompt.
+            Default is False.
         :type schema_include_views: bool
+        :type schema_include_indexes: bool
         :return: A dictionary containing the graph schema and collection schema.
         :rtype: Dict[str, List[Dict[str, Any]]]
         :raises ValueError: If the sample ratio is not between 0 and 1.
@@ -326,6 +337,25 @@ class ArangoGraph(GraphStore):
             col_type: str = collection["type"]
             col_size: int = self.db.collection(col_name).count()  # type: ignore
 
+            # Extract collection indexes if schema_include_indexes is True
+            if schema_include_indexes:
+                col_indexes: List[Dict[str, Any]] = self.db.collection(
+                    col_name
+                ).indexes()  # type: ignore
+
+                indexes = []
+                for index in col_indexes:
+                    # Add required fields
+                    index_dict = {
+                        "id": index["id"],
+                        "fields": index["fields"],
+                    }
+                    # Add optional fields only if they exist
+                    for field in ["type", "name"]:
+                        if value := index.get(field):
+                            index_dict[field] = value
+                    indexes.append(index_dict)
+
             # Set number of ArangoDB documents/edges to retrieve
             limit_amount = ceil(sample_ratio * col_size) or 1
 
@@ -355,6 +385,9 @@ class ArangoGraph(GraphStore):
                 )
 
             collection_schema.append(collection_schema_entry)
+
+            if schema_include_indexes:
+                collection_schema_entry["indexes"] = indexes
 
         if not schema_include_views:
             return {
@@ -424,7 +457,7 @@ class ArangoGraph(GraphStore):
         top_k = params.pop("top_k", None)
         list_limit = params.pop("list_limit", 32)
         string_limit = params.pop("string_limit", 256)
-        cursor = self.__db.aql.execute(query, **params)
+        cursor = self.db.aql.execute(query, **params)
 
         results = []
 
@@ -454,7 +487,7 @@ class ArangoGraph(GraphStore):
         :raises ArangoServerError: If the ArangoDB server cannot be reached.
         :raises ArangoCollectionError: If the collection cannot be created.
         """
-        return self.__db.aql.explain(query)  # type: ignore
+        return self.db.aql.explain(query)  # type: ignore
 
     def add_graph_documents(
         self,

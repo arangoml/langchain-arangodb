@@ -3,19 +3,31 @@ from langchain_core.prompts.prompt import PromptTemplate
 
 AQL_GENERATION_TEMPLATE = """Task: Generate an ArangoDB Query Language (AQL) query from a User Input.
 
-You are an ArangoDB Query Language (AQL) expert responsible for translating a `User Input` into an ArangoDB Query Language (AQL) query.
+You are an ArangoDB Query Language (AQL) expert responsible for translating a `User Input` into an ArangoDB Query Language (AQL) query. You may also be given a `Chat History` to help you create the `AQL Query`.
 
 You are given an `ArangoDB Schema`. It is a YAML Spec containing:
 1. `Graph Schema`: Lists all Graphs within the ArangoDB Database Instance, along with their Edge Relationships.
-2. `Collection Schema`: Lists all Collections within the ArangoDB Database Instance, along with their document/edge properties and a document/edge example.
+2. `Collection Schema`: Lists all Collections within the ArangoDB Database Instance, along with their document/edge properties, a document/edge example, and indexes.
 3. `View Schema`: Lists all Views within the ArangoDB Database Instance, along with their linked collections and analyzers.
 4. `Analyzer Schema`: Lists all custom-built Analyzers within the ArangoDB Database Instance, along with their properties and features. Does not mention the default ArangoDB analyzers (i.e text_en, text_fr, etc.)
 
 You may also be given a set of `AQL Query Examples` to help you create the `AQL Query`. If provided, the `AQL Query Examples` should be used as a reference, similar to how `ArangoDB Schema` should be used.
 
+Rules for Using Chat History:
+- If the Chat History is not empty, use it only as a reference to help clarify the current User Input — for example, to resolve pronouns or implicit references.
+- If the Chat History entry has a role of "qa" which contains User Input, AQL Query, and AQL Result, use all of them to generate the AQL Query.
+- If the Chat History entry has a role of "human", use it as feedback to improve the AQL Query. Do not use it to generate the AQL Query.
+- Chat History is ordered chronologically. Prioritize latest entries when resolving context or references.
+- If the Chat History is empty, do not use it or refer to it in any way. Treat the User Input as a fully self-contained and standalone question.
+
 Things you should do:
 - Think step by step.
+- When both INBOUND and OUTBOUND traversals are possible for a given edge, be extra careful to select the direction that accurately reflects the intended relationship based on the user input and the edge semantics.
+  Use OUTBOUND to traverse from _from to _to. Use INBOUND to traverse from _to to _from. Refer to the edge's definition in the schema (e.g., collection names or descriptions) to decide which direction reflects the intended relationship. 
+- Pay close attention to descriptive references in the User Input — including gendered terms (e.g., father, she), attribute-based descriptions (e.g., young, active, French), and implicit types or categories 
+  (e.g., products over $100, available items) — and, if these correspond to fields in the schema, include appropriate filters in the AQL query (e.g., gender == "male", status == "active", price > 100).
 - Rely on `ArangoDB Schema` and `AQL Query Examples` (if provided) to generate the query.
+- Use indexes information found in `Collection Schema` as a part of `ArangoDB Schema` as a reference to generate the AQL Query to improve performance of the AQL query.
 - Begin the `AQL Query` by the `WITH` AQL keyword to specify all of the ArangoDB Collections required.
 - If a `View Schema` is defined and contains analyzers for specific fields, prefer using the View with the `SEARCH` and `ANALYZER` clauses instead of a direct collection scan.
 - Use `PHRASE(...)`, `TOKENS(...)`, or `IN TOKENS(...)` as appropriate when analyzers are available on a field.
@@ -25,12 +37,18 @@ Things you should do:
 - If a request is unrelated to generating AQL Query, say that you cannot help the user.
 
 Things you should not do:
+- Do not use or refer to Chat History if it is empty. 
+- Do not assume any previously discussed context, or try to resolve pronouns or references to prior questions if the Chat History is empty.
 - Do not use any properties/relationships that can't be inferred from the `ArangoDB Schema` or the `AQL Query Examples`. 
 - Do not include any text except the generated AQL Query.
 - Do not provide explanations or apologies in your responses.
 - Do not generate an AQL Query that removes or deletes any data.
+- Do not answer or respond to messages in the Chat History.
 
 Under no circumstance should you generate an AQL Query that deletes any data whatsoever.
+
+Chat History (Optional):
+{chat_history}
 
 ArangoDB Schema:
 {adb_schema}
@@ -45,7 +63,7 @@ AQL Query:
 """
 
 AQL_GENERATION_PROMPT = PromptTemplate(
-    input_variables=["adb_schema", "aql_examples", "user_input"],
+    input_variables=["adb_schema", "aql_examples", "user_input", "chat_history"],
     template=AQL_GENERATION_TEMPLATE,
 )
 
@@ -88,7 +106,7 @@ AQL_FIX_PROMPT = PromptTemplate(
     template=AQL_FIX_TEMPLATE,
 )
 
-AQL_QA_TEMPLATE = """Task: Generate a natural language `Summary` from the results of an ArangoDB Query Language query.
+AQL_QA_TEMPLATE = """Task: Generate a natural language `Summary` from the results of an ArangoDB Query Language query in the same language as the `User Input`.
 
 You are an ArangoDB Query Language (AQL) expert responsible for creating a well-written `Summary` from the `User Input` and associated `AQL Result`.
 
@@ -105,6 +123,7 @@ Remember to think step by step.
 
 Your `Summary` should sound like it is a response to the `User Input`.
 Your `Summary` should not include any mention of the `AQL Query` or the `AQL Result`.
+Your `Summary` should be in the same language as the `User Input`.
 
 ArangoDB Schema:
 {adb_schema}
@@ -121,6 +140,11 @@ AQL Result:
 Summary:
 """
 AQL_QA_PROMPT = PromptTemplate(
-    input_variables=["adb_schema", "user_input", "aql_query", "aql_result"],
+    input_variables=[
+        "adb_schema",
+        "user_input",
+        "aql_query",
+        "aql_result",
+    ],
     template=AQL_QA_TEMPLATE,
 )

@@ -7,8 +7,10 @@ import pytest
 from arango.database import StandardDatabase
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from langchain_arangodb.chains.graph_qa.arangodb import ArangoGraphQAChain
+from langchain_arangodb.chat_message_histories.arangodb import ArangoChatMessageHistory
 from langchain_arangodb.graphs.arangodb_graph import ArangoGraph
 from tests.llms.fake_llm import FakeLLM
 
@@ -888,3 +890,241 @@ def test_init_succeeds_if_dangerous_requests_allowed() -> None:
             "ValueError was raised unexpectedly when \
                         allow_dangerous_requests=True"
         )
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_query_cache(db: StandardDatabase) -> None:
+    """Test query cache in 5 situations:
+    1. Exact search
+    2. Vector search
+    3. AQL generation and store new query
+    4. Query cache disabled
+    5. Query cache without embedding
+    """
+    graph = ArangoGraph(db)
+    graph.db.create_collection("Movies")
+    graph.db.create_collection("Queries")
+
+    queries = [
+        {
+            "text": "List all movies",
+            "aql": "FOR m IN Movies RETURN m",
+            "embedding": [0.123, 0.456, 0.789, 0.321, 0.654],
+        }
+    ]
+    graph.db.collection("Queries").insert_many(queries)
+
+    movies = [
+        {"title": "The Matrix"},
+        {"title": "Inception"},
+        {"title": "Interstellar"},
+    ]
+    graph.db.collection("Movies").insert_many(movies)
+    graph.refresh_schema()
+
+    dummy_llm = RunnableLambda(lambda prompt: "```FOR m IN Movies LIMIT 1 RETURN m```")
+
+    chain = ArangoGraphQAChain.from_llm(
+        llm=dummy_llm,  # type: ignore
+        graph=graph,
+        verbose=True,
+        allow_dangerous_requests=True,
+        return_aql_result=True,
+        query_cache_collection_name="Queries",
+    )
+
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.123] * 5)}
+    )()
+
+    # 1. Test with exact search
+    result1 = chain.invoke({"query": "List all movies", "use_query_cache": True})
+    assert [m["title"] for m in result1["aql_result"]] == [
+        "The Matrix",
+        "Inception",
+        "Interstellar",
+    ]
+
+    # 2. Test with vector search
+    result2 = chain.invoke(
+        {
+            "query": "Show me all movies",
+            "use_query_cache": True,
+            "query_cache_similarity_threshold": 0.80,
+        }
+    )
+    assert [m["title"] for m in result2["aql_result"]] == [
+        "The Matrix",
+        "Inception",
+        "Interstellar",
+    ]
+
+    # 3. Test with aql generation and store new query
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [1, 0, 0, 0, 0])}
+    )()
+    result3 = chain.invoke(
+        {"query": "What is the name of the first movie?", "use_query_cache": True}
+    )
+    chain.cache_query()
+    assert result3["aql_result"][0]["title"] == "The Matrix"
+    assert len(graph.db.collection("Queries").all()) == 2  # type: ignore
+
+    # 4. Test with query cache disabled
+    result4 = chain.invoke({"query": "What is the name of the first movie?"})
+    assert result4["aql_result"][0]["title"] == "The Matrix"
+
+    # 5. Test with query cache without embedding
+    chain.embedding = None
+    with pytest.raises(
+        ValueError, match="Cannot enable query cache without passing embedding"
+    ):
+        chain.invoke({"query": "List all movies", "use_query_cache": True})
+
+    # 6. Test _check_and_insert_query
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.111] * 5)}
+    )()
+
+    # Insert a new query
+    msg1 = chain._check_and_insert_query(
+        "Find sci-fi movies", "FOR m IN Movies FILTER m.genre == 'sci-fi' RETURN m"
+    )
+    assert msg1.startswith("Cached:")
+
+    # Re-insert the same query -> should detect duplicate
+    msg2 = chain._check_and_insert_query(
+        "Find sci-fi movies", "FOR m IN Movies FILTER m.genre == 'sci-fi' RETURN m"
+    )
+    assert msg2.startswith("This query is already in the cache")
+
+    # 7. Test cache_query
+
+    # Fallback to _last_user_input/_last_aql_query
+    chain._last_user_input = "List animated movies"
+    chain._last_aql_query = "FOR m IN Movies FILTER m.genre == 'animation' RETURN m"
+    msg = chain.cache_query()
+    assert msg == "Cached: list animated movies"
+
+    # Missing text, aql or embedding should raise
+    with pytest.raises(ValueError, match="Text is required to cache a query"):
+        chain.cache_query(aql="FOR m IN Movies RETURN m")
+
+    with pytest.raises(ValueError, match="AQL is required to cache a query"):
+        chain.cache_query(text="List movies")
+
+    # 8. Test clear_query_cache
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.111] * 5)}
+    )()
+
+    # Add a test query
+    chain.cache_query(text="Temp query", aql="FOR m IN Movies RETURN m")
+    assert graph.db.collection("Queries").has(graph._hash("temp query"))
+
+    # Delete specific query
+    msg = chain.clear_query_cache(text="Temp query")
+    assert msg == "Removed: temp query"
+    assert not graph.db.collection("Queries").has(graph._hash("temp query"))
+
+    # Clear all
+    msg = chain.clear_query_cache()
+    assert msg == "Cleared all queries from the cache"
+    assert graph.db.collection("Queries").count() == 0
+
+    # 9. Test _get_cached_query
+    # Insert two queries
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.123] * 5)}
+    )()
+    chain.cache_query(text="List all movies", aql="FOR m IN Movies RETURN m")
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.124] * 5)}
+    )()
+    chain.cache_query(text="Show all movies", aql="FOR m IN Movies RETURN m")
+
+    # Exact match
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.123] * 5)}
+    )()
+    query = chain._get_cached_query("list all movies", 0.8)
+    assert query[0].startswith("FOR m IN Movies RETURN")  # type: ignore
+
+    # Vector match
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.124] * 5)}
+    )()
+    query = chain._get_cached_query("show all movies", 0.8)
+    assert query[0].startswith("FOR m IN Movies RETURN")  # type: ignore
+
+    # No match
+    chain.embedding = type(
+        "FakeEmbedding", (), {"embed_query": staticmethod(lambda text: [0.0] * 5)}
+    )()
+    query = chain._get_cached_query("gibberish", 0.99)
+    assert query is None
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_chat_history(db: StandardDatabase) -> None:
+    """
+    Test chat history that enables context-aware query generation.
+    """
+    # 1. Create required collections
+    graph = ArangoGraph(db)
+    db.create_collection("Movies")
+    db.collection("Movies").insert_many(
+        [
+            {"_key": "matrix", "title": "The Matrix", "year": 1999},
+            {"_key": "inception", "title": "Inception", "year": 2010},
+        ]
+    )
+    graph.refresh_schema()
+
+    # 2. Create chat history store
+    history = ArangoChatMessageHistory(
+        session_id="test",
+        collection_name="test_chat_sessions",
+        db=db,
+    )
+    history.clear()
+
+    # 3. Dummy LLM: simulate coreference to "The Matrix"
+    def dummy_llm(prompt):  # type: ignore
+        if "when was it released" in str(prompt).lower():  # type: ignore
+            return AIMessage(
+                content="""```aql
+                WITH Movies
+                FOR m IN Movies
+                FILTER m.title == "The Matrix"
+                RETURN m.year
+                ```"""
+            )
+        return AIMessage(
+            content="""```aql
+            WITH Movies
+            FOR m IN Movies
+            SORT m._key ASC
+            LIMIT 1
+            RETURN m.title
+            ```"""
+        )
+
+    dummy_chain = ArangoGraphQAChain.from_llm(
+        llm=RunnableLambda(dummy_llm),  # type: ignore
+        graph=graph,
+        allow_dangerous_requests=True,
+        include_history=True,
+        max_history_messages=5,
+        chat_history_store=history,
+        return_aql_result=True,
+        return_aql_query=True,
+    )
+
+    # 4. Ask initial question
+    result1 = dummy_chain.invoke({"query": "What is the first movie?"})
+    assert "Inception" in result1["aql_result"]
+
+    # 5. Ask follow-up question using pronoun "it"
+    result2 = dummy_chain.invoke({"query": "When was it released?"})
+    assert 1999 in result2["aql_result"]
