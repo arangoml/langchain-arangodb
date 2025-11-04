@@ -13,10 +13,12 @@
 
 This package contains the ArangoDB integration for LangChain.
 
+Hello world
+
 ## 📦 Installation
 
 ```bash
-pip install -U langchain-arangodb
+pip install -U langchain-arangodb`
 ```
 
 ## 💻 Examples
