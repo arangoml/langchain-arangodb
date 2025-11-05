@@ -84,9 +84,9 @@ def test_arangovector_from_texts_and_similarity_search(
     query = "hello"
     results = vector_store.similarity_search(query, k=1, return_fields={"source"})
 
-    assert len(results) == 1
-    assert results[0].page_content == "hello world"
-    assert results[0].metadata.get("source") == "doc1"
+    assert len(results) == 1  # type: ignore[arg-type]
+    assert results[0].page_content == "hello world"  # type: ignore[index]
+    assert results[0].metadata.get("source") == "doc1"  # type: ignore[index]
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -136,8 +136,8 @@ def test_arangovector_euclidean_distance(
     assert index_info is not None
     query = "docA"
     results = vector_store.similarity_search(query, k=1)
-    assert len(results) == 1
-    assert results[0].page_content == "docA"
+    assert len(results) == 1  # type: ignore[arg-type]
+    assert results[0].page_content == "docA"  # type: ignore[index]
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -254,9 +254,9 @@ def test_arangovector_add_embeddings_and_search(
     # Perform search
     query = "apple"
     results = vector_store.similarity_search(query, k=1, return_fields={"fruit_type"})
-    assert len(results) == 1
-    assert results[0].page_content == "apple"
-    assert results[0].metadata.get("fruit_type") == "pome"
+    assert len(results) == 1  # type: ignore[arg-type]
+    assert results[0].page_content == "apple"  # type: ignore[index]
+    assert results[0].metadata.get("fruit_type") == "pome"  # type: ignore[index]
 
 
 # NEW TEST
@@ -444,28 +444,28 @@ def test_arangovector_similarity_search_with_return_fields(
     results_all_meta = vector_store.similarity_search(
         query_text, k=1, return_fields={"source", "chapter", "page", "author"}
     )
-    assert len(results_all_meta) == 1
-    assert results_all_meta[0].page_content == query_text
+    assert len(results_all_meta) == 1  # type: ignore[arg-type]
+    assert results_all_meta[0].page_content == query_text  # type: ignore[index]
     expected_meta_all = {"source": "doc1", "chapter": "ch1", "page": 10, "author": "A"}
-    assert results_all_meta[0].metadata == expected_meta_all
+    assert results_all_meta[0].metadata == expected_meta_all  # type: ignore[index]
 
     # Test 2: Specific return_fields
     fields_to_return = {"source", "page"}
     results_specific_meta = vector_store.similarity_search(
         query_text, k=1, return_fields=fields_to_return
     )
-    assert len(results_specific_meta) == 1
-    assert results_specific_meta[0].page_content == query_text
+    assert len(results_specific_meta) == 1  # type: ignore[arg-type]
+    assert results_specific_meta[0].page_content == query_text  # type: ignore[index]
     expected_meta_specific = {"source": "doc1", "page": 10}
-    assert results_specific_meta[0].metadata == expected_meta_specific
+    assert results_specific_meta[0].metadata == expected_meta_specific  # type: ignore[index]
 
     # Test 3: Empty return_fields set
     results_empty_set_meta = vector_store.similarity_search(
         query_text, k=1, return_fields={"source", "chapter", "page", "author"}
     )
-    assert len(results_empty_set_meta) == 1
-    assert results_empty_set_meta[0].page_content == query_text
-    assert results_empty_set_meta[0].metadata == expected_meta_all
+    assert len(results_empty_set_meta) == 1  # type: ignore[arg-type]
+    assert results_empty_set_meta[0].page_content == query_text  # type: ignore[index]
+    assert results_empty_set_meta[0].metadata == expected_meta_all  # type: ignore[index]
 
     # Test 4: return_fields requesting a non-existent field
     # and one existing field
@@ -473,10 +473,10 @@ def test_arangovector_similarity_search_with_return_fields(
     results_non_existent_meta = vector_store.similarity_search(
         query_text, k=1, return_fields=fields_with_non_existent
     )
-    assert len(results_non_existent_meta) == 1
-    assert results_non_existent_meta[0].page_content == query_text
+    assert len(results_non_existent_meta) == 1  # type: ignore[arg-type]
+    assert results_non_existent_meta[0].page_content == query_text  # type: ignore[index]
     expected_meta_non_existent = {"source": "doc1"}
-    assert results_non_existent_meta[0].metadata == expected_meta_non_existent
+    assert results_non_existent_meta[0].metadata == expected_meta_non_existent  # type: ignore[index]
 
 
 # NEW TEST
@@ -752,7 +752,7 @@ def test_arangovector_core_functionality(
     results = vector_store.similarity_search(query, k=2)
 
     # Should return documents with "jumps" in them
-    assert len(results) == 2
+    assert len(results) == 2  # type: ignore[arg-type]
     text_contents = [doc.page_content for doc in results]
     # The most relevant results should include docs with "jumps"
     has_jump_docs = [doc for doc in text_contents if "jump" in doc.lower()]
@@ -780,7 +780,7 @@ def test_arangovector_core_functionality(
         return_fields={"source", "length"},
     )
 
-    assert len(vector_results) == 2
+    assert len(vector_results) == 2  # type: ignore[arg-type]
     # Check result format
     for doc, score in vector_results:
         assert isinstance(doc, Document)
@@ -963,7 +963,7 @@ def test_arangovector_from_existing_collection(
 
     # Perform a search to verify functionality
     results = vector_store.similarity_search("astronomy")
-    assert len(results) > 0
+    assert len(results) > 0  # type: ignore[arg-type]
 
     # 2. Test with custom AQL query to modify the text extraction
     custom_aql_query = "RETURN CONCAT(doc[p], ' by ', doc.author)"
@@ -1044,7 +1044,7 @@ def test_arangovector_from_existing_collection(
 
     # 5. Test searching in the custom store
     results_custom = vector_store_custom.similarity_search("Einstein", k=1)
-    assert len(results_custom) == 1
+    assert len(results_custom) == 1  # type: ignore[arg-type]
 
     # 6. Test max_marginal_relevance search
     mmr_results = vector_store.max_marginal_relevance_search(
@@ -1450,8 +1450,8 @@ def test_arangovector_jaccard_distance(
 
     query = "foo"
     results = vector_store.similarity_search(query, k=1, use_approx=False)
-    assert len(results) == 1
-    assert results[0].page_content == "foo"
+    assert len(results) == 1  # type: ignore[arg-type]
+    assert results[0].page_content == "foo"  # type: ignore[index]
 
     # Test with scores
     results_with_scores = vector_store.similarity_search_with_score(
@@ -1485,8 +1485,8 @@ def test_arangovector_dot_product_distance(
 
     query = "foo"
     results = vector_store.similarity_search(query, k=1, use_approx=False)
-    assert len(results) == 1
-    assert results[0].page_content == "foo"
+    assert len(results) == 1  # type: ignore[arg-type]
+    assert results[0].page_content == "foo"  # type: ignore[index]
 
     # Test with scores
     results_with_scores = vector_store.similarity_search_with_score(
@@ -1520,8 +1520,8 @@ def test_arangovector_max_inner_product_distance(
 
     query = "foo"
     results = vector_store.similarity_search(query, k=1, use_approx=False)
-    assert len(results) == 1
-    assert results[0].page_content == "foo"
+    assert len(results) == 1  # type: ignore[arg-type]
+    assert results[0].page_content == "foo"  # type: ignore[index]
 
     # Test with scores
     results_with_scores = vector_store.similarity_search_with_score(
@@ -1563,8 +1563,8 @@ def test_arangovector_jaccard_hybrid_search(
     results = vector_store.similarity_search(
         "foo", k=2, search_type=SearchType.HYBRID, use_approx=False
     )
-    assert len(results) >= 1
-    assert results[0].page_content == "foo document"
+    assert len(results) >= 1  # type: ignore[arg-type]
+    assert results[0].page_content == "foo document"  # type: ignore[index]
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -1599,8 +1599,8 @@ def test_arangovector_dot_product_hybrid_search(
     results = vector_store.similarity_search(
         "foo", k=2, search_type=SearchType.HYBRID, use_approx=False
     )
-    assert len(results) >= 1
-    assert results[0].page_content == "foo document"
+    assert len(results) >= 1  # type: ignore[arg-type]
+    assert results[0].page_content == "foo document"  # type: ignore[index]
 
 
 @pytest.mark.usefixtures("clear_arangodb_database")
@@ -1635,8 +1635,8 @@ def test_arangovector_max_inner_product_hybrid_search(
     results = vector_store.similarity_search(
         "foo", k=2, search_type=SearchType.HYBRID, use_approx=False
     )
-    assert len(results) >= 1
-    assert results[0].page_content == "foo document"
+    assert len(results) >= 1  # type: ignore[arg-type]
+    assert results[0].page_content == "foo document"  # type: ignore[index]
 
 
 # ============================================================================
@@ -2306,8 +2306,9 @@ def test_streaming_with_multiple_return_fields(
     vector_store.create_vector_index()
 
     # Test streaming with multiple return fields
-    results_iter = vector_store.similarity_search(
-        "query", k=3, stream=True, return_fields={"field1", "field2", "field3"}
+    embedding = fake_embedding_function.embed_query("query")
+    results_iter = vector_store.similarity_search_by_vector(
+        embedding, k=3, stream=True, return_fields={"field1", "field2", "field3"}
     )
 
     results = list(results_iter)

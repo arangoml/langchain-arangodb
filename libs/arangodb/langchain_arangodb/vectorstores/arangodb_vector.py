@@ -8,7 +8,6 @@ from typing import (
     Iterable,
     Iterator,
     List,
-    Literal,
     MutableMapping,
     Optional,
     Sequence,
@@ -16,7 +15,6 @@ from typing import (
     Type,
     Union,
     cast,
-    overload,
 )
 
 import farmhash
@@ -359,44 +357,7 @@ class ArangoVector(VectorStore):
             texts=texts, embeddings=embeddings, metadatas=metadatas, ids=ids, **kwargs
         )
 
-    @overload
-    def similarity_search(
-        self,
-        query: str,
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        embedding: Optional[List[float]] = None,
-        filter_clause: str = "",
-        search_type: Optional[SearchType] = None,
-        vector_weight: float = 1.0,
-        keyword_weight: float = 1.0,
-        keyword_search_clause: str = "",
-        metadata_clause: str = "",
-        stream: Literal[False] = False,
-        **kwargs: Any,
-    ) -> List[Document]: ...
-
-    @overload
-    def similarity_search(
-        self,
-        query: str,
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        embedding: Optional[List[float]] = None,
-        filter_clause: str = "",
-        search_type: Optional[SearchType] = None,
-        vector_weight: float = 1.0,
-        keyword_weight: float = 1.0,
-        keyword_search_clause: str = "",
-        metadata_clause: str = "",
-        *,
-        stream: Literal[True],
-        **kwargs: Any,
-    ) -> Iterator[Document]: ...
-
-    def similarity_search(
+    def similarity_search(  # type: ignore[override]
         self,
         query: str,
         k: int = 4,
@@ -580,7 +541,7 @@ class ArangoVector(VectorStore):
         embedding = embedding or self.embedding.embed_query(query)
 
         if search_type == SearchType.VECTOR:
-            return self.similarity_search_by_vector_with_score(
+            return self.similarity_search_by_vector_with_score(  # type: ignore[return-value]
                 embedding=embedding,
                 k=k,
                 return_fields=return_fields,
@@ -590,7 +551,7 @@ class ArangoVector(VectorStore):
             )
 
         else:
-            return self.similarity_search_by_vector_and_keyword_with_score(
+            return self.similarity_search_by_vector_and_keyword_with_score(  # type: ignore[return-value]
                 query=query,
                 embedding=embedding,
                 k=k,
@@ -603,47 +564,7 @@ class ArangoVector(VectorStore):
                 metadata_clause=metadata_clause,
             )
 
-    @overload
-    def similarity_search_by_vector(
-        self,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        metadata_clause: str = "",
-        stream: Literal[False] = False,
-        **kwargs: Any,
-    ) -> List[Document]: ...
-
-    @overload
-    def similarity_search_by_vector(
-        self,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        metadata_clause: str = "",
-        *,
-        stream: Literal[True],
-        **kwargs: Any,
-    ) -> Iterator[Document]: ...
-
-    @overload
-    def similarity_search_by_vector(
-        self,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        metadata_clause: str = "",
-        stream: bool = ...,
-        **kwargs: Any,
-    ) -> Union[List[Document], Iterator[Document]]: ...
-
-    def similarity_search_by_vector(
+    def similarity_search_by_vector(  # type: ignore[override]
         self,
         embedding: List[float],
         k: int = 4,
@@ -696,55 +617,6 @@ class ArangoVector(VectorStore):
             return (doc for doc, _ in results)
         else:
             return [doc for doc, _ in results]
-
-    @overload
-    def similarity_search_by_vector_and_keyword(
-        self,
-        query: str,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        vector_weight: float = 1.0,
-        keyword_weight: float = 1.0,
-        keyword_search_clause: str = "",
-        metadata_clause: str = "",
-        stream: Literal[False] = False,
-    ) -> List[Document]: ...
-
-    @overload
-    def similarity_search_by_vector_and_keyword(
-        self,
-        query: str,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        vector_weight: float = 1.0,
-        keyword_weight: float = 1.0,
-        keyword_search_clause: str = "",
-        metadata_clause: str = "",
-        *,
-        stream: Literal[True],
-    ) -> Iterator[Document]: ...
-
-    @overload
-    def similarity_search_by_vector_and_keyword(
-        self,
-        query: str,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        vector_weight: float = 1.0,
-        keyword_weight: float = 1.0,
-        keyword_search_clause: str = "",
-        metadata_clause: str = "",
-        stream: bool = ...,
-    ) -> Union[List[Document], Iterator[Document]]: ...
 
     def similarity_search_by_vector_and_keyword(
         self,
@@ -808,43 +680,6 @@ class ArangoVector(VectorStore):
         else:
             return [doc for doc, _ in results]
 
-    @overload
-    def similarity_search_by_vector_with_score(
-        self,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        metadata_clause: str = "",
-        stream: Literal[False] = False,
-    ) -> List[tuple[Document, float]]: ...
-
-    @overload
-    def similarity_search_by_vector_with_score(
-        self,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        metadata_clause: str = "",
-        *,
-        stream: Literal[True],
-    ) -> Iterator[tuple[Document, float]]: ...
-
-    @overload
-    def similarity_search_by_vector_with_score(
-        self,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        metadata_clause: str = "",
-        stream: bool = ...,
-    ) -> Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]: ...
-
     def similarity_search_by_vector_with_score(
         self,
         embedding: List[float],
@@ -899,55 +734,6 @@ class ArangoVector(VectorStore):
             results = self._process_search_query(cursor)  # type: ignore
 
         return results
-
-    @overload
-    def similarity_search_by_vector_and_keyword_with_score(
-        self,
-        query: str,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        vector_weight: float = 1.0,
-        keyword_weight: float = 1.0,
-        keyword_search_clause: str = "",
-        metadata_clause: str = "",
-        stream: Literal[False] = False,
-    ) -> List[tuple[Document, float]]: ...
-
-    @overload
-    def similarity_search_by_vector_and_keyword_with_score(
-        self,
-        query: str,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        vector_weight: float = 1.0,
-        keyword_weight: float = 1.0,
-        keyword_search_clause: str = "",
-        metadata_clause: str = "",
-        *,
-        stream: Literal[True],
-    ) -> Iterator[tuple[Document, float]]: ...
-
-    @overload
-    def similarity_search_by_vector_and_keyword_with_score(
-        self,
-        query: str,
-        embedding: List[float],
-        k: int = 4,
-        return_fields: set[str] = set(),
-        use_approx: bool = True,
-        filter_clause: str = "",
-        vector_weight: float = 1.0,
-        keyword_weight: float = 1.0,
-        keyword_search_clause: str = "",
-        metadata_clause: str = "",
-        stream: bool = ...,
-    ) -> Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]: ...
 
     def similarity_search_by_vector_and_keyword_with_score(
         self,
@@ -1157,7 +943,7 @@ class ArangoVector(VectorStore):
             np.array(query_embedding), embeddings, lambda_mult=lambda_mult, k=k
         )
 
-        selected_docs = [docs[i] for i in selected_indices]
+        selected_docs = [docs[i] for i in selected_indices]  # type: ignore[index]
 
         return selected_docs
 
