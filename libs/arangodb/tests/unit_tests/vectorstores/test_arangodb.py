@@ -1,7 +1,9 @@
+from collections.abc import Iterator
 from typing import Any, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
+from langchain_core.documents import Document
 
 from langchain_arangodb.vectorstores.arangodb_vector import (
     ArangoVector,
@@ -1490,3 +1492,379 @@ def test_distance_strategy_reject_approximate_search(
                 filter_clause="",
                 metadata_clause="",
             )
+
+
+def test_similarity_search_default_returns_list(
+    arango_vector_factory: Any,
+) -> None:
+    """Test that similarity_search with default stream=None returns a list."""
+    vector_store = arango_vector_factory()
+
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    expected_docs = [Document(page_content="content1", id="id1")]
+    with patch.object(
+        vector_store, "similarity_search_by_vector", return_value=expected_docs
+    ) as mock_search_by_vector:
+        docs = vector_store.similarity_search(query="test query", k=1)
+
+    # Verify stream parameter was not passed (defaults to None)
+    mock_search_by_vector.assert_called_once()
+    call_kwargs = mock_search_by_vector.call_args[1]
+    assert "stream" not in call_kwargs
+
+    # Verify it returns a list (not iterator)
+    assert isinstance(docs, list)
+    assert len(docs) == 1
+    assert docs[0].page_content == "content1"
+
+
+def test_similarity_search_by_vector_with_score_default_returns_list(
+    arango_vector_factory: Any,
+) -> None:
+    """Test similarity_search_by_vector_with_score default stream=None returns list."""
+    vector_store = arango_vector_factory()
+
+    mock_cursor = MagicMock()
+    mock_cursor.empty.side_effect = [False, True]
+    mock_cursor.has_more.return_value = False
+
+    doc1_data = {"_key": "id1", "text": "content1"}
+    doc2_data = {"_key": "id2", "text": "content2"}
+
+    mock_cursor.__iter__ = MagicMock(
+        return_value=iter(
+            [
+                {"data": doc1_data.copy(), "score": 0.9, "metadata": {}},
+                {"data": doc2_data.copy(), "score": 0.8, "metadata": {}},
+            ]
+        )
+    )
+
+    with patch.object(
+        vector_store,
+        "_build_vector_search_query",
+        return_value=("test query", {"@collection": "test"}),
+    ):
+        vector_store.db.aql.execute.return_value = mock_cursor
+
+        # Test default behavior (stream=None)
+        results = vector_store.similarity_search_by_vector_with_score(
+            embedding=[0.1] * 64,
+            k=2,
+        )
+
+        # Verify it returns a list
+        assert isinstance(results, list)
+        assert len(results) == 2
+        assert results[0][1] == 0.9
+        assert results[1][1] == 0.8
+
+
+def test_similarity_search_explicit_batch_mode(
+    arango_vector_factory: Any,
+) -> None:
+    """Test that similarity_search with stream=False explicitly returns a list."""
+    vector_store = arango_vector_factory()
+
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    expected_docs = [Document(page_content="content1", id="id1")]
+    with patch.object(
+        vector_store, "similarity_search_by_vector", return_value=expected_docs
+    ):
+        docs = vector_store.similarity_search(query="test query", k=1, stream=False)
+
+    # Verify it returns a list (not iterator)
+    assert isinstance(docs, list)
+    assert len(docs) == 1
+
+
+def test_similarity_search_by_vector_with_score_explicit_batch_mode(
+    arango_vector_factory: Any,
+) -> None:
+    """Test similarity_search_by_vector_with_score with stream=False returns list."""
+    vector_store = arango_vector_factory()
+
+    mock_cursor = MagicMock()
+    mock_cursor.empty.side_effect = [False, True]
+    mock_cursor.has_more.return_value = False
+
+    doc1_data = {"_key": "id1", "text": "content1"}
+    doc2_data = {"_key": "id2", "text": "content2"}
+
+    mock_cursor.__iter__ = MagicMock(
+        return_value=iter(
+            [
+                {"data": doc1_data.copy(), "score": 0.9, "metadata": {}},
+                {"data": doc2_data.copy(), "score": 0.8, "metadata": {}},
+            ]
+        )
+    )
+
+    with patch.object(
+        vector_store,
+        "_build_vector_search_query",
+        return_value=("test query", {"@collection": "test"}),
+    ):
+        vector_store.db.aql.execute.return_value = mock_cursor
+
+        # Test explicit batch mode (stream=False)
+        results = vector_store.similarity_search_by_vector_with_score(
+            embedding=[0.1] * 64,
+            k=2,
+            stream=False,
+        )
+
+        # Verify it returns a list
+        assert isinstance(results, list)
+        assert len(results) == 2
+        assert results[0][1] == 0.9
+        assert results[1][1] == 0.8
+
+
+def test_similarity_search_streaming_returns_iterator(
+    arango_vector_factory: Any,
+) -> None:
+    """Test that similarity_search with stream=True returns an iterator."""
+    vector_store = arango_vector_factory()
+
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    mock_doc1 = Document(page_content="content1", id="id1")
+    mock_doc2 = Document(page_content="content2", id="id2")
+
+    def mock_stream() -> Iterator[Document]:
+        yield mock_doc1
+        yield mock_doc2
+
+    with patch.object(
+        vector_store, "similarity_search_by_vector", return_value=mock_stream()
+    ) as mock_search_by_vector:
+        result = vector_store.similarity_search(query="test query", k=2, stream=True)
+
+    # Verify it was called with stream=True
+    call_kwargs = mock_search_by_vector.call_args[1]
+    assert call_kwargs["stream"] is True
+
+    # Verify it returns an iterator
+    assert isinstance(result, Iterator)
+
+    # Verify we can consume the iterator
+    docs = list(result)
+    assert len(docs) == 2
+    assert docs[0].page_content == "content1"
+    assert docs[1].page_content == "content2"
+
+
+def test_similarity_search_by_vector_with_score_streaming_returns_iterator(
+    arango_vector_factory: Any,
+) -> None:
+    """Test similarity_search_by_vector_with_score with stream=True returns iterator."""
+    vector_store = arango_vector_factory()
+
+    mock_cursor = MagicMock()
+    mock_cursor.empty.side_effect = [False, True]
+    mock_cursor.has_more.return_value = False
+
+    doc1_data = {"_key": "id1", "text": "content1"}
+    doc2_data = {"_key": "id2", "text": "content2"}
+
+    mock_cursor.__iter__ = MagicMock(
+        return_value=iter(
+            [
+                {"data": doc1_data.copy(), "score": 0.9, "metadata": {}},
+                {"data": doc2_data.copy(), "score": 0.8, "metadata": {}},
+            ]
+        )
+    )
+
+    with patch.object(
+        vector_store,
+        "_build_vector_search_query",
+        return_value=("test query", {"@collection": "test"}),
+    ):
+        vector_store.db.aql.execute.return_value = mock_cursor
+
+        # Test streaming mode (stream=True)
+        results = vector_store.similarity_search_by_vector_with_score(
+            embedding=[0.1] * 64,
+            k=2,
+            stream=True,
+        )
+
+        # Verify it returns an iterator
+        assert isinstance(results, Iterator)
+
+        # Consume iterator and verify results
+        results_list = list(results)
+        assert len(results_list) == 2
+        assert isinstance(results_list[0], tuple)
+        assert isinstance(results_list[0][0], Document)
+        assert results_list[0][0].page_content == "content1"
+        assert results_list[0][1] == 0.9
+        assert results_list[1][0].page_content == "content2"
+        assert results_list[1][1] == 0.8
+
+
+def test_similarity_search_passes_stream_parameter(
+    arango_vector_factory: Any,
+) -> None:
+    """Test similarity_search passes stream parameter correctly through call chain."""
+    vector_store = arango_vector_factory()
+
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    expected_docs = [Document(page_content="content1", id="id1")]
+    with patch.object(
+        vector_store, "similarity_search_by_vector", return_value=expected_docs
+    ) as mock_search_by_vector:
+        # Test with stream=True
+        vector_store.similarity_search(query="test query", k=1, stream=True)
+        call_kwargs = mock_search_by_vector.call_args[1]
+        assert call_kwargs["stream"] is True
+
+        # Test with stream=None (default)
+        vector_store.similarity_search(query="test query", k=1)
+        call_kwargs = mock_search_by_vector.call_args[1]
+        assert "stream" not in call_kwargs
+
+
+def test_similarity_search_with_score_passes_stream_parameter(
+    arango_vector_factory: Any,
+) -> None:
+    """Test that similarity_search_with_score passes stream parameter correctly."""
+    vector_store = arango_vector_factory()
+
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    mock_doc1 = Document(page_content="content1", id="id1")
+    mock_doc2 = Document(page_content="content2", id="id2")
+
+    def mock_stream() -> Iterator[tuple[Document, float]]:
+        yield (mock_doc1, 0.9)
+        yield (mock_doc2, 0.8)
+
+    with patch.object(
+        vector_store,
+        "similarity_search_by_vector_with_score",
+        return_value=mock_stream(),
+    ) as mock_search_with_score:
+        # Test with stream=True
+        result = vector_store.similarity_search_with_score(
+            query="test query", k=2, stream=True
+        )
+        call_kwargs = mock_search_with_score.call_args[1]
+        assert call_kwargs["stream"] is True
+        assert isinstance(result, Iterator)
+
+        # Test with stream=None (default)
+        vector_store.similarity_search_with_score(query="test query", k=2)
+        call_kwargs = mock_search_with_score.call_args[1]
+        assert "stream" not in call_kwargs
+
+
+def test_similarity_search_hybrid_streaming(
+    arango_vector_factory: Any,
+) -> None:
+    """Test that similarity_search with hybrid search type supports streaming."""
+    from langchain_arangodb.vectorstores.arangodb_vector import SearchType
+
+    vector_store = arango_vector_factory(search_type=SearchType.HYBRID)
+
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    mock_doc1 = Document(page_content="content1", id="id1")
+    mock_doc2 = Document(page_content="content2", id="id2")
+
+    def mock_stream() -> Iterator[Document]:
+        yield mock_doc1
+        yield mock_doc2
+
+    with patch.object(
+        vector_store,
+        "similarity_search_by_vector_and_keyword",
+        return_value=mock_stream(),
+    ) as mock_hybrid_search:
+        result = vector_store.similarity_search(query="test query", k=2, stream=True)
+
+        # Verify it was called with stream=True
+        call_kwargs = mock_hybrid_search.call_args[1]
+        assert call_kwargs["stream"] is True
+
+        # Verify it returns an iterator
+        assert isinstance(result, Iterator)
+
+        docs = list(result)
+        assert len(docs) == 2
+        assert docs[0].page_content == "content1"
+        assert docs[1].page_content == "content2"
+
+
+def test_similarity_search_streaming_empty_results(
+    arango_vector_factory: Any,
+) -> None:
+    """Test that streaming mode with empty results returns empty iterator."""
+    vector_store = arango_vector_factory()
+
+    mock_cursor = MagicMock()
+    mock_cursor.empty.return_value = True  # Empty cursor
+    mock_cursor.has_more.return_value = False
+
+    with patch.object(
+        vector_store,
+        "_build_vector_search_query",
+        return_value=("test query", {"@collection": "test"}),
+    ):
+        vector_store.db.aql.execute.return_value = mock_cursor
+
+        # Test streaming mode with empty results
+        results = vector_store.similarity_search_by_vector_with_score(
+            embedding=[0.1] * 64, k=10, stream=True
+        )
+
+        assert isinstance(results, Iterator)
+
+        results_list = list(results)
+        assert len(results_list) == 0
+
+
+def test_similarity_search_streaming_single_result(
+    arango_vector_factory: Any,
+) -> None:
+    """Test that streaming mode works correctly with single result."""
+    vector_store = arango_vector_factory()
+
+    mock_cursor = MagicMock()
+    mock_cursor.empty.side_effect = [False, True]
+    mock_cursor.has_more.return_value = False
+
+    doc1_data = {"_key": "id1", "text": "content1"}
+
+    mock_cursor.__iter__ = MagicMock(
+        return_value=iter([{"data": doc1_data.copy(), "score": 0.9, "metadata": {}}])
+    )
+
+    with patch.object(
+        vector_store,
+        "_build_vector_search_query",
+        return_value=("test query", {"@collection": "test"}),
+    ):
+        vector_store.db.aql.execute.return_value = mock_cursor
+
+        results = vector_store.similarity_search_by_vector_with_score(
+            embedding=[0.1] * 64, k=1, stream=True
+        )
+
+        assert isinstance(results, Iterator)
+
+        results_list = list(results)
+        assert len(results_list) == 1
+        assert results_list[0][0].page_content == "content1"
+        assert results_list[0][1] == 0.9
