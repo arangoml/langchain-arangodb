@@ -8,6 +8,7 @@ from typing import (
     Iterable,
     Iterator,
     List,
+    Literal,
     MutableMapping,
     Optional,
     Sequence,
@@ -15,6 +16,7 @@ from typing import (
     Type,
     Union,
     cast,
+    overload,
 )
 
 import farmhash
@@ -357,6 +359,43 @@ class ArangoVector(VectorStore):
             texts=texts, embeddings=embeddings, metadatas=metadatas, ids=ids, **kwargs
         )
 
+    @overload
+    def similarity_search(
+        self,
+        query: str,
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        embedding: Optional[List[float]] = None,
+        filter_clause: str = "",
+        search_type: Optional[SearchType] = None,
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+        keyword_search_clause: str = "",
+        metadata_clause: str = "",
+        stream: Literal[False] = False,
+        **kwargs: Any,
+    ) -> List[Document]: ...
+
+    @overload
+    def similarity_search(
+        self,
+        query: str,
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        embedding: Optional[List[float]] = None,
+        filter_clause: str = "",
+        search_type: Optional[SearchType] = None,
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+        keyword_search_clause: str = "",
+        metadata_clause: str = "",
+        *,
+        stream: Literal[True],
+        **kwargs: Any,
+    ) -> Iterator[Document]: ...
+
     def similarity_search(
         self,
         query: str,
@@ -416,7 +455,7 @@ class ArangoVector(VectorStore):
         :type metadata_clause: str
         :param stream: If True, returns an iterator that yields results one at a time.
             If False, returns all results as a list (default).
-            Note: Currently only supported for vector search (not hybrid search).
+            Supports both vector and hybrid search.
         :type stream: bool
         :param kwargs: Additional keyword arguments.
         :type kwargs: Any
@@ -445,7 +484,7 @@ class ArangoVector(VectorStore):
                 vector_weight=0.8,
                 keyword_weight=0.2
             )
-            
+
             # Streaming search for large result sets
             for doc in vector_store.similarity_search("query", k=10000, stream=True):
                 process(doc)
@@ -467,7 +506,7 @@ class ArangoVector(VectorStore):
             )
 
         else:
-            # Hybrid search - streaming not yet supported
+            # Hybrid search with streaming support
             return self.similarity_search_by_vector_and_keyword(
                 query=query,
                 embedding=embedding,
@@ -479,6 +518,7 @@ class ArangoVector(VectorStore):
                 keyword_weight=keyword_weight,
                 keyword_search_clause=keyword_search_clause,
                 metadata_clause=metadata_clause,
+                stream=stream,
             )
 
     def similarity_search_with_score(
@@ -563,6 +603,46 @@ class ArangoVector(VectorStore):
                 metadata_clause=metadata_clause,
             )
 
+    @overload
+    def similarity_search_by_vector(
+        self,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        metadata_clause: str = "",
+        stream: Literal[False] = False,
+        **kwargs: Any,
+    ) -> List[Document]: ...
+
+    @overload
+    def similarity_search_by_vector(
+        self,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        metadata_clause: str = "",
+        *,
+        stream: Literal[True],
+        **kwargs: Any,
+    ) -> Iterator[Document]: ...
+
+    @overload
+    def similarity_search_by_vector(
+        self,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        metadata_clause: str = "",
+        stream: bool = ...,
+        **kwargs: Any,
+    ) -> Union[List[Document], Iterator[Document]]: ...
+
     def similarity_search_by_vector(
         self,
         embedding: List[float],
@@ -617,6 +697,7 @@ class ArangoVector(VectorStore):
         else:
             return [doc for doc, _ in results]
 
+    @overload
     def similarity_search_by_vector_and_keyword(
         self,
         query: str,
@@ -629,7 +710,84 @@ class ArangoVector(VectorStore):
         keyword_weight: float = 1.0,
         keyword_search_clause: str = "",
         metadata_clause: str = "",
-    ) -> List[Document]:
+        stream: Literal[False] = False,
+    ) -> List[Document]: ...
+
+    @overload
+    def similarity_search_by_vector_and_keyword(
+        self,
+        query: str,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+        keyword_search_clause: str = "",
+        metadata_clause: str = "",
+        *,
+        stream: Literal[True],
+    ) -> Iterator[Document]: ...
+
+    @overload
+    def similarity_search_by_vector_and_keyword(
+        self,
+        query: str,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+        keyword_search_clause: str = "",
+        metadata_clause: str = "",
+        stream: bool = ...,
+    ) -> Union[List[Document], Iterator[Document]]: ...
+
+    def similarity_search_by_vector_and_keyword(
+        self,
+        query: str,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+        keyword_search_clause: str = "",
+        metadata_clause: str = "",
+        stream: bool = False,
+    ) -> Union[List[Document], Iterator[Document]]:
+        """Run hybrid similarity search combining vector and keyword search.
+
+        :param query: Query text to search for.
+        :type query: str
+        :param embedding: Embedding vector for the query.
+        :type embedding: List[float]
+        :param k: Number of results to return. Defaults to 4.
+        :type k: int
+        :param return_fields: Fields to return in the result.
+        :type return_fields: set[str]
+        :param use_approx: Whether to use approximate vector search. Defaults to True.
+        :type use_approx: bool
+        :param filter_clause: Filter clause to apply to the query.
+        :type filter_clause: str
+        :param vector_weight: Weight for vector similarity scores. Defaults to 1.0.
+        :type vector_weight: float
+        :param keyword_weight: Weight for keyword search scores. Defaults to 1.0.
+        :type keyword_weight: float
+        :param keyword_search_clause: Optional AQL filter clause for full text search.
+        :type keyword_search_clause: str
+        :param metadata_clause: Optional AQL clause to return additional metadata.
+        :type metadata_clause: str
+        :param stream: If True, returns an iterator that yields results one at a time.
+            If False, returns all results as a list (default).
+        :type stream: bool
+        :return: List or Iterator of Documents most similar to the query.
+        :rtype: Union[List[Document], Iterator[Document]]
+        """
         results = self.similarity_search_by_vector_and_keyword_with_score(
             query=query,
             embedding=embedding,
@@ -641,9 +799,51 @@ class ArangoVector(VectorStore):
             keyword_weight=keyword_weight,
             keyword_search_clause=keyword_search_clause,
             metadata_clause=metadata_clause,
+            stream=stream,
         )
 
-        return [doc for doc, _ in results]
+        # Strip scores - handle both list and iterator
+        if stream:
+            return (doc for doc, _ in results)
+        else:
+            return [doc for doc, _ in results]
+
+    @overload
+    def similarity_search_by_vector_with_score(
+        self,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        metadata_clause: str = "",
+        stream: Literal[False] = False,
+    ) -> List[tuple[Document, float]]: ...
+
+    @overload
+    def similarity_search_by_vector_with_score(
+        self,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        metadata_clause: str = "",
+        *,
+        stream: Literal[True],
+    ) -> Iterator[tuple[Document, float]]: ...
+
+    @overload
+    def similarity_search_by_vector_with_score(
+        self,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        metadata_clause: str = "",
+        stream: bool = ...,
+    ) -> Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]: ...
 
     def similarity_search_by_vector_with_score(
         self,
@@ -677,7 +877,8 @@ class ArangoVector(VectorStore):
         :param stream: If True, returns an iterator that yields results one at a time.
             If False, returns all results as a list (default).
         :type stream: bool
-        :return: List or Iterator of (Document, score) tuples most similar to the query vector.
+        :return: List or Iterator of (Document, score) tuples most similar to the
+            query vector.
         :rtype: Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]
         """
         aql_query, bind_vars = self._build_vector_search_query(
@@ -699,6 +900,7 @@ class ArangoVector(VectorStore):
 
         return results
 
+    @overload
     def similarity_search_by_vector_and_keyword_with_score(
         self,
         query: str,
@@ -711,7 +913,56 @@ class ArangoVector(VectorStore):
         keyword_weight: float = 1.0,
         keyword_search_clause: str = "",
         metadata_clause: str = "",
-    ) -> List[tuple[Document, float]]:
+        stream: Literal[False] = False,
+    ) -> List[tuple[Document, float]]: ...
+
+    @overload
+    def similarity_search_by_vector_and_keyword_with_score(
+        self,
+        query: str,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+        keyword_search_clause: str = "",
+        metadata_clause: str = "",
+        *,
+        stream: Literal[True],
+    ) -> Iterator[tuple[Document, float]]: ...
+
+    @overload
+    def similarity_search_by_vector_and_keyword_with_score(
+        self,
+        query: str,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+        keyword_search_clause: str = "",
+        metadata_clause: str = "",
+        stream: bool = ...,
+    ) -> Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]: ...
+
+    def similarity_search_by_vector_and_keyword_with_score(
+        self,
+        query: str,
+        embedding: List[float],
+        k: int = 4,
+        return_fields: set[str] = set(),
+        use_approx: bool = True,
+        filter_clause: str = "",
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+        keyword_search_clause: str = "",
+        metadata_clause: str = "",
+        stream: bool = False,
+    ) -> Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]:
         """Run hybrid similarity search combining vector and keyword search with scores.
 
         :param query: Query text to search for.
@@ -744,9 +995,12 @@ class ArangoVector(VectorStore):
             the top k results are retrieved. If specified, the metadata will be
             added to the Document.metadata field.
         :type metadata_clause: str
-        :return: List of tuples containing (Document, score)
-            pairs most similar to thequery.
-        :rtype: List[tuple[Document, float]]
+        :param stream: If True, returns an iterator that yields results one at a time.
+            If False, returns all results as a list (default).
+        :type stream: bool
+        :return: List or Iterator of tuples containing (Document, score)
+            pairs most similar to the query.
+        :rtype: Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]
         """
 
         aql_query, bind_vars = self._build_hybrid_search_query(
@@ -764,7 +1018,11 @@ class ArangoVector(VectorStore):
 
         cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
 
-        results = self._process_search_query(cursor)  # type: ignore
+        # Use streaming or non-streaming based on parameter
+        if stream:
+            results = self._process_search_query_streaming(cursor)  # type: ignore
+        else:
+            results = self._process_search_query(cursor)  # type: ignore
 
         return results
 
@@ -809,7 +1067,7 @@ class ArangoVector(VectorStore):
 
     def max_marginal_relevance_search(
         self,
-        query: st,
+        query: str,
         k: int = 4,
         fetch_k: int = 20,
         lambda_mult: float = 0.5,
@@ -1267,10 +1525,10 @@ class ArangoVector(VectorStore):
         self, cursor: Cursor
     ) -> Iterator[tuple[Document, float]]:
         """Stream search results from cursor one at a time.
-        
+
         This yields results as they are fetched from the database, enabling
         memory-efficient processing and early stopping.
-        
+
         :param cursor: The database cursor with results
         :return: Iterator of (Document, score) tuples
         """
