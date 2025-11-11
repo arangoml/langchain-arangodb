@@ -394,6 +394,7 @@ def test_similarity_search(arango_vector_factory: Any) -> None:
         use_approx=True,
         filter_clause="",
         metadata_clause="",
+        stream=False,
     )
 
     # Verify the correct documents were returned
@@ -703,6 +704,7 @@ def test_similarity_search_hybrid(arango_vector_factory: Any) -> None:
         keyword_weight=0.5,
         keyword_search_clause="",
         metadata_clause="",
+        stream=False,
     )
 
     # Verify the correct documents were returned
@@ -794,6 +796,7 @@ def test_similarity_search_by_vector_and_keyword(arango_vector_factory: Any) -> 
         keyword_weight=0.8,
         keyword_search_clause="custom search",
         metadata_clause="",
+        stream=False,
     )
 
     # Verify only documents (not scores) were returned
