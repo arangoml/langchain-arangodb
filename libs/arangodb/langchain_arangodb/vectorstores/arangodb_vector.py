@@ -370,7 +370,7 @@ class ArangoVector(VectorStore):
         keyword_weight: float = 1.0,
         keyword_search_clause: str = "",
         metadata_clause: str = "",
-        stream: bool = False,
+        stream: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[List[Document], Iterator[Document]]:
         """Search for similar documents using vector similarity or hybrid search.
@@ -415,12 +415,13 @@ class ArangoVector(VectorStore):
             added to the Document.metadata field.
         :type metadata_clause: str
         :param stream: If True, returns an iterator that yields results one at a time.
-            This reduces memory usage for large k values. If False, returns all results
-            as a list. Defaults to False.
-        :type stream: bool
+            This reduces memory usage for large k values. If None or False, returns all
+            results as a list. Defaults to None (batch mode).
+        :type stream: Optional[bool]
         :param kwargs: Additional keyword arguments.
         :type kwargs: Any
-        :return: List of Document objects if stream=False, Iterator if stream=True.
+        :return: List of Document objects if stream is None or False, Iterator if
+            stream=True.
         :rtype: Union[List[Document], Iterator[Document]]
 
         .. code-block:: python
@@ -498,7 +499,7 @@ class ArangoVector(VectorStore):
         keyword_weight: float = 1.0,
         keyword_search_clause: str = "",
         metadata_clause: str = "",
-        stream: bool = False,
+        stream: Optional[bool] = None,
     ) -> Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]:
         """Search for similar documents and return their similarity scores.
 
@@ -539,11 +540,11 @@ class ArangoVector(VectorStore):
             the top k results are retrieved.
         :type metadata_clause: str
         :param stream: If True, returns an iterator that yields results one at a time.
-            This reduces memory usage for large k values. If False, returns all results
-            as a list. Defaults to False.
-        :type stream: bool
-        :return: List of tuples containing (Document, score) pairs if stream=False,
-            Iterator if stream=True.
+            This reduces memory usage for large k values. If None or False, returns all
+            results as a list. Defaults to None (batch mode).
+        :type stream: Optional[bool]
+        :return: List of tuples containing (Document, score) pairs if stream is None or
+            False, Iterator if stream=True.
         :rtype: Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]
 
         .. code-block:: python
@@ -600,7 +601,7 @@ class ArangoVector(VectorStore):
         use_approx: bool = True,
         filter_clause: str = "",
         metadata_clause: str = "",
-        stream: bool = False,
+        stream: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[List[Document], Iterator[Document]]:
         """Return docs most similar to embedding vector.
@@ -623,12 +624,12 @@ class ArangoVector(VectorStore):
             added to the Document.metadata field.
         :type metadata_clause: str
         :param stream: If True, returns an iterator that yields results one at a time.
-            This reduces memory usage for large k values. If False, returns all results
-            as a list. Defaults to False.
-        :type stream: bool
+            This reduces memory usage for large k values. If None or False, returns all
+            results as a list. Defaults to None (batch mode).
+        :type stream: Optional[bool]
         :param kwargs: Additional keyword arguments.
         :type kwargs: Any
-        :return: List of Documents if stream=False, Iterator if stream=True.
+        :return: List of Documents if stream is None or False, Iterator if stream=True.
         :rtype: Union[List[Document], Iterator[Document]]
 
         .. code-block:: python
@@ -654,7 +655,7 @@ class ArangoVector(VectorStore):
             kwargs["stream"] = stream
         results = self.similarity_search_by_vector_with_score(**kwargs)
 
-        if stream:
+        if stream is True:
             return (doc for doc, _ in results)
         else:
             return [doc for doc, _ in results]
@@ -671,7 +672,7 @@ class ArangoVector(VectorStore):
         keyword_weight: float = 1.0,
         keyword_search_clause: str = "",
         metadata_clause: str = "",
-        stream: bool = False,
+        stream: Optional[bool] = None,
     ) -> Union[List[Document], Iterator[Document]]:
         """Return docs most similar to query using hybrid search.
 
@@ -704,10 +705,10 @@ class ArangoVector(VectorStore):
             added to the Document.metadata field.
         :type metadata_clause: str
         :param stream: If True, returns an iterator that yields results one at a time.
-            This reduces memory usage for large k values. If False, returns all results
-            as a list. Defaults to False.
-        :type stream: bool
-        :return: List of Documents if stream=False, Iterator if stream=True.
+            This reduces memory usage for large k values. If None or False, returns all
+            results as a list. Defaults to None (batch mode).
+        :type stream: Optional[bool]
+        :return: List of Documents if stream is None or False, Iterator if stream=True.
         :rtype: Union[List[Document], Iterator[Document]]
 
         .. code-block:: python
@@ -739,7 +740,7 @@ class ArangoVector(VectorStore):
             kwargs["stream"] = stream
         results = self.similarity_search_by_vector_and_keyword_with_score(**kwargs)
 
-        if stream:
+        if stream is True:
             return (doc for doc, _ in results)
         else:
             return [doc for doc, _ in results]
@@ -752,7 +753,7 @@ class ArangoVector(VectorStore):
         use_approx: bool = True,
         filter_clause: str = "",
         metadata_clause: str = "",
-        stream: bool = False,
+        stream: Optional[bool] = None,
     ) -> Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]:
         """Return docs most similar to embedding vector with scores.
 
@@ -774,11 +775,11 @@ class ArangoVector(VectorStore):
             added to the Document.metadata field.
         :type metadata_clause: str
         :param stream: If True, returns an iterator that yields results one at a time.
-            This reduces memory usage for large k values. If False, returns all results
-            as a list. Defaults to False.
-        :type stream: bool
-        :return: List of tuples containing (Document, score) pairs if stream=False,
-            Iterator if stream=True.
+            This reduces memory usage for large k values. If None or False, returns all
+            results as a list. Defaults to None (batch mode).
+        :type stream: Optional[bool]
+        :return: List of tuples containing (Document, score) pairs if stream is None or
+            False, Iterator if stream=True.
         :rtype: Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]
 
         .. code-block:: python
@@ -805,7 +806,7 @@ class ArangoVector(VectorStore):
 
         cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
 
-        if stream:
+        if stream is True:
             return self._process_search_query(cursor, stream=stream)
         else:
             return self._process_search_query(cursor)
@@ -822,7 +823,7 @@ class ArangoVector(VectorStore):
         keyword_weight: float = 1.0,
         keyword_search_clause: str = "",
         metadata_clause: str = "",
-        stream: bool = False,
+        stream: Optional[bool] = None,
     ) -> Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]:
         """Run hybrid similarity search combining vector and keyword search with scores.
 
@@ -857,11 +858,11 @@ class ArangoVector(VectorStore):
             added to the Document.metadata field.
         :type metadata_clause: str
         :param stream: If True, returns an iterator that yields results one at a time.
-            This reduces memory usage for large k values. If False, returns all results
-            as a list. Defaults to False.
-        :type stream: bool
-        :return: List of tuples containing (Document, score) pairs if stream=False,
-            Iterator if stream=True.
+            This reduces memory usage for large k values. If None or False, returns all
+            results as a list. Defaults to None (batch mode).
+        :type stream: Optional[bool]
+        :return: List of tuples containing (Document, score) pairs if stream is None or
+            False, Iterator if stream=True.
         :rtype: Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]
 
         .. code-block:: python
@@ -895,7 +896,7 @@ class ArangoVector(VectorStore):
 
         cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars, stream=True)
 
-        if stream:
+        if stream is True:
             return self._process_search_query(cursor, stream=stream)
         else:
             return self._process_search_query(cursor)
@@ -1402,20 +1403,20 @@ class ArangoVector(VectorStore):
                 cursor.fetch()
 
     def _process_search_query(
-        self, cursor: Cursor, stream: bool = False
+        self, cursor: Cursor, stream: Optional[bool] = None
     ) -> Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]:
         """Process search query cursor and return results.
 
         :param cursor: AQL cursor from executed query.
         :type cursor: Cursor
-        :param stream: If True, yields results one at a time. If False, returns all
-            results as a list. Defaults to False.
-        :type stream: bool
-        :return: List of (Document, score) tuples if stream=False, Iterator if
-            stream=True.
+        :param stream: If True, yields results one at a time. If None or False, returns
+            all results as a list. Defaults to None (batch mode).
+        :type stream: Optional[bool]
+        :return: List of (Document, score) tuples if stream is None or False, Iterator
+            if stream=True.
         :rtype: Union[List[tuple[Document, float]], Iterator[tuple[Document, float]]]
         """
-        if stream:
+        if stream is True:
             return self._iter_cursor(cursor)
         else:
             return list(self._iter_cursor(cursor))
