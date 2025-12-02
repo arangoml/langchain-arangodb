@@ -1680,6 +1680,7 @@ def test_arangovector_max_inner_product_hybrid_search(
     assert len(results) >= 1
     assert results[0].page_content == "foo document"
 
+
 @pytest.mark.parametrize(
     "k,num_docs",
     [
