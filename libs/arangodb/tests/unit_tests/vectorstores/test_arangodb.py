@@ -1490,3 +1490,89 @@ def test_distance_strategy_reject_approximate_search(
                 filter_clause="",
                 metadata_clause="",
             )
+
+
+def test_similarity_search_returns_iterator_with_stream(
+    arango_vector_factory: Any,
+) -> None:
+    """Test that similarity_search returns iterator when stream=True."""
+    from langchain_core.documents import Document
+
+    vector_store = arango_vector_factory()
+
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    # Mock similarity_search_by_vector to return an iterator
+    mock_iterator = iter([MagicMock(spec=Document), MagicMock(spec=Document)])
+    with patch.object(
+        vector_store, "similarity_search_by_vector", return_value=mock_iterator
+    ):
+        result = vector_store.similarity_search("query", k=2, stream=True)
+
+        # Should be an iterator
+        assert hasattr(result, "__iter__")
+        assert hasattr(result, "__next__")
+
+
+def test_similarity_search_returns_list_without_stream(
+    arango_vector_factory: Any,
+) -> None:
+    """Test that similarity_search returns list when stream is not set."""
+    from langchain_core.documents import Document
+
+    vector_store = arango_vector_factory()
+
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    # Mock to return a list
+    mock_docs = [MagicMock(spec=Document), MagicMock(spec=Document)]
+    with patch.object(
+        vector_store, "similarity_search_by_vector", return_value=mock_docs
+    ):
+        result = vector_store.similarity_search("query", k=2)
+
+        # Should be a list
+        assert isinstance(result, list)
+
+
+def test_similarity_search_passes_stream_only_when_true(
+    arango_vector_factory: Any,
+) -> None:
+    """Test that stream parameter is only included in kwargs when True."""
+    vector_store = arango_vector_factory()
+
+    mock_embedding = [0.1] * 64
+    vector_store.embedding.embed_query.return_value = mock_embedding
+
+    # Test stream=True
+    with patch.object(
+        vector_store, "similarity_search_by_vector", return_value=iter([])
+    ) as mock_search:
+        vector_store.similarity_search("query", k=2, stream=True)
+
+        # Should include stream=True
+        call_kwargs = mock_search.call_args[1]
+        assert "stream" in call_kwargs
+        assert call_kwargs["stream"] is True
+
+    # Test stream=False
+    with patch.object(
+        vector_store, "similarity_search_by_vector", return_value=[]
+    ) as mock_search:
+        vector_store.similarity_search("query", k=2, stream=False)
+
+        # Should NOT include stream in kwargs
+        call_kwargs = mock_search.call_args[1]
+        assert "stream" not in call_kwargs
+
+    # Test stream=None (default)
+    with patch.object(
+        vector_store, "similarity_search_by_vector", return_value=[]
+    ) as mock_search:
+        vector_store.similarity_search("query", k=2)
+
+        # Should NOT include stream in kwargs
+        call_kwargs = mock_search.call_args[1]
+        assert "stream" not in call_kwargs

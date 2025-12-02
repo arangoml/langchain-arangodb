@@ -1679,3 +1679,303 @@ def test_arangovector_max_inner_product_hybrid_search(
     assert isinstance(results, list)
     assert len(results) >= 1
     assert results[0].page_content == "foo document"
+
+@pytest.mark.parametrize(
+    "k,num_docs",
+    [
+        pytest.param(0, 10, id="k_zero"),
+        pytest.param(5, 10, id="k_normal"),
+        pytest.param(100, 10, id="k_exceeds"),
+        pytest.param(200, 100, id="k_large"),
+        pytest.param(1, 100, id="k_one"),
+        pytest.param(50, 100, id="k_fifty"),
+    ],
+)
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_k_value_scenarios(
+    k: int,
+    num_docs: int,
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test streaming with various k values and document counts."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = [f"document_{i}" for i in range(num_docs)]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name=f"test_k_{k}_{num_docs}",
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    results_iter = vector_store.similarity_search("query", k=k, stream=True)
+    results = list(results_iter)
+    # Should return min(k, num_docs)
+    expected = min(k, num_docs)
+    assert len(results) == expected
+    assert all(isinstance(doc, Document) for doc in results)
+
+
+@pytest.mark.parametrize(
+    "distance_strategy,use_approx",
+    [
+        pytest.param(DistanceStrategy.COSINE, True, id="cosine_approx"),
+        pytest.param(DistanceStrategy.COSINE, False, id="cosine_exact"),
+        pytest.param(DistanceStrategy.EUCLIDEAN_DISTANCE, True, id="euclidean_approx"),
+        pytest.param(DistanceStrategy.EUCLIDEAN_DISTANCE, False, id="euclidean_exact"),
+    ],
+)
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_search_configurations(
+    distance_strategy: DistanceStrategy,
+    use_approx: bool,
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test streaming with different distance strategies and search modes."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = [f"document_{i}" for i in range(20)]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name=f"test_config_{distance_strategy.value}_{use_approx}",
+        distance_strategy=distance_strategy,
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    results_iter = vector_store.similarity_search(
+        "query", k=10, stream=True, use_approx=use_approx
+    )
+
+    # Should return iterator, not list
+    assert not isinstance(results_iter, list)
+
+    # Consume and verify
+    results = list(results_iter)
+    assert len(results) == 10
+    assert all(isinstance(doc, Document) for doc in results)
+
+
+@pytest.mark.parametrize(
+    "search_method,num_docs,k",
+    [
+        pytest.param("similarity_search", 30, 10, id="by_text"),
+        pytest.param("similarity_search_by_vector", 30, 10, id="by_vector"),
+        pytest.param("similarity_search", 50, 50, id="consumes_all"),
+    ],
+)
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_basic_iterator_behavior(
+    search_method: str,
+    num_docs: int,
+    k: int,
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test basic iterator behavior across different search methods.
+    Consolidates: test_streaming_similarity_search_returns_iterator,
+    test_streaming_by_vector, test_streaming_consumes_all_results
+    """
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = [f"doc_{i}" for i in range(num_docs)]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name=f"test_iter_{search_method}_{k}",
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    # Call the appropriate search method
+    if search_method == "similarity_search_by_vector":
+        query_embedding = fake_embedding_function.embed_query("query")
+        results_iter = vector_store.similarity_search_by_vector(
+            query_embedding, k=k, stream=True
+        )
+    else:
+        results_iter = vector_store.similarity_search("query", k=k, stream=True)
+
+    # Should be iterator, not list
+    assert not isinstance(results_iter, list)
+    assert hasattr(results_iter, "__iter__")
+
+    # Consume and verify
+    results = list(results_iter)
+    assert len(results) == k
+    assert all(isinstance(doc, Document) for doc in results)
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_backward_compatibility(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test that existing code without stream_results parameter still works."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = ["test1", "test2", "test3"]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_backward_compat",
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    # Call without stream_results parameter (should default to False)
+    results = vector_store.similarity_search("query", k=2)
+
+    # Should return a list (backward compatible)
+    assert isinstance(results, list)
+    assert len(results) == 2
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_early_stopping(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test that streaming allows early stopping without fetching all results."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = [f"document {i}" for i in range(100)]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_early_stop",
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    # Stream with k=100 but stop after 5
+    results_iterator = vector_store.similarity_search("query", k=100, stream=True)
+
+    collected = []
+    for doc in results_iterator:
+        collected.append(doc)
+        if len(collected) >= 5:
+            break
+
+    assert len(collected) == 5
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_hybrid_search(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test streaming with hybrid search mode."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = ["machine learning", "deep learning", "neural networks", "AI systems"]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_streaming_hybrid",
+        search_type=SearchType.HYBRID,
+        overwrite_index=True,
+        insert_text=True,
+    )
+    vector_store.create_vector_index()
+    vector_store.create_keyword_index()
+
+    # Test that hybrid search streaming returns an iterator
+    results = vector_store.similarity_search("learning", k=3, stream=True)
+    assert hasattr(results, "__iter__") and hasattr(results, "__next__")
+
+    # Consume the iterator
+    docs = list(results)
+    assert len(docs) <= 3  # May be less if not enough matches
+    assert all(isinstance(doc, Document) for doc in docs)
+
+    # Test backward compatibility - without stream parameter returns list
+    results_list = vector_store.similarity_search("learning", k=3)
+    assert isinstance(results_list, list)
+    assert all(isinstance(doc, Document) for doc in results_list)
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_with_filters(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test streaming works with filter clauses."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = ["doc_a", "doc_b", "doc_c", "doc_d", "doc_e", "doc_f"]
+    metadatas = [
+        {"category": "A"},
+        {"category": "B"},
+        {"category": "A"},
+        {"category": "B"},
+        {"category": "A"},
+        {"category": "B"},
+    ]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        metadatas=metadatas,
+        database=db,
+        collection_name="test_streaming_filters",
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    # Test streaming with filter
+    results_iter = vector_store.similarity_search(
+        "query",
+        k=10,
+        stream=True,
+        filter_clause='FILTER doc.category == "A"',
+        return_fields={"category"},
+    )
+
+    results = list(results_iter)
+    assert len(results) == 3  # Only category A docs
+    assert all(doc.metadata["category"] == "A" for doc in results)
