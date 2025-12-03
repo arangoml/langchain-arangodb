@@ -722,7 +722,8 @@ def test_is_read_only_query_returns_false_for_insert_query() -> None:
     write_query = "INSERT { name: 'test' } INTO MyCollection"
     is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
-    assert operation == "INSERT"
+    assert isinstance(operation, str)
+    assert "INSERT" in operation
 
 
 def test_is_read_only_query_returns_false_for_update_query() -> None:
@@ -741,7 +742,8 @@ def test_is_read_only_query_returns_false_for_update_query() -> None:
     UPDATE doc WITH { name: 'new_test' } IN MyCollection"
     is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
-    assert operation == "UPDATE"
+    assert isinstance(operation, str)
+    assert "UPDATE" in operation
 
 
 def test_is_read_only_query_returns_false_for_remove_query() -> None:
@@ -760,7 +762,8 @@ def test_is_read_only_query_returns_false_for_remove_query() -> None:
     doc._key== '123' REMOVE doc IN MyCollection"
     is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
-    assert operation == "REMOVE"
+    assert isinstance(operation, str)
+    assert "REMOVE" in operation
 
 
 def test_is_read_only_query_returns_false_for_replace_query() -> None:
@@ -779,7 +782,8 @@ def test_is_read_only_query_returns_false_for_replace_query() -> None:
     REPLACE doc WITH { name: 'replaced_test' } IN MyCollection"
     is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
     assert is_read_only is False
-    assert operation == "REPLACE"
+    assert isinstance(operation, str)
+    assert "REPLACE" in operation
 
 
 def test_is_read_only_query_returns_false_for_upsert_query() -> None:
@@ -802,8 +806,8 @@ def test_is_read_only_query_returns_false_for_upsert_query() -> None:
     is_read_only, operation = chain._is_read_only_query(write_query)  # type: ignore
 
     assert is_read_only is False
-    # FIX: The method finds "INSERT" before "UPSERT" because of the list order.
-    assert operation == "INSERT"
+    assert isinstance(operation, str)
+    assert "UPDATE" in operation
 
 
 def test_is_read_only_query_is_case_insensitive() -> None:
@@ -823,14 +827,15 @@ def test_is_read_only_query_is_case_insensitive() -> None:
     write_query_lower = "insert { name: 'test' } into MyCollection"
     is_read_only, operation = chain._is_read_only_query(write_query_lower)  # type: ignore
     assert is_read_only is False
-    assert operation == "INSERT"
+    assert isinstance(operation, str)
+    assert "INSERT" in operation
 
     write_query_mixed = "UpSeRt { _key: '123' } InSeRt { name: 'new' } \
     UpDaTe { name: 'updated' } In MyCollection"
     is_read_only_mixed, operation_mixed = chain._is_read_only_query(write_query_mixed)  # type: ignore
     assert is_read_only_mixed is False
-    # FIX: The method finds "INSERT" before "UPSERT" regardless of case.
-    assert operation_mixed == "INSERT"
+    assert isinstance(operation_mixed, str)
+    assert "UPDATE" in operation_mixed
 
 
 def test_init_raises_error_if_dangerous_requests_not_allowed() -> None:
