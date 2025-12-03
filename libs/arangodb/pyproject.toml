@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langchain-arangodb"
-version = "2.0.0"
+version = "2.1.0"
 description = "An integration package connecting ArangoDB and LangChain"
 authors = ["ArangoDB"]
 readme = "README.md"
