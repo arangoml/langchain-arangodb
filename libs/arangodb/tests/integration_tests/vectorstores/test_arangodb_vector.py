@@ -84,6 +84,7 @@ def test_arangovector_from_texts_and_similarity_search(
     query = "hello"
     results = vector_store.similarity_search(query, k=1, return_fields={"source"})
 
+    assert isinstance(results, list)
     assert len(results) == 1
     assert results[0].page_content == "hello world"
     assert results[0].metadata.get("source") == "doc1"
@@ -136,6 +137,7 @@ def test_arangovector_euclidean_distance(
     assert index_info is not None
     query = "docA"
     results = vector_store.similarity_search(query, k=1)
+    assert isinstance(results, list)
     assert len(results) == 1
     assert results[0].page_content == "docA"
 
@@ -169,6 +171,7 @@ def test_arangovector_similarity_search_with_score(
         query, k=1, return_fields={"id"}
     )
 
+    assert isinstance(results_with_scores, list)
     assert len(results_with_scores) == 1
     doc, score = results_with_scores[0]
 
@@ -179,6 +182,7 @@ def test_arangovector_similarity_search_with_score(
     results_with_scores_exact = vector_store.similarity_search_with_score(
         query, k=1, use_approx=False, return_fields={"id"}
     )
+    assert isinstance(results_with_scores_exact, list)
     assert len(results_with_scores_exact) == 1
     doc_exact, score_exact = results_with_scores_exact[0]
     assert doc_exact.page_content == "alpha"
@@ -201,6 +205,7 @@ def test_arangovector_similarity_search_with_score(
     results_with_scores_l2 = vector_store_l2.similarity_search_with_score(
         query, k=1, return_fields={"id"}
     )
+    assert isinstance(results_with_scores_l2, list)
     assert len(results_with_scores_l2) == 1
     doc_l2, score_l2 = results_with_scores_l2[0]
     assert doc_l2.page_content == "alpha"
@@ -254,6 +259,7 @@ def test_arangovector_add_embeddings_and_search(
     # Perform search
     query = "apple"
     results = vector_store.similarity_search(query, k=1, return_fields={"fruit_type"})
+    assert isinstance(results, list)
     assert len(results) == 1
     assert results[0].page_content == "apple"
     assert results[0].metadata.get("fruit_type") == "pome"
@@ -304,6 +310,7 @@ def test_arangovector_retriever_search_threshold(
     query = "foo"
     results = retriever.invoke(query)
 
+    assert isinstance(results, list)
     assert len(results) == 1
     assert results[0].page_content == "dog"
     assert results[0].metadata.get("animal_type") == "canine"
@@ -319,6 +326,7 @@ def test_arangovector_retriever_search_threshold(
         },
     )
     results_strict = retriever_strict.invoke(query)
+    assert isinstance(results_strict, list)
     assert len(results_strict) == 0
 
 
@@ -444,6 +452,7 @@ def test_arangovector_similarity_search_with_return_fields(
     results_all_meta = vector_store.similarity_search(
         query_text, k=1, return_fields={"source", "chapter", "page", "author"}
     )
+    assert isinstance(results_all_meta, list)
     assert len(results_all_meta) == 1
     assert results_all_meta[0].page_content == query_text
     expected_meta_all = {"source": "doc1", "chapter": "ch1", "page": 10, "author": "A"}
@@ -454,6 +463,7 @@ def test_arangovector_similarity_search_with_return_fields(
     results_specific_meta = vector_store.similarity_search(
         query_text, k=1, return_fields=fields_to_return
     )
+    assert isinstance(results_specific_meta, list)
     assert len(results_specific_meta) == 1
     assert results_specific_meta[0].page_content == query_text
     expected_meta_specific = {"source": "doc1", "page": 10}
@@ -463,6 +473,7 @@ def test_arangovector_similarity_search_with_return_fields(
     results_empty_set_meta = vector_store.similarity_search(
         query_text, k=1, return_fields={"source", "chapter", "page", "author"}
     )
+    assert isinstance(results_empty_set_meta, list)
     assert len(results_empty_set_meta) == 1
     assert results_empty_set_meta[0].page_content == query_text
     assert results_empty_set_meta[0].metadata == expected_meta_all
@@ -473,6 +484,7 @@ def test_arangovector_similarity_search_with_return_fields(
     results_non_existent_meta = vector_store.similarity_search(
         query_text, k=1, return_fields=fields_with_non_existent
     )
+    assert isinstance(results_non_existent_meta, list)
     assert len(results_non_existent_meta) == 1
     assert results_non_existent_meta[0].page_content == query_text
     expected_meta_non_existent = {"source": "doc1"}
@@ -524,6 +536,7 @@ def test_arangovector_max_marginal_relevance_search(
     mmr_results = vector_store.max_marginal_relevance_search(
         query_text, k=2, fetch_k=4, lambda_mult=0.5, use_approx=False
     )
+    assert isinstance(mmr_results, list)
     assert len(mmr_results) == 2
     assert mmr_results[0].page_content == "apple"
     # With new FakeEmbeddings, lambda=0.5 should pick "apricot" as second.
@@ -537,6 +550,7 @@ def test_arangovector_max_marginal_relevance_search(
     mmr_results_sim = vector_store.max_marginal_relevance_search(
         query_text, k=2, fetch_k=4, lambda_mult=0.1, use_approx=False
     )
+    assert isinstance(mmr_results_sim, list)
     assert len(mmr_results_sim) == 2
     assert mmr_results_sim[0].page_content == "apple"
     assert mmr_results_sim[1].page_content == "blueberry"
@@ -545,6 +559,7 @@ def test_arangovector_max_marginal_relevance_search(
     mmr_results_div = vector_store.max_marginal_relevance_search(
         query_text, k=2, fetch_k=4, lambda_mult=0.9, use_approx=False
     )
+    assert isinstance(mmr_results_div, list)
     assert len(mmr_results_div) == 2
     assert mmr_results_div[0].page_content == "apple"
     assert mmr_results_div[1].page_content == "apricot"
@@ -752,6 +767,7 @@ def test_arangovector_core_functionality(
     results = vector_store.similarity_search(query, k=2)
 
     # Should return documents with "jumps" in them
+    assert isinstance(results, list)
     assert len(results) == 2
     text_contents = [doc.page_content for doc in results]
     # The most relevant results should include docs with "jumps"
@@ -763,6 +779,7 @@ def test_arangovector_core_functionality(
         query, k=3, return_fields={"source", "pangram"}
     )
 
+    assert isinstance(results_with_scores, list)
     assert len(results_with_scores) == 3
     # Check result format
     for doc, score in results_with_scores:
@@ -780,6 +797,7 @@ def test_arangovector_core_functionality(
         return_fields={"source", "length"},
     )
 
+    assert isinstance(vector_results, list)
     assert len(vector_results) == 2
     # Check result format
     for doc, score in vector_results:
@@ -795,12 +813,14 @@ def test_arangovector_core_functionality(
     exact_results = vector_store.similarity_search_with_score(
         query, k=2, use_approx=False
     )
+    assert isinstance(exact_results, list)
     assert len(exact_results) == 2
 
     # 6. Test max_marginal_relevance_search - for getting diverse results
     mmr_results = vector_store.max_marginal_relevance_search(
         query, k=3, fetch_k=5, lambda_mult=0.5
     )
+    assert isinstance(mmr_results, list)
     assert len(mmr_results) == 3
     # MMR results should be diverse, so they might differ from regular search
 
@@ -963,6 +983,7 @@ def test_arangovector_from_existing_collection(
 
     # Perform a search to verify functionality
     results = vector_store.similarity_search("astronomy")
+    assert isinstance(results, list)
     assert len(results) > 0
 
     # 2. Test with custom AQL query to modify the text extraction
@@ -1044,12 +1065,14 @@ def test_arangovector_from_existing_collection(
 
     # 5. Test searching in the custom store
     results_custom = vector_store_custom.similarity_search("Einstein", k=1)
+    assert isinstance(results_custom, list)
     assert len(results_custom) == 1
 
     # 6. Test max_marginal_relevance search
     mmr_results = vector_store.max_marginal_relevance_search(
         "science", k=2, fetch_k=4, lambda_mult=0.5
     )
+    assert isinstance(mmr_results, list)
     assert len(mmr_results) == 2
 
     # 7. Test the get_by_ids method
@@ -1141,8 +1164,11 @@ def test_arangovector_hybrid_search_functionality(
     )
 
     # Verify all searches return expected number of results
+    assert isinstance(vector_results, list)
     assert len(vector_results) == 2
+    assert isinstance(hybrid_results, list)
     assert len(hybrid_results) == 2
+    assert isinstance(hybrid_results_with_higher_vector_weight, list)
     assert len(hybrid_results_with_higher_vector_weight) == 2
 
     # Verify that all results have scores
@@ -1235,8 +1261,11 @@ def test_arangovector_hybrid_search_with_weights(
     )
 
     # Verify all searches return expected number of results
+    assert isinstance(equal_weight_results, list)
     assert len(equal_weight_results) == 3
+    assert isinstance(vector_emphasis_results, list)
     assert len(vector_emphasis_results) == 3
+    assert isinstance(keyword_emphasis_results, list)
     assert len(keyword_emphasis_results) == 3
 
     # Verify scores are valid
@@ -1319,7 +1348,9 @@ def test_arangovector_hybrid_search_custom_keyword_search(
     )
 
     # Verify both searches return results
+    assert isinstance(default_results, list)
     assert len(default_results) >= 1
+    assert isinstance(custom_results, list)
     assert len(custom_results) >= 1
 
 
@@ -1410,6 +1441,7 @@ def test_arangovector_hybrid_search_error_cases(
     )
 
     # Should still return results (keyword-only search)
+    assert isinstance(results, list)
     assert len(results) >= 0  # May return 0 or more results
 
     # Test with zero keyword weight
@@ -1423,6 +1455,7 @@ def test_arangovector_hybrid_search_error_cases(
     )
 
     # Should still return results (vector-only search)
+    assert isinstance(results_vector_only, list)
     assert len(results_vector_only) >= 0  # May return 0 or more results
 
 
@@ -1450,6 +1483,7 @@ def test_arangovector_jaccard_distance(
 
     query = "foo"
     results = vector_store.similarity_search(query, k=1, use_approx=False)
+    assert isinstance(results, list)
     assert len(results) == 1
     assert results[0].page_content == "foo"
 
@@ -1457,6 +1491,7 @@ def test_arangovector_jaccard_distance(
     results_with_scores = vector_store.similarity_search_with_score(
         query, k=1, use_approx=False
     )
+    assert isinstance(results_with_scores, list)
     assert len(results_with_scores) == 1
     assert 0.0 <= results_with_scores[0][1] <= 1.0
 
@@ -1485,6 +1520,7 @@ def test_arangovector_dot_product_distance(
 
     query = "foo"
     results = vector_store.similarity_search(query, k=1, use_approx=False)
+    assert isinstance(results, list)
     assert len(results) == 1
     assert results[0].page_content == "foo"
 
@@ -1492,6 +1528,7 @@ def test_arangovector_dot_product_distance(
     results_with_scores = vector_store.similarity_search_with_score(
         query, k=1, use_approx=False
     )
+    assert isinstance(results_with_scores, list)
     assert len(results_with_scores) == 1
     assert isinstance(results_with_scores[0][1], (int, float))
 
@@ -1520,6 +1557,7 @@ def test_arangovector_max_inner_product_distance(
 
     query = "foo"
     results = vector_store.similarity_search(query, k=1, use_approx=False)
+    assert isinstance(results, list)
     assert len(results) == 1
     assert results[0].page_content == "foo"
 
@@ -1527,6 +1565,7 @@ def test_arangovector_max_inner_product_distance(
     results_with_scores = vector_store.similarity_search_with_score(
         query, k=1, use_approx=False
     )
+    assert isinstance(results_with_scores, list)
     assert len(results_with_scores) == 1
     assert isinstance(results_with_scores[0][1], (int, float))
 
@@ -1563,6 +1602,7 @@ def test_arangovector_jaccard_hybrid_search(
     results = vector_store.similarity_search(
         "foo", k=2, search_type=SearchType.HYBRID, use_approx=False
     )
+    assert isinstance(results, list)
     assert len(results) >= 1
     assert results[0].page_content == "foo document"
 
@@ -1599,6 +1639,7 @@ def test_arangovector_dot_product_hybrid_search(
     results = vector_store.similarity_search(
         "foo", k=2, search_type=SearchType.HYBRID, use_approx=False
     )
+    assert isinstance(results, list)
     assert len(results) >= 1
     assert results[0].page_content == "foo document"
 
@@ -1635,5 +1676,307 @@ def test_arangovector_max_inner_product_hybrid_search(
     results = vector_store.similarity_search(
         "foo", k=2, search_type=SearchType.HYBRID, use_approx=False
     )
+    assert isinstance(results, list)
     assert len(results) >= 1
     assert results[0].page_content == "foo document"
+
+
+@pytest.mark.parametrize(
+    "k,num_docs",
+    [
+        pytest.param(0, 10, id="k_zero"),
+        pytest.param(5, 10, id="k_normal"),
+        pytest.param(100, 10, id="k_exceeds"),
+        pytest.param(200, 100, id="k_large"),
+        pytest.param(1, 100, id="k_one"),
+        pytest.param(50, 100, id="k_fifty"),
+    ],
+)
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_k_value_scenarios(
+    k: int,
+    num_docs: int,
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test streaming with various k values and document counts."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = [f"document_{i}" for i in range(num_docs)]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name=f"test_k_{k}_{num_docs}",
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    results_iter = vector_store.similarity_search("query", k=k, stream=True)
+    results = list(results_iter)
+    # Should return min(k, num_docs)
+    expected = min(k, num_docs)
+    assert len(results) == expected
+    assert all(isinstance(doc, Document) for doc in results)
+
+
+@pytest.mark.parametrize(
+    "distance_strategy,use_approx",
+    [
+        pytest.param(DistanceStrategy.COSINE, True, id="cosine_approx"),
+        pytest.param(DistanceStrategy.COSINE, False, id="cosine_exact"),
+        pytest.param(DistanceStrategy.EUCLIDEAN_DISTANCE, True, id="euclidean_approx"),
+        pytest.param(DistanceStrategy.EUCLIDEAN_DISTANCE, False, id="euclidean_exact"),
+    ],
+)
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_search_configurations(
+    distance_strategy: DistanceStrategy,
+    use_approx: bool,
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test streaming with different distance strategies and search modes."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = [f"document_{i}" for i in range(20)]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name=f"test_config_{distance_strategy.value}_{use_approx}",
+        distance_strategy=distance_strategy,
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    results_iter = vector_store.similarity_search(
+        "query", k=10, stream=True, use_approx=use_approx
+    )
+
+    # Should return iterator, not list
+    assert not isinstance(results_iter, list)
+
+    # Consume and verify
+    results = list(results_iter)
+    assert len(results) == 10
+    assert all(isinstance(doc, Document) for doc in results)
+
+
+@pytest.mark.parametrize(
+    "search_method,num_docs,k",
+    [
+        pytest.param("similarity_search", 30, 10, id="by_text"),
+        pytest.param("similarity_search_by_vector", 30, 10, id="by_vector"),
+        pytest.param("similarity_search", 50, 50, id="consumes_all"),
+    ],
+)
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_basic_iterator_behavior(
+    search_method: str,
+    num_docs: int,
+    k: int,
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test basic iterator behavior across different search methods.
+    Consolidates: test_streaming_similarity_search_returns_iterator,
+    test_streaming_by_vector, test_streaming_consumes_all_results
+    """
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = [f"doc_{i}" for i in range(num_docs)]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name=f"test_iter_{search_method}_{k}",
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    # Call the appropriate search method
+    if search_method == "similarity_search_by_vector":
+        query_embedding = fake_embedding_function.embed_query("query")
+        results_iter = vector_store.similarity_search_by_vector(
+            query_embedding, k=k, stream=True
+        )
+    else:
+        results_iter = vector_store.similarity_search("query", k=k, stream=True)
+
+    # Should be iterator, not list
+    assert not isinstance(results_iter, list)
+    assert hasattr(results_iter, "__iter__")
+
+    # Consume and verify
+    results = list(results_iter)
+    assert len(results) == k
+    assert all(isinstance(doc, Document) for doc in results)
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_backward_compatibility(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test that existing code without stream_results parameter still works."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = ["test1", "test2", "test3"]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_backward_compat",
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    # Call without stream_results parameter (should default to False)
+    results = vector_store.similarity_search("query", k=2)
+
+    # Should return a list (backward compatible)
+    assert isinstance(results, list)
+    assert len(results) == 2
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_early_stopping(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test that streaming allows early stopping without fetching all results."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = [f"document {i}" for i in range(100)]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_early_stop",
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    # Stream with k=100 but stop after 5
+    results_iterator = vector_store.similarity_search("query", k=100, stream=True)
+
+    collected = []
+    for doc in results_iterator:
+        collected.append(doc)
+        if len(collected) >= 5:
+            break
+
+    assert len(collected) == 5
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_hybrid_search(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test streaming with hybrid search mode."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = ["machine learning", "deep learning", "neural networks", "AI systems"]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        database=db,
+        collection_name="test_streaming_hybrid",
+        search_type=SearchType.HYBRID,
+        overwrite_index=True,
+        insert_text=True,
+    )
+    vector_store.create_vector_index()
+    vector_store.create_keyword_index()
+
+    # Test that hybrid search streaming returns an iterator
+    results = vector_store.similarity_search("learning", k=3, stream=True)
+    assert hasattr(results, "__iter__") and hasattr(results, "__next__")
+
+    # Consume the iterator
+    docs = list(results)
+    assert len(docs) <= 3  # May be less if not enough matches
+    assert all(isinstance(doc, Document) for doc in docs)
+
+    # Test backward compatibility - without stream parameter returns list
+    results_list = vector_store.similarity_search("learning", k=3)
+    assert isinstance(results_list, list)
+    assert all(isinstance(doc, Document) for doc in results_list)
+
+
+@pytest.mark.usefixtures("clear_arangodb_database")
+def test_streaming_with_filters(
+    arangodb_credentials: ArangoCredentials,
+    fake_embedding_function: FakeEmbeddings,
+) -> None:
+    """Test streaming works with filter clauses."""
+    client = ArangoClient(hosts=arangodb_credentials["url"])
+    db = client.db(
+        username=arangodb_credentials["username"],
+        password=arangodb_credentials["password"],
+    )
+
+    texts = ["doc_a", "doc_b", "doc_c", "doc_d", "doc_e", "doc_f"]
+    metadatas = [
+        {"category": "A"},
+        {"category": "B"},
+        {"category": "A"},
+        {"category": "B"},
+        {"category": "A"},
+        {"category": "B"},
+    ]
+
+    vector_store = ArangoVector.from_texts(
+        texts=texts,
+        embedding=fake_embedding_function,
+        metadatas=metadatas,
+        database=db,
+        collection_name="test_streaming_filters",
+        overwrite_index=True,
+    )
+    vector_store.create_vector_index()
+
+    # Test streaming with filter
+    results_iter = vector_store.similarity_search(
+        "query",
+        k=10,
+        stream=True,
+        filter_clause='FILTER doc.category == "A"',
+        return_fields={"category"},
+    )
+
+    results = list(results_iter)
+    assert len(results) == 3  # Only category A docs
+    assert all(doc.metadata["category"] == "A" for doc in results)

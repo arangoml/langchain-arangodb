@@ -50,6 +50,12 @@ Quick Start
     for doc in results:
         print(doc.page_content)
 
+    # Stream results for large queries (memory efficient)
+    cursor = vectorstore.similarity_search("query", k=10000, stream=True)
+    for doc in cursor:
+        print(doc.page_content)
+    
+
 Creating from Existing Collections
 ----------------------------------
 
