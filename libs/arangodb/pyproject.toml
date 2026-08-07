@@ -17,8 +17,10 @@ langchain-core = ">=0.3.8,<2.0.0"
 langchain = ">=0.3.7,<2.0.0"
 python-arango = "^8.0.0"
 cityhash = "^0.4.8"
-numpy = ">=1.0.0,<3.0.0"
+numpy = ">=1.0.0,!=2.0.2,<3.0.0"
 langchain-classic = "^1.0.0"
+python-arango-async = "^1.2.3"
+
 
 [tool.poetry.group.test]
 optional = true
@@ -72,6 +74,10 @@ select = [
 
 [tool.mypy]
 disallow_untyped_defs = true # "True"
+
+[[tool.mypy.overrides]]
+module = "arangoasync.*"
+ignore_missing_imports = true
 
 [tool.coverage.run]
 omit = ["tests/*"]

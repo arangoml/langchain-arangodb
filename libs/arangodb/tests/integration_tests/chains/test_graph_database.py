@@ -922,7 +922,9 @@ def test_query_cache(db: StandardDatabase) -> None:
     graph.db.collection("Movies").insert_many(movies)
     graph.refresh_schema()
 
-    dummy_llm = RunnableLambda(lambda prompt: "```FOR m IN Movies LIMIT 1 RETURN m```")
+    dummy_llm: RunnableLambda = RunnableLambda(
+        lambda prompt: "```FOR m IN Movies LIMIT 1 RETURN m```"
+    )
 
     chain = ArangoGraphQAChain.from_llm(
         llm=dummy_llm,  # type: ignore

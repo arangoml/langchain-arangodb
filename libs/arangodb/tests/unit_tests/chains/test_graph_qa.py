@@ -603,7 +603,7 @@ class TestArangoGraphQAChain:
 
         fake_graph_store.db.aql.execute = Mock(side_effect=mock_execute)
 
-        dummy_llm = RunnableLambda(
+        dummy_llm: RunnableLambda = RunnableLambda(
             lambda prompt: "```FOR m IN Movies LIMIT 1 RETURN m```"
         )
 

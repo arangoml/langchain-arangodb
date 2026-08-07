@@ -8,8 +8,7 @@
 
 [![License](https://img.shields.io/github/license/arangoml/langchain-arangodb?color=9E2165&style=for-the-badge)](https://github.com/arangoml/langchain-arangodb/blob/main/LICENSE)
 [![Code style: black](https://img.shields.io/static/v1?style=for-the-badge&label=code%20style&message=black&color=black)](https://github.com/psf/black)
-[![Downloads](https://img.shields.io/pepy/dt/langchain-arangodb?style=for-the-badge&color=282661
-)](https://pepy.tech/project/langchain-arangodb)
+[![Downloads](https://img.shields.io/pepy/dt/langchain-arangodb?style=for-the-badge&color=282661)](https://pepy.tech/project/langchain-arangodb)
 
 This package contains the ArangoDB integration for LangChain.
 
@@ -92,6 +91,45 @@ vector_db = ArangoVector.from_documents(
 docs_with_score = vector_db.similarity_search_with_score("What is LangChain?", k=1)
 ```
 
+### ArangoVector (Async)
+
+For async applications, pass an `arangoasync` database via `async_database`. A sync `database` is still required for index management.
+
+```python
+from arangoasync import ArangoClient as AsyncArangoClient
+from arangoasync.auth import Auth
+
+from langchain_openai import OpenAIEmbeddings
+from langchain_arangodb import ArangoVector
+
+embeddings = OpenAIEmbeddings(
+    model="text-embedding-3-large",
+    api_key="sk-...",
+)
+
+async_client = AsyncArangoClient(hosts="http://localhost:8529")
+async_db = await async_client.db(
+    "<your_db_name>",
+    auth=Auth(username="root", password="password"),
+)
+
+vector_store = ArangoVector(
+    embedding=embeddings,
+    embedding_dimension=3072,
+    async_database=async_db,
+    collection_name="documents",
+)
+
+# Add documents asynchronously
+ids = await vector_store.aadd_texts(
+    ["LangChain is a framework for building LLM applications."],
+    metadatas=[{"source": "docs"}],
+)
+
+# Search asynchronously
+results = await vector_store.asimilarity_search("What is LangChain?", k=1)
+```
+
 ### ArangoGraphQAChain
 
 The `ArangoGraphQAChain` class enables natural language interactions with an ArangoDB database.
@@ -140,16 +178,16 @@ make tests
 
 1. Start the ArangoDB instance using Docker:
 
-    ```bash
-    cd tests/integration_tests/docker-compose
-    docker-compose -f arangodb.yml up
-    ```
+   ```bash
+   cd tests/integration_tests/docker-compose
+   docker-compose -f arangodb.yml up
+   ```
 
 2. Run the tests:
 
-    ```bash
-    make integration_tests
-    ```
+   ```bash
+   make integration_tests
+   ```
 
 ## 🧹 Code Formatting and Linting
 

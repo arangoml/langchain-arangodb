@@ -1656,12 +1656,6 @@ def test_arangovector_max_inner_product_hybrid_search(
         password=arangodb_credentials["password"],
     )
 
-    # Clean up any leftover views from previous runs
-    try:
-        db.delete_view("keyword_index_max_hybrid")
-    except Exception:
-        pass
-
     vector_store = ArangoVector.from_texts(
         texts=["foo document", "bar document"],
         embedding=fake_embedding_function,
@@ -1671,6 +1665,7 @@ def test_arangovector_max_inner_product_hybrid_search(
         distance_strategy=DistanceStrategy.MAX_INNER_PRODUCT,
         search_type=SearchType.HYBRID,
         insert_text=True,
+        overwrite_index=True,
     )
 
     results = vector_store.similarity_search(
